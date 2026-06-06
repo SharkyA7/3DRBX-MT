@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roblox 3D Downloader</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#05050d;--s1:#0c0c1a;--s2:#12122a;--s3:#1a1a36;--red:#e8000b;--rb:#ff1a24;--rg:rgba(232,0,11,.18);--rd:rgba(232,0,11,.08);--green:#00ff99;--amber:#ffaa00;--white:#eeeef8;--gray:#5a5a7a;--gray2:#3a3a5a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:'Share Tech Mono',monospace;min-height:100vh;
+  background-image:linear-gradient(rgba(232,0,11,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(232,0,11,.04) 1px,transparent 1px);
+  background-size:40px 40px}
+header{text-align:center;padding:40px 20px 24px}
+h1{font-family:'Press Start 2P',monospace;font-size:clamp(12px,2.5vw,20px);color:var(--rb);
+   text-shadow:0 0 20px rgba(232,0,11,.6);letter-spacing:2px;line-height:1.5}
+.sub{font-size:10px;color:var(--gray);letter-spacing:3px;text-transform:uppercase;margin-top:8px}
+.scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--red),transparent);margin-top:20px;opacity:.5}
+main{max-width:860px;margin:0 auto;padding:24px 16px 80px}
+.tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--gray2)}
+.tab{flex:1;text-align:center;padding:12px;font-family:'Press Start 2P',monospace;font-size:9px;
+     color:var(--gray);cursor:pointer;transition:all .2s;letter-spacing:1px;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab:hover{color:var(--white)}
+.tab.active{color:var(--red);border-bottom-color:var(--red)}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--s1);border:1px solid var(--red);
+  box-shadow:0 0 0 1px var(--rd),0 0 24px var(--rg);border-radius:4px;padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--rb),transparent)}
+.label{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--red);letter-spacing:2px;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.label::before{content:'▶';font-size:7px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+input[type=text],input[type=number],select{
+  flex:1;min-width:180px;background:var(--s2);border:1px solid var(--gray2);border-radius:3px;
+  color:var(--white);font-family:'Share Tech Mono',monospace;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
+input:focus,select:focus{border-color:var(--red);box-shadow:0 0 0 2px var(--rd)}
+select option{background:var(--s2)}
+.hint{font-size:9px;color:var(--gray);margin-top:4px;letter-spacing:.5px}
+.btn{background:var(--red);color:#fff;border:none;border-radius:3px;font-family:'Press Start 2P',monospace;
+  font-size:9px;padding:12px 20px;cursor:pointer;letter-spacing:1px;transition:background .15s,box-shadow .15s;white-space:nowrap}
+.btn:hover{background:var(--rb);box-shadow:0 0 14px rgba(232,0,11,.5)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{background:var(--gray2);cursor:not-allowed;box-shadow:none}
+.btn-green{background:#009955}.btn-green:hover{background:#00bb66;box-shadow:0 0 14px rgba(0,255,153,.3)}
+.btn-amber{background:#b07800}.btn-amber:hover{background:#cc8c00}
+.status-box{min-height:20px;display:flex;align-items:flex-start;gap:8px;font-size:11px;margin-top:12px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.idle{color:var(--gray)}.idle .dot{background:var(--gray)}
+.loading{color:var(--amber)}.loading .dot{background:var(--amber);animation:blink .7s infinite}
+.ok{color:var(--green)}.ok .dot{background:var(--green)}
+.err{color:#ff7777}.err .dot{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.prog{height:3px;background:var(--s2);border-radius:2px;overflow:hidden;margin-top:10px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--rb));width:0%;transition:width .4s}
+.result-grid{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start}
+@media(max-width:540px){.result-grid{grid-template-columns:1fr}}
+.av-img{background:var(--s2);border:1px solid var(--gray2);border-radius:4px;aspect-ratio:1;
+  display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
+.av-img img{width:100%;height:100%;object-fit:cover}
+.info-list{display:flex;flex-direction:column;gap:9px}
+.irow{display:flex;flex-direction:column;gap:2px}
+.ikey{font-size:8px;color:var(--gray);letter-spacing:2px;text-transform:uppercase}
+.ival{font-size:13px}.ival.big{font-family:'Press Start 2P',monospace;font-size:11px;color:var(--rb)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+.chip{background:var(--s3);border:1px solid var(--gray2);border-radius:3px;padding:3px 8px;font-size:9px;color:var(--gray)}
+.dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+@media(max-width:460px){.dl-grid{grid-template-columns:1fr}}
+.dl-card{background:var(--s2);border:1px solid var(--gray2);border-radius:4px;padding:14px;transition:border-color .2s}
+.dl-card.ready{border-color:var(--green);box-shadow:0 0 10px rgba(0,255,153,.1)}
+.dl-title{font-family:'Press Start 2P',monospace;font-size:10px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.dl-desc{font-size:9px;color:var(--gray);line-height:1.6;margin-bottom:10px}
+.badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:8px;letter-spacing:1px}
+.b-ok{background:rgba(0,255,153,.12);color:var(--green);border:1px solid rgba(0,255,153,.3)}
+.b-w{background:rgba(255,170,0,.1);color:var(--amber);border:1px solid rgba(255,170,0,.3)}
+.b-na{background:rgba(90,90,122,.2);color:var(--gray);border:1px solid var(--gray2)}
+.api-note{background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);border-radius:4px;
+  padding:12px 14px;font-size:10px;color:#ccaa55;line-height:1.8;margin-top:14px}
+.api-note strong{color:var(--amber)}
+code{background:var(--s2);border:1px solid var(--gray2);border-radius:3px;padding:2px 6px;font-size:10px;color:var(--green)}
+footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top:1px solid var(--s2);letter-spacing:1px}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>ROBLOX 3D DOWNLOADER</h1>
+  <p class="sub">Avatar · Katalog · OBJ · GLTF · Backend API</p>
+  <div class="scan"></div>
+</header>
+
+<main>
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('avatar')">👤 AVATAR</div>
+    <div class="tab" onclick="switchTab('catalog')">🛍️ KATALOG</div>
+    <div class="tab" onclick="switchTab('api')">📡 API DOCS</div>
+  </div>
+
+  <!-- ── AVATAR PANEL ── -->
+  <div class="panel active" id="panel-avatar">
+    <div class="card">
+      <div class="label">CARI AVATAR</div>
+      <div class="row">
+        <div style="flex:1;min-width:180px">
+          <input type="text" id="av-input" placeholder="Username atau User ID…">
+          <p class="hint">Contoh: "Roblox" · "builderman" · "156"</p>
+        </div>
+        <select id="av-format" style="flex:0 0 120px;min-width:120px">
+          <option value="obj">OBJ + MTL</option>
+          <option value="gltf">GLTF</option>
+        </select>
+        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ FETCH</button>
+      </div>
+      <div class="status-box idle" id="av-status"><div class="dot"></div><span id="av-msg">Siap.</span></div>
+      <div class="prog"><div class="prog-fill" id="av-prog"></div></div>
+    </div>
+
+    <div id="av-result" style="display:none">
+      <!-- Profile -->
+      <div class="card" id="av-profile-card">
+        <div class="label">PROFIL</div>
+        <div class="result-grid">
+          <div class="av-img" id="av-thumb">👤</div>
+          <div class="info-list">
+            <div class="irow"><span class="ikey">USERNAME</span><span class="ival big" id="av-name">—</span></div>
+            <div class="irow"><span class="ikey">USER ID</span><span class="ival" id="av-id">—</span></div>
+            <div class="irow"><span class="ikey">RIG TYPE</span><span class="ival" id="av-rig">—</span></div>
+            <div class="irow"><span class="ikey">DIBUAT</span><span class="ival" id="av-created">—</span></div>
+            <a id="av-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA PROFIL ROBLOX</a>
+          </div>
+        </div>
+        <div class="chips" id="av-chips"></div>
+      </div>
+
+      <!-- Download -->
+      <div class="card">
+        <div class="label">DOWNLOAD 3D MODEL</div>
+        <div style="margin-bottom:12px;background:rgba(0,255,153,.06);border:1px solid rgba(0,255,153,.3);border-radius:4px;padding:14px">
+          <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⭐ REAL MODEL + TEXTURE</div>
+          <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:10px">
+            Download langsung dari Roblox CDN via browser.<br>
+            Berisi <strong style="color:#fff">mesh asli + UV texture PNG</strong> — cocok untuk Nomad Sculpt &amp; Prisma 3D.
+          </div>
+          <button class="btn btn-green" id="btn-real" onclick="downloadReal()" disabled>⬇ DOWNLOAD OBJ + TEXTURE (REAL)</button>
+          <div style="margin-top:8px;font-size:9px;color:var(--gray)" id="real-status"></div>
+        </div>
+        <div class="dl-grid">
+          <div class="dl-card" id="dl-av-obj">
+            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-w" id="bd-obj">LOADING…</span></div>
+            <div class="dl-desc">Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D.</div>
+            <button class="btn btn-green" id="btn-av-obj" onclick="downloadAvatar('obj')" disabled>⬇ DOWNLOAD ZIP</button>
+          </div>
+          <div class="dl-card" id="dl-av-gltf">
+            <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-w" id="bd-gltf">LOADING…</span></div>
+            <div class="dl-desc">GL Transmission Format. Untuk game engine &amp; AR/VR.</div>
+            <button class="btn btn-amber" id="btn-av-gltf" onclick="downloadAvatar('gltf')" disabled>⬇ DOWNLOAD ZIP</button>
+          </div>
+        </div>
+        <div class="api-note" id="av-note" style="display:none"></div>
+        <div id="av-procedural" style="display:none;margin-top:14px">
+          <div style="background:rgba(0,255,153,.06);border:1px solid rgba(0,255,153,.2);border-radius:4px;padding:14px">
+            <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⚙ PROCEDURAL MODEL</div>
+            <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:12px">3D Roblox tidak tersedia. Model dibuat dari body colors avatar kamu.</div>
+            <button class="btn btn-green" onclick="downloadProcedural()">⬇ DOWNLOAD PROCEDURAL OBJ</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── KATALOG PANEL ── -->
+  <div class="panel" id="panel-catalog">
+    <div class="card">
+      <div class="label">CARI ITEM KATALOG</div>
+      <div class="row">
+        <div style="flex:1;min-width:180px">
+          <input type="number" id="cat-input" placeholder="Asset ID (misal: 102611803)">
+          <p class="hint">Ambil ID dari URL: roblox.com/catalog/<strong>ID</strong>/nama-item</p>
+        </div>
+        <select id="cat-format" style="flex:0 0 120px;min-width:120px">
+          <option value="obj">OBJ + MTL</option>
+          <option value="gltf">GLTF</option>
+        </select>
+        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ FETCH</button>
+      </div>
+      <div class="status-box idle" id="cat-status"><div class="dot"></div><span id="cat-msg">Siap.</span></div>
+      <div class="prog"><div class="prog-fill" id="cat-prog"></div></div>
+    </div>
+
+    <div id="cat-result" style="display:none">
+      <div class="card">
+        <div class="label">DETAIL ITEM</div>
+        <div class="result-grid">
+          <div class="av-img" id="cat-thumb">🧢</div>
+          <div class="info-list">
+            <div class="irow"><span class="ikey">NAMA</span><span class="ival big" id="cat-name">—</span></div>
+            <div class="irow"><span class="ikey">ASSET ID</span><span class="ival" id="cat-id">—</span></div>
+            <div class="irow"><span class="ikey">TIPE</span><span class="ival" id="cat-type">—</span></div>
+            <div class="irow"><span class="ikey">PEMBUAT</span><span class="ival" id="cat-creator">—</span></div>
+            <div class="irow"><span class="ikey">HARGA</span><span class="ival" id="cat-price">—</span></div>
+            <a id="cat-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA DI KATALOG</a>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">DOWNLOAD</div>
+        <div class="dl-grid">
+          <div class="dl-card ready">
+            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok">SIAP</span></div>
+            <div class="dl-desc">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</div>
+            <button class="btn btn-green" onclick="downloadCatalog('obj')">⬇ OBJ ZIP</button>
+          </div>
+          <div class="dl-card ready">
+            <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-ok">SIAP</span></div>
+            <div class="dl-desc">Dikonversi ke GLTF 2.0 dengan embedded buffer.</div>
+            <button class="btn btn-amber" onclick="downloadCatalog('gltf')">⬇ GLTF ZIP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── API PANEL ── -->
+  <div class="panel" id="panel-api">
+    <div class="card">
+      <div class="label">ENDPOINT API</div>
+      <p style="font-size:10px;color:var(--gray);line-height:1.9;margin-bottom:16px">
+        Base URL: <code>http://localhost:8000</code><br>
+        Semua endpoint mengembalikan JSON kecuali <code>/download</code> yang mengembalikan ZIP.
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead>
+          <tr style="color:var(--red);font-family:'Press Start 2P',monospace;font-size:8px">
+            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">METHOD</th>
+            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">ENDPOINT</th>
+            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">KETERANGAN</th>
+          </tr>
+        </thead>
+        <tbody id="api-table"></tbody>
+      </table>
+    </div>
+    <div class="api-note">
+      <strong>⚠ KEAMANAN</strong> — API key dan cookie Roblox disimpan di file <code>.env</code> di server.
+      Tidak pernah dikirim ke browser. Jangan share file <code>.env</code> atau commit ke Git.
+    </div>
+  </div>
+</main>
+
+<footer>ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
+
+<script>
+const BASE = '';  // Kosong = same origin. Ganti ke 'http://localhost:8000' jika frontend dijalankan terpisah.
+
+// ── TABS ──────────────────────────────────────────────────────────
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['avatar','catalog','api'][i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────────
+function st(id,msg,type){
+  const el=document.getElementById(id);
+  el.className='status-box '+type;
+  el.querySelector('span').textContent=msg;
+}
+function prog(id,p){ document.getElementById(id).style.width=p+'%'; }
+function badge(id,txt,cls){ const e=document.getElementById(id); e.textContent=txt; e.className='badge '+cls; }
+
+// ── AVATAR ────────────────────────────────────────────────────────
+let currentUser = null;
+
+async function fetchAvatar(){
+  const input=document.getElementById('av-input').value.trim();
+  if(!input){st('av-status','Masukkan username atau User ID.','err');return;}
+  const btn=document.getElementById('av-btn');
+  btn.disabled=true; prog('av-prog',0);
+  document.getElementById('av-result').style.display='none';
+  ['btn-av-obj','btn-av-gltf'].forEach(id=>document.getElementById(id).disabled=true);
+  ['bd-obj','bd-gltf'].forEach(id=>badge(id,'LOADING…','b-w'));
+
+  try{
+    st('av-status','Mengambil info avatar…','loading'); prog('av-prog',20);
+    const res=await fetch(`${BASE}/api/avatar/info?user=${encodeURIComponent(input)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail?.error||e.detail||res.statusText); }
+    const data=await res.json();
+    currentUser=data;
+    fillAvatarProfile(data);
+    const rb=document.getElementById('btn-real'); if(rb) rb.disabled=false;
+    prog('av-prog',55);
+
+    st('av-status','Mengambil URL 3D model…','loading');
+    const r2=await fetch(`${BASE}/api/avatar/3d-urls?user=${encodeURIComponent(input)}`);
+    if(!r2.ok){
+      const e2=await r2.json();
+      const hints=(e2.detail?.hints||[]).join('\n• ');
+      badge('bd-obj','TIDAK TERSEDIA','b-na');
+      badge('bd-gltf','TIDAK TERSEDIA','b-na');
+      document.getElementById('av-procedural').style.display='block';
+      // Enable real download button
+      const rb=document.getElementById('btn-real'); if(rb) rb.disabled=false;
+      const note=document.getElementById('av-note');
+      note.style.display='block';
+      note.innerHTML=`<strong>⚠ 3D Thumbnail Tidak Tersedia</strong><br>${e2.detail?.error||''}<br><br>• ${hints}`;
+      st('av-status','⚠ Profil berhasil dimuat, namun 3D model tidak tersedia.','err');
+      prog('av-prog',60);
+    }else{
+      badge('bd-obj','SIAP','b-ok');
+      badge('bd-gltf','SIAP','b-ok');
+      document.getElementById('dl-av-obj').classList.add('ready');
+      document.getElementById('dl-av-gltf').classList.add('ready');
+      document.getElementById('btn-av-obj').disabled=false;
+      document.getElementById('btn-av-gltf').disabled=false;
+      st('av-status',`✓ Avatar ${data.username} (ID ${data.userId}) berhasil dimuat.`,'ok');
+      prog('av-prog',100);
+    }
+    document.getElementById('av-result').style.display='block';
+  }catch(e){
+    st('av-status','✗ '+e.message,'err'); prog('av-prog',0);
+  }finally{ btn.disabled=false; }
+}
+
+function fillAvatarProfile(d){
+  document.getElementById('av-name').textContent    = d.username||'—';
+  document.getElementById('av-id').textContent      = d.userId||'—';
+  document.getElementById('av-rig').textContent     = d.rigType||'—';
+  document.getElementById('av-created').textContent = d.created
+    ? new Date(d.created).toLocaleDateString('id-ID',{year:'numeric',month:'short',day:'numeric'})
+    : '—';
+  document.getElementById('av-link').href = d.profileUrl||'#';
+  if(d.thumbnailUrl){
+    document.getElementById('av-thumb').innerHTML=`<img src="${d.thumbnailUrl}" alt="${d.username}">`;
+  }
+  const chips=document.getElementById('av-chips');
+  chips.innerHTML=(d.assets||[]).slice(0,20)
+    .map(a=>`<div class="chip">${a.name} [${a.assetType?.name||'Item'}]</div>`).join('');
+}
+
+async function downloadAvatar(format){
+  if(!currentUser) return;
+  const user=document.getElementById('av-input').value.trim();
+  st('av-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
+  try{
+    const res=await fetch(`${BASE}/api/avatar/download?user=${encodeURIComponent(user)}&format=${format}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    const blob=await res.blob();
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:`${currentUser.username}_avatar_${format}.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('av-status',`✓ Download selesai: ${currentUser.username}_avatar_${format}.zip`,'ok');
+  }catch(e){ st('av-status','✗ '+e.message,'err'); }
+}
+
+// ── CATALOG ───────────────────────────────────────────────────────
+let currentAssetId = null;
+
+async function fetchCatalog(){
+  const id=parseInt(document.getElementById('cat-input').value);
+  if(!id||isNaN(id)){st('cat-status','Masukkan Asset ID yang valid.','err');return;}
+  const btn=document.getElementById('cat-btn');
+  btn.disabled=true; prog('cat-prog',0);
+  document.getElementById('cat-result').style.display='none';
+
+  try{
+    st('cat-status','Mengambil detail item…','loading'); prog('cat-prog',30);
+    const res=await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    const data=await res.json();
+    currentAssetId=id;
+    fillCatalogInfo(data);
+    document.getElementById('cat-result').style.display='block';
+    prog('cat-prog',100);
+    st('cat-status',`✓ Item "${data.name}" ditemukan.`,'ok');
+  }catch(e){
+    st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
+  }finally{ btn.disabled=false; }
+}
+
+function fillCatalogInfo(d){
+  document.getElementById('cat-name').textContent    = d.name||'—';
+  document.getElementById('cat-id').textContent      = d.assetId||'—';
+  document.getElementById('cat-type').textContent    = d.assetType||'—';
+  document.getElementById('cat-creator').textContent = d.creatorName||'—';
+  document.getElementById('cat-price').textContent   = d.price!=null ? `${d.price} Robux` : 'Gratis';
+  document.getElementById('cat-link').href           = d.catalogUrl||'#';
+  if(d.thumbnailUrl){
+    document.getElementById('cat-thumb').innerHTML=`<img src="${d.thumbnailUrl}" alt="${d.name}">`;
+  }
+}
+
+async function downloadCatalog(format){
+  if(!currentAssetId) return;
+  st('cat-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
+  try{
+    const res=await fetch(`${BASE}/api/catalog/download?asset_id=${currentAssetId}&format=${format}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    const blob=await res.blob();
+    const name=document.getElementById('cat-name').textContent||currentAssetId;
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:`${name}_${format}.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('cat-status',`✓ Download selesai!`,'ok');
+  }catch(e){ st('cat-status','✗ '+e.message,'err'); }
+}
+
+// ── API TABLE ─────────────────────────────────────────────────────
+const ROUTES=[
+  ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
+  ['GET','GET /api/avatar/3d-urls?user=','URL .obj & .mtl dari Roblox CDN'],
+  ['GET','GET /api/avatar/download?user=&format=','ZIP berisi OBJ/GLTF avatar'],
+  ['GET','GET /api/avatar/wearing?user=','Daftar Asset ID yang dipakai avatar'],
+  ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
+  ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
+  ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
+  ['GET','GET /health','Health check'],
+  ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
+];
+document.getElementById('api-table').innerHTML=ROUTES.map(([m,ep,desc])=>`
+<tr style="border-bottom:1px solid var(--s3)">
+  <td style="padding:7px 6px;color:var(--green)">${m}</td>
+  <td style="padding:7px 6px"><code>${ep}</code></td>
+  <td style="padding:7px 6px;color:var(--gray);font-size:9px">${desc}</td>
+</tr>`).join('');
+
+// Enter key
+async function downloadReal(){
+  if(!currentUser) return;
+  const user = document.getElementById('av-input').value.trim();
+  const name = currentUser.username;
+  const btn  = document.getElementById('btn-real');
+  const st   = document.getElementById('real-status');
+  btn.disabled = true;
+  st.style.color = '#ffaa00';
+  st.textContent = '⏳ Menghubungi server...';
+
+  try{
+    // Pakai server endpoint - server pakai cloudscraper + cookie
+    st.textContent = '⏳ Download mesh + texture dari Roblox... (30-60 detik)';
+    const res = await fetch(`/api/v2/avatar?user=${encodeURIComponent(user)}`);
+    if(!res.ok){
+      const e = await res.json();
+      throw new Error(e.error || res.statusText);
+    }
+    st.textContent = '⏳ Menyimpan file...';
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `${name}_real.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st.textContent = '✓ Berhasil! Buka ZIP → import .obj di Nomad Sculpt';
+    st.style.color = '#00ff99';
+  }catch(e){
+    st.textContent = '✗ '+e.message;
+    st.style.color = '#ff7777';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function downloadReal_OLD(){
+  const user = document.getElementById('av-input').value.trim();
+  if(!user || !currentUser) return;
+  const uid = currentUser.userId;
+  const name = currentUser.username;
+  const btn = document.getElementById('btn-real');
+  const st  = document.getElementById('real-status');
+  btn.disabled = true;
+
+  try{
+    // Step 1: Get 3D manifest URL langsung dari Roblox (browser bisa, server tidak)
+    st.textContent = '⏳ Meminta 3D thumbnail dari Roblox...';
+    let manifestUrl = null;
+    for(let i=0; i<8; i++){
+      const r = await fetch(`https://thumbnails.roblox.com/v1/users/avatar-3d?userId=${uid}`);
+      const d = await r.json();
+      const item = d.data?.[0];
+      if(item?.state === 'Completed'){ manifestUrl = item.imageUrl; break; }
+      if(item?.state === 'Blocked') throw new Error('Avatar 3D diblokir oleh Roblox');
+      st.textContent = `⏳ Generating... retry ${i+1}/8`;
+      await new Promise(r=>setTimeout(r,3000));
+    }
+    if(!manifestUrl) throw new Error('3D thumbnail tidak tersedia — coba lagi dalam 30 detik');
+
+    // Step 2: Download manifest JSON
+    st.textContent = '⏳ Mengambil manifest...';
+    const manifest = await fetch(manifestUrl).then(r=>r.json());
+    const objUrl  = manifest.obj;
+    const mtlUrl  = manifest.mtl;
+    const texUrls = manifest.textures || [];
+
+    if(!objUrl) throw new Error('Manifest tidak berisi OBJ URL');
+
+    // Step 3: Download semua file
+    st.textContent = `⏳ Download OBJ...`;
+    const objBytes = await fetch(objUrl).then(r=>r.arrayBuffer());
+
+    let mtlBytes = null;
+    if(mtlUrl){
+      st.textContent = '⏳ Download MTL...';
+      mtlBytes = await fetch(mtlUrl).then(r=>r.arrayBuffer());
+    }
+
+    // Step 4: Download semua textures
+    const texFiles = [];
+    for(let i=0; i<texUrls.length; i++){
+      st.textContent = `⏳ Download texture ${i+1}/${texUrls.length}...`;
+      try{
+        const tb = await fetch(texUrls[i]).then(r=>r.arrayBuffer());
+        texFiles.push({name:`textures/texture_${i}.png`, data:tb});
+      }catch(e){ console.warn('texture skip:', e); }
+    }
+
+    // Step 5: Buat ZIP pakai JSZip
+    st.textContent = '⏳ Membuat ZIP...';
+    const zip = new JSZip();
+    zip.file(`${name}.obj`, objBytes);
+    if(mtlBytes) zip.file(`${name}.mtl`, mtlBytes);
+    texFiles.forEach(t => zip.file(t.name, t.data));
+    zip.file('README.txt',
+      `Avatar: ${name}\n`+
+      `Cara import di Nomad Sculpt:\n`+
+      `  1. Files -> Import -> pilih ${name}.obj\n`+
+      `  2. Tap mesh -> Material -> Base Color -> load texture dari textures/\n\n`+
+      `Cara import di Prisma 3D:\n`+
+      `  1. + -> Import -> OBJ -> pilih ${name}.obj\n`+
+      `  2. Material -> Texture -> pilih file dari textures/`
+    );
+
+    const blob = await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `${name}_real.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+
+    st.textContent = `✓ Download selesai! ${texFiles.length} texture(s) included.`;
+    st.style.color = '#00ff99';
+
+  }catch(e){
+    st.textContent = '✗ ' + e.message;
+    st.style.color = '#ff7777';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function downloadProcedural(){
+  const user=document.getElementById('av-input').value.trim();
+  if(!user)return;
+  try{
+    const res=await fetch('/api/avatar/procedural-download?user='+encodeURIComponent(user));
+    const blob=await res.blob();
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:user+'_procedural.zip'});
+    a.click();
+  }catch(e){alert('Error: '+e.message);}
+}
+document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
+document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
+</script>
+</body>
+</html>
