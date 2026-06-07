@@ -147,7 +147,7 @@ def procedural(av,name):
 
 @app.get("/health")
 def health():
-    return jsonify({"status":"ok","cookie_set":bool(COOKIE)})
+    return jsonify({"status":"ok","cookie_set":bool(COOKIE),"maintenance":MAINTENANCE})
 
 @app.get("/api/avatar/info")
 def avatar_info():

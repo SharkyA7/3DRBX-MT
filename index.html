@@ -319,6 +319,7 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 
 <script>
 const BASE = 'https://web-production-62c2e.up.railway.app';
+fetch(BASE+'/health').then(r=>r.json()).then(d=>{ if(d.maintenance) window.location.href=BASE+'/maintenance'; }).catch(()=>{});
 
 // ── TABS ──────────────────────────────────────────────────────────
 function switchTab(name){
