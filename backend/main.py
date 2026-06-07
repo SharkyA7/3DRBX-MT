@@ -196,10 +196,10 @@ def avatar_download_full():
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             if manifest_url:
                 m=rget(manifest_url)
-                if m.get("obj"): zf.writestr(f"{name}.obj",rget_bytes(fix_url(m["obj"])))
-                if m.get("mtl"): zf.writestr(f"{name}.mtl",rget_bytes(fix_url(m["mtl"])))
+                if m.get("obj"): zf.writestr(f"{name}.obj",rget_cdn(fix_url(m["obj"])))
+                if m.get("mtl"): zf.writestr(f"{name}.mtl",rget_cdn(fix_url(m["mtl"])))
                 for i,tx in enumerate(m.get("textures",[])):
-                    try: zf.writestr(f"textures/texture_{i}.png",rget_bytes(fix_url(tx)))
+                    try: zf.writestr(f"textures/texture_{i}.png",rget_cdn(fix_url(tx)))
                     except: pass
                 zf.writestr("README.txt",f"Avatar: {name}\nImport {name}.obj\nTextures ada di folder textures/\nDi Prisma 3D: Import OBJ -> Material -> load texture\nDi Nomad Sculpt: Import -> OBJ -> Material -> Base Color -> pilih texture")
             else:
@@ -414,7 +414,7 @@ def avatar_smart_download():
                             mt = re.sub(r"map_Kd\s+\S+", f"map_Kd textures/texture_{i}.png", mt, count=1)
                         zf.writestr(f"{name}.mtl", mt)
                     for i,tx in enumerate(txs):
-                        try: zf.writestr(f"textures/texture_{i}.png", rget_bytes(fix_url(tx)))
+                        try: zf.writestr(f"textures/texture_{i}.png", rget_cdn(fix_url(tx)))
                         except: pass
                 except: manifest_url = None
 
