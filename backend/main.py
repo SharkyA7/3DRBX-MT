@@ -14,6 +14,7 @@ def add_cors(response):
     return response
 
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
+API_KEY = os.getenv("ROBLOX_API_KEY","")
 TIMEOUT = 15
 
 # Cloudscraper dengan cookie Roblox
