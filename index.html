@@ -77,10 +77,79 @@ select option{background:var(--s2)}
 .api-note strong{color:var(--amber)}
 code{background:var(--s2);border:1px solid var(--gray2);border-radius:3px;padding:2px 6px;font-size:10px;color:var(--green)}
 footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top:1px solid var(--s2);letter-spacing:1px}
+
+/* ── POPUP & I18N ─────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;
+  display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)}
+.modal-box{background:#0a0a18;border:1px solid #e8000b;border-radius:6px;max-width:420px;width:100%;
+  box-shadow:0 0 40px rgba(232,0,11,.3),0 0 80px rgba(232,0,11,.1);position:relative;overflow:hidden}
+.modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,#e8000b,#ff6600,#e8000b,transparent)}
+.modal-header{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:'Press Start 2P',monospace;font-size:10px;color:#e8000b;letter-spacing:2px}
+.lang-btns{display:flex;gap:6px}
+.lang-btn{background:transparent;border:1px solid #3a3a5a;color:#5a5a7a;font-family:'Share Tech Mono',monospace;
+  font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;transition:all .2s}
+.lang-btn.active{border-color:#e8000b;color:#e8000b;background:rgba(232,0,11,.08)}
+.modal-body{padding:18px 20px}
+.security-item{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.sec-icon{font-size:18px;flex-shrink:0;margin-top:2px}
+.sec-text{font-size:10px;line-height:1.8;color:#aaa}
+.sec-text strong{color:#eef;font-family:'Share Tech Mono',monospace}
+.modal-footer{padding:0 20px 20px;display:flex;gap:10px}
+.modal-btn{flex:1;padding:12px;border:none;border-radius:3px;font-family:'Press Start 2P',monospace;
+  font-size:8px;cursor:pointer;letter-spacing:1px;transition:all .2s}
+.modal-btn-primary{background:#e8000b;color:#fff}
+.modal-btn-primary:hover{background:#ff1a24;box-shadow:0 0 14px rgba(232,0,11,.5)}
+.neon-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(232,0,11,.6),transparent);
+  animation:scan 3s linear infinite}
+@keyframes scan{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+.lang-flag{font-size:14px}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
+
+
+<!-- SECURITY MODAL -->
+<div class="modal-overlay" id="security-modal">
+  <div class="modal-box">
+    <div class="neon-scan"></div>
+    <div class="modal-header">
+      <div class="modal-title" data-i18n="modal_title">⚡ SECURITY INFO</div>
+      <div class="lang-btns">
+        <button class="lang-btn active" onclick="setLang('id')"><span class="lang-flag">🇮🇩</span> ID</button>
+        <button class="lang-btn" onclick="setLang('en')"><span class="lang-flag">🇬🇧</span> EN</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="security-item">
+        <span class="sec-icon">🔒</span>
+        <div class="sec-text"><strong data-i18n="s1_title">100% AMAN</strong><br>
+          <span data-i18n="s1_desc">Website ini tidak pernah meminta atau menyimpan password Roblox kamu.</span></div>
+      </div>
+      <div class="security-item">
+        <span class="sec-icon">🚫</span>
+        <div class="sec-text"><strong data-i18n="s2_title">TIDAK ADA TRACKING</strong><br>
+          <span data-i18n="s2_desc">Tidak ada data pribadi yang dikirim ke server manapun. Cookie hanya dipakai untuk akses API Roblox.</span></div>
+      </div>
+      <div class="security-item">
+        <span class="sec-icon">📂</span>
+        <div class="sec-text"><strong data-i18n="s3_title">LOCAL SERVER</strong><br>
+          <span data-i18n="s3_desc">Server berjalan di HP kamu sendiri (localhost). Data tidak pernah meninggalkan perangkat kamu.</span></div>
+      </div>
+      <div class="security-item">
+        <span class="sec-icon">⚡</span>
+        <div class="sec-text"><strong data-i18n="s4_title">OPEN SOURCE</strong><br>
+          <span data-i18n="s4_desc">Kode sumber tersedia di GitHub. Kamu bisa verifikasi sendiri keamanannya.</span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-primary" onclick="closeModal()" data-i18n="btn_understand">▶ MENGERTI, LANJUTKAN</button>
+    </div>
+  </div>
+</div>
 
 <header>
   <h1>ROBLOX 3D DOWNLOADER</h1>
@@ -282,8 +351,9 @@ async function fetchAvatar(){
   try{
     st('av-status','Mengambil info avatar…','loading'); prog('av-prog',20);
     const res=await fetch(`${BASE}/api/avatar/info?user=${encodeURIComponent(input)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail?.error||e.detail||res.statusText); }
-    const data=await res.json();
+    const rawText=await res.text();
+    if(!res.ok){ let e={detail:rawText}; try{e=JSON.parse(rawText);}catch(_){} throw new Error(e.detail?.error||e.detail||res.statusText); }
+    let data; try{ data=JSON.parse(rawText); }catch(pe){ throw new Error('INFO response bukan JSON: '+rawText.substring(0,150)); }
     currentUser=data;
     fillAvatarProfile(data);
     const rb=document.getElementById('btn-real'); if(rb) rb.disabled=false;
@@ -292,7 +362,9 @@ async function fetchAvatar(){
     st('av-status','Mengambil URL 3D model…','loading');
     const r2=await fetch(`${BASE}/api/avatar/3d-urls?user=${encodeURIComponent(input)}`);
     if(!r2.ok){
-      const e2=await r2.json();
+      const e2txt=await r2.text();
+      let e2={detail:{error:'Server error',hints:[]}};
+      try{ e2=JSON.parse(e2txt); }catch(_){}
       const hints=(e2.detail?.hints||[]).join('\n• ');
       badge('bd-obj','TIDAK TERSEDIA','b-na');
       badge('bd-gltf','TIDAK TERSEDIA','b-na');
@@ -317,6 +389,13 @@ async function fetchAvatar(){
     document.getElementById('av-result').style.display='block';
   }catch(e){
     st('av-status','✗ '+e.message,'err'); prog('av-prog',0);
+    // Debug: tampilkan stack trace
+    const dbg = document.getElementById('error-detail');
+    if(dbg){
+      dbg.style.display='block';
+      dbg.innerHTML='<strong>DEBUG</strong><pre style="font-size:9px;white-space:pre-wrap">'
+        + (e.stack||e.message) + '</pre>';
+    }
   }finally{ btn.disabled=false; }
 }
 
@@ -339,18 +418,30 @@ function fillAvatarProfile(d){
 async function downloadAvatar(format){
   if(!currentUser) return;
   const user=document.getElementById('av-input').value.trim();
-  st('av-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
+  const name=currentUser.username;
+  st('av-status',`⏳ Download ${format.toUpperCase()}... (30-60 detik)`,'loading');
+  const btn=document.getElementById(`btn-av-${format}`);
+  if(btn) btn.disabled=true;
   try{
+    // Pakai /api/v2/avatar yang sudah pakai cloudscraper + cookie
     const res=await fetch(`${BASE}/api/v2/avatar?user=${encodeURIComponent(user)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    if(!res.ok){
+      const t=await res.text();
+      let e={error:t}; try{e=JSON.parse(t);}catch(_){}
+      throw new Error(e.error||res.statusText);
+    }
     const blob=await res.blob();
     const a=Object.assign(document.createElement('a'),{
       href:URL.createObjectURL(blob),
-      download:`${currentUser.username}_avatar_${format}.zip`
+      download:`${name}_avatar.zip`
     });
     a.click(); URL.revokeObjectURL(a.href);
-    st('av-status',`✓ Download selesai: ${currentUser.username}_avatar_${format}.zip`,'ok');
-  }catch(e){ st('av-status','✗ '+e.message,'err'); }
+    st('av-status',`✓ Download selesai! Buka ZIP → import .obj di Nomad Sculpt / Prisma 3D`,'ok');
+  }catch(e){
+    st('av-status','✗ '+e.message,'err');
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 
 // ── CATALOG ───────────────────────────────────────────────────────
@@ -411,10 +502,10 @@ async function downloadCatalog(format){
 const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
   ['GET','GET /api/avatar/3d-urls?user=','URL .obj & .mtl dari Roblox CDN'],
-  ['GET','GET /api/avatar/download-full?user=&format=','ZIP berisi OBJ/GLTF avatar'],
+  ['GET','GET /api/avatar/download?user=&format=','ZIP berisi OBJ/GLTF avatar'],
   ['GET','GET /api/avatar/wearing?user=','Daftar Asset ID yang dipakai avatar'],
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
-  ['GET','GET /api/catalog/download-full?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
+  ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
@@ -553,12 +644,70 @@ async function downloadProcedural(){
   const user=document.getElementById('av-input').value.trim();
   if(!user)return;
   try{
-    const res=await fetch('/api/avatar/procedural-download?user='+encodeURIComponent(user));
+    const res=await fetch('${BASE}/api/avatar/procedural-download?user='+encodeURIComponent(user));
     const blob=await res.blob();
     const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:user+'_procedural.zip'});
     a.click();
   }catch(e){alert('Error: '+e.message);}
 }
+
+// ── I18N ─────────────────────────────────────────────────────────
+const LANG = {
+  id: {
+    modal_title: '⚡ INFO KEAMANAN',
+    s1_title: '100% AMAN',
+    s1_desc: 'Website ini tidak pernah meminta atau menyimpan password Roblox kamu.',
+    s2_title: 'TIDAK ADA TRACKING',
+    s2_desc: 'Tidak ada data pribadi yang dikirim ke server manapun. Cookie hanya dipakai untuk akses API Roblox.',
+    s3_title: 'LOCAL SERVER',
+    s3_desc: 'Server berjalan di HP kamu sendiri (localhost). Data tidak pernah meninggalkan perangkat kamu.',
+    s4_title: 'OPEN SOURCE',
+    s4_desc: 'Kode sumber tersedia di GitHub. Kamu bisa verifikasi sendiri keamanannya.',
+    btn_understand: '▶ MENGERTI, LANJUTKAN',
+  },
+  en: {
+    modal_title: '⚡ SECURITY INFO',
+    s1_title: '100% SAFE',
+    s1_desc: 'This website never asks for or stores your Roblox password.',
+    s2_title: 'NO TRACKING',
+    s2_desc: 'No personal data is sent to any server. Cookie is only used for Roblox API access.',
+    s3_title: 'LOCAL SERVER',
+    s3_desc: 'Server runs on your own device (localhost). Data never leaves your device.',
+    s4_title: 'OPEN SOURCE',
+    s4_desc: 'Source code is available on GitHub. You can verify the security yourself.',
+    btn_understand: '▶ UNDERSTOOD, CONTINUE',
+  }
+};
+
+let currentLang = localStorage.getItem('lang') || 'id';
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('lang', lang);
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if(LANG[lang][key]) el.textContent = LANG[lang][key];
+  });
+  document.querySelectorAll('.lang-btn').forEach((btn,i) => {
+    btn.classList.toggle('active', (i===0&&lang==='id')||(i===1&&lang==='en'));
+  });
+}
+
+function closeModal() {
+  document.getElementById('security-modal').style.display='none';
+  localStorage.setItem('modal_seen','1');
+}
+
+// Show modal on first visit
+if(!localStorage.getItem('modal_seen')) {
+  document.addEventListener('DOMContentLoaded', () => setLang(currentLang));
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('security-modal').style.display='none';
+    setLang(currentLang);
+  });
+}
+
 document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
 document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
 </script>
