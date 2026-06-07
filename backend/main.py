@@ -181,6 +181,7 @@ def avatar_info():
             "profileUrl":f"https://www.roblox.com/users/{uid}/profile"}
         cache_set(f"info_{user}",result)
         return jsonify(result)
+    except Exception as e: return jsonify({"error":str(e)}),500
 
 @app.get("/api/avatar/3d-urls")
 def avatar_3d_urls():
