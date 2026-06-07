@@ -341,7 +341,7 @@ async function downloadAvatar(format){
   const user=document.getElementById('av-input').value.trim();
   st('av-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
   try{
-    const res=await fetch(`${BASE}/api/avatar/download?user=${encodeURIComponent(user)}&format=${format}`);
+    const res=await fetch(`${BASE}/api/avatar/download-full?user=${encodeURIComponent(user)}&format=${format}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
     const blob=await res.blob();
     const a=Object.assign(document.createElement('a'),{
@@ -411,7 +411,7 @@ async function downloadCatalog(format){
 const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
   ['GET','GET /api/avatar/3d-urls?user=','URL .obj & .mtl dari Roblox CDN'],
-  ['GET','GET /api/avatar/download?user=&format=','ZIP berisi OBJ/GLTF avatar'],
+  ['GET','GET /api/avatar/download-full?user=&format=','ZIP berisi OBJ/GLTF avatar'],
   ['GET','GET /api/avatar/wearing?user=','Daftar Asset ID yang dipakai avatar'],
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
