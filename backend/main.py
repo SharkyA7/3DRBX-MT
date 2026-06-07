@@ -36,12 +36,12 @@ def hdr(auth=False):
 
 def rget(url):
     # Cookie hanya untuk assetdelivery (download asset privat)
-    needs_auth = "assetdelivery.roblox.com" in url
+    needs_auth = "assetdelivery.roblox.com" in url or "rbxcdn.com" in url
     with httpx.Client(timeout=TIMEOUT,follow_redirects=True) as c:
         r = c.get(url,headers=hdr(auth=needs_auth)); r.raise_for_status(); return r.json()
 
 def rget_bytes(url):
-    needs_auth = "assetdelivery.roblox.com" in url
+    needs_auth = "assetdelivery.roblox.com" in url or "rbxcdn.com" in url
     with httpx.Client(timeout=30,follow_redirects=True) as c:
         r = c.get(url,headers=hdr(auth=needs_auth)); r.raise_for_status(); return r.content
 
