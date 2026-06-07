@@ -14,6 +14,19 @@ def add_cors(response):
     return response
 
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
+_cache = {}
+CACHE_TTL = 300
+
+def cache_get(key):
+    if key in _cache:
+        val, ts = _cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+def cache_set(key, val):
+    _cache[key] = (val, time.time())
 API_KEY = os.getenv("ROBLOX_API_KEY","")
 TIMEOUT = 15
 
@@ -154,17 +167,20 @@ def avatar_info():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
     try:
+        cached=cache_get(f"info_{user}")
+        if cached: return jsonify(cached)
         uid=resolve(user)
         info=rget(f"https://users.roblox.com/v1/users/{uid}")
         av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
         th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
-        return jsonify({"userId":uid,"username":info.get("name"),"displayName":info.get("displayName"),
+        result={"userId":uid,"username":info.get("name"),"displayName":info.get("displayName"),
             "created":info.get("created"),"rigType":av.get("playerAvatarType"),
             "scales":av.get("scales"),"bodyColors":av.get("bodyColors"),
             "assets":av.get("assets",[]),
             "thumbnailUrl":(th.get("data") or [{}])[0].get("imageUrl"),
-            "profileUrl":f"https://www.roblox.com/users/{uid}/profile"})
-    except Exception as e: return jsonify({"error":str(e)}),500
+            "profileUrl":f"https://www.roblox.com/users/{uid}/profile"}
+        cache_set(f"info_{user}",result)
+        return jsonify(result)
 
 @app.get("/api/avatar/3d-urls")
 def avatar_3d_urls():
