@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maintenance — Roblox Downloader</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05050d;color:#eeeef8;font-family:'Share Tech Mono',monospace;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  background-image:linear-gradient(rgba(0,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,255,.03) 1px,transparent 1px);
+  background-size:40px 40px}
+.container{text-align:center;padding:40px 20px;max-width:500px}
+.icon{font-size:60px;margin-bottom:24px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+h1{font-family:'Press Start 2P',monospace;font-size:clamp(12px,3vw,18px);
+  color:#00ffff;text-shadow:0 0 20px rgba(0,255,255,.8),0 0 40px rgba(0,255,255,.4);
+  letter-spacing:3px;line-height:1.6;margin-bottom:16px}
+.sub{font-size:11px;color:#5a5a7a;letter-spacing:3px;text-transform:uppercase;margin-bottom:32px}
+.card{background:#0c0c1a;border:1px solid #00ffff;border-radius:4px;padding:24px;
+  box-shadow:0 0 30px rgba(0,255,255,.15),inset 0 0 30px rgba(0,255,255,.02);
+  position:relative;overflow:hidden;margin-bottom:24px}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,#00ffff,#ff00ff,#00ffff,transparent)}
+.msg{font-size:11px;line-height:2;color:#aaa;margin-bottom:16px}
+.msg strong{color:#00ffff}
+.eta{font-family:'Press Start 2P',monospace;font-size:9px;color:#ff00ff;
+  text-shadow:0 0 10px rgba(255,0,255,.5);letter-spacing:2px}
+.progress{width:100%;height:4px;background:#1a1a2e;border-radius:2px;overflow:hidden;margin:16px 0}
+.progress-bar{height:100%;
+  background:linear-gradient(90deg,#00ffff,#ff00ff,#00ffff);
+  background-size:200% 100%;animation:slide 2s linear infinite;width:70%}
+@keyframes slide{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.social{font-size:9px;color:#3a3a5a;letter-spacing:2px}
+.social a{color:#00ffff;text-decoration:none}
+.scan-line{position:fixed;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,255,.6),transparent);
+  animation:scandown 4s linear infinite}
+@keyframes scandown{0%{top:0}100%{top:100vh}}
+.glitch{animation:glitch 3s infinite}
+@keyframes glitch{
+  0%,95%,100%{text-shadow:0 0 20px rgba(0,255,255,.8)}
+  96%{text-shadow:3px 0 #ff00ff,−3px 0 #00ffff}
+  97%{text-shadow:-3px 0 #ff00ff,3px 0 #00ffff}
+  98%{text-shadow:3px 0 #ff00ff,-3px 0 #00ffff}
+}
+</style>
+</head>
+<body>
+<div class="scan-line"></div>
+<div class="container">
+  <div class="icon">⚙️</div>
+  <h1 class="glitch">SISTEM<br>MAINTENANCE</h1>
+  <p class="sub">// SERVER SEDANG DIPERBAIKI //</p>
+  <div class="card">
+    <p class="msg">
+      <strong>Roblox 3D Downloader</strong> sedang dalam masa pemeliharaan.<br><br>
+      Developer sedang melakukan update dan perbaikan sistem.<br>
+      Server akan segera kembali online.
+    </p>
+    <div class="progress"><div class="progress-bar"></div></div>
+    <p class="eta">EST. BACK SOON...</p>
+  </div>
+  <p class="social">
+    Follow progress di
+    <a href="https://github.com/SharkyA7" target="_blank">GitHub @SharkyA7</a>
+  </p>
+</div>
+</body>
+</html>

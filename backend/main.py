@@ -4,6 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
+
+# CORS - izinkan semua request dari browser
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
 TIMEOUT = 15
 
@@ -228,57 +237,137 @@ def avatar_procedural_download():
 
 @app.get("/api/catalog/info")
 def catalog_info():
-    aid=request.args.get("asset_id","")
+    aid = request.args.get("asset_id","")
     if not aid: return jsonify({"error":"asset_id required"}),400
     try:
-        d=rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":int(aid)}]})
-        item=(d.get("data") or [{}])[0]
-        th=rget(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png")
-        return jsonify({"assetId":int(aid),"name":item.get("name"),"assetType":item.get("assetType"),
-            "creatorName":item.get("creatorName"),"price":item.get("price"),
-            "thumbnailUrl":(th.get("data") or [{}])[0].get("imageUrl"),
-            "catalogUrl":f"https://www.roblox.com/catalog/{aid}"})
+        s   = get_scraper()
+        aid_int = int(aid)
+        item = {}
+
+        # Coba 3 endpoint berbeda
+        endpoints = [
+            f"https://catalog.roblox.com/v1/catalog/items/{aid_int}/details?itemType=Asset",
+            f"https://economy.roblox.com/v2/assets/{aid_int}/details",
+            f"https://apis.roblox.com/assets/v1/assets/{aid_int}",
+        ]
+        for ep in endpoints:
+            try:
+                r = s.get(ep, timeout=10)
+                if r.status_code == 200:
+                    item = r.json(); break
+            except: continue
+
+        # Fallback POST
+        if not item:
+            try:
+                d = rpost("https://catalog.roblox.com/v1/catalog/items/details",
+                          {"items":[{"itemType":"Asset","id":aid_int}]})
+                item = (d.get("data") or [{}])[0]
+            except: pass
+
+        if not item:
+            return jsonify({"error":f"Asset {aid} tidak ditemukan atau tidak dapat diakses"}),404
+
+        # Thumbnail
+        try:
+            th    = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
+            thumb = (th.get("data") or [{}])[0].get("imageUrl")
+        except: thumb = None
+
+        name    = item.get("name") or item.get("displayName") or f"Asset {aid}"
+        creator = item.get("creatorName") or item.get("creator",{}).get("name","")
+        price   = item.get("price") or item.get("priceInRobux")
+        atype   = item.get("assetType") or item.get("assetTypeId")
+
+        return jsonify({"assetId":aid_int,"name":name,"assetType":atype,
+            "creatorName":creator,"price":price,
+            "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"})
     except Exception as e: return jsonify({"error":str(e)}),500
 
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
-    aid=request.args.get("asset_id","")
+    aid = request.args.get("asset_id","")
+    fmt = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
     if not aid: return jsonify({"error":"asset_id required"}),400
     try:
-        d=rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":int(aid)}]})
-        item=(d.get("data") or [{}])[0]
-        name=item.get("name",f"asset_{aid}")
-        safe="".join(c if c.isalnum() or c in" _-" else "_" for c in name).strip()
-        raw=rget_bytes(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}")
-        th=rget(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png")
-        tu=(th.get("data") or [{}])[0].get("imageUrl")
-        buf=io.BytesIO()
+        s = get_scraper()
+        d = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":int(aid)}]})
+        item = (d.get("data") or [{}])[0]
+        if not item: return jsonify({"error":f"Asset {aid} tidak ditemukan"}),404
+        name = item.get("name",f"asset_{aid}")
+        safe = "".join(c if c.isalnum() or c in" _-" else "_" for c in name).strip()
+
+        # Download asset pakai scraper (bypass Cloudflare 403)
+        raw_r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
+        raw   = raw_r.content
+
+        # Thumbnail
+        try:
+            th  = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
+            tu  = (th.get("data") or [{}])[0].get("imageUrl")
+        except: tu = None
+
+        buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             try:
-                from services.mesh_converter import parse_mesh,mesh_to_obj
-                mesh=parse_mesh(raw,name=safe)
-                obj_t=mesh_to_obj(mesh,mtl_name=safe)
-                mtl_t=f"newmtl default\nKd 0.8 0.8 0.8\n"
-                if tu:
-                    tex=rget_bytes(tu)
-                    zf.writestr(f"textures/{safe}.png",tex)
-                    mtl_t=f"newmtl default\nKd 0.8 0.8 0.8\nmap_Kd textures/{safe}.png\n"
-                zf.writestr(f"{safe}.obj",obj_t)
-                zf.writestr(f"{safe}.mtl",mtl_t)
-            except:
-                zf.writestr(f"{safe}.mesh",raw)
-                if tu: zf.writestr(f"textures/{safe}_preview.png",rget_bytes(tu))
-            zf.writestr("README.txt",f"Item: {name}\nImport {safe}.obj di Prisma 3D atau Nomad Sculpt\nTexture ada di folder textures/")
+                from services.mesh_converter import parse_mesh, mesh_to_obj
+                mesh  = parse_mesh(raw, name=safe)
+                obj_t = mesh_to_obj(mesh, mtl_name=safe)
+
+                if fmt == "gltf" and tu:
+                    # GLTF: OBJ + MTL + texture PNG
+                    tex = s.get(tu, timeout=15).content
+                    zf.writestr(f"textures/{safe}.png", tex)
+                    mtl_t = "newmtl default\nKd 0.8 0.8 0.8\nmap_Kd textures/" + safe + ".png\n"
+                else:
+                    # OBJ: geometry + material tanpa texture
+                    mtl_t = "newmtl default\nKd 0.8 0.8 0.8\nKa 0.1 0.1 0.1\n"
+
+                zf.writestr(f"{safe}.obj", obj_t)
+                zf.writestr(f"{safe}.mtl", mtl_t)
+
+            except Exception as me:
+                # Fallback: simpan raw mesh + thumbnail
+                ext = ".png" if raw[:4]==b"\x89PNG" else ".mesh"
+                zf.writestr(f"{safe}{ext}", raw)
+                if tu and fmt=="gltf":
+                    try: zf.writestr(f"textures/{safe}_preview.png", s.get(tu,timeout=10).content)
+                    except: pass
+                zf.writestr("PARSE_ERROR.txt", f"Mesh parse gagal: {me}\nFile mentah disertakan.")
+
+            zf.writestr("README.txt",
+                f"Item  : {name}\nFormat: {fmt.upper()}\n\n"
+                f"NOMAD SCULPT:\n  Files > Import > {safe}.obj\n"
+                + (f"  Material > Base Color > textures/{safe}.png\n" if fmt=="gltf" else "")
+                + f"\nPRISMA 3D:\n  + > Import > OBJ > {safe}.obj\n"
+                + (f"  Material > Texture > textures/{safe}.png" if fmt=="gltf" else "")
+            )
+
         buf.seek(0)
-        return Response(buf.read(),mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{safe}_full.zip"'})
+        fname = f"{safe}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
     except Exception as e: return jsonify({"error":str(e)}),500
+
+# Set True saat maintenance
+MAINTENANCE = os.getenv("MAINTENANCE","false").lower() == "true"
 
 @app.get("/")
 def frontend():
-    p=os.path.join(os.path.dirname(__file__),"..","frontend","index.html")
+    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    if MAINTENANCE:
+        mp = os.path.join(base,"maintenance.html")
+        if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
+    p = os.path.join(base,"index.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
-    return "<h1>Roblox Downloader</h1><p><a href='/health'>/health</a></p>"
+    return "<h1>Roblox Downloader</h1>"
+
+@app.get("/maintenance")
+def maintenance_preview():
+    """Preview maintenance page langsung"""
+    p=os.path.join(os.path.dirname(__file__),"..","frontend","maintenance.html")
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    return "Maintenance page not found",404
 
 
 @app.get("/api/avatar/smart-download")
@@ -378,7 +467,8 @@ def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
 @app.get("/api/v2/avatar")
 def avatar_v2():
     """Avatar download - real mesh + UV texture"""
-    user = request.args.get("user","")
+    user   = request.args.get("user","")
+    fmt    = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
     if not user: return jsonify({"error":"user required"}),400
     try:
         uid  = resolve(user)
@@ -410,13 +500,14 @@ def avatar_v2():
                 zf.writestr(f"{name}.obj", obj_data)
                 zf.writestr(f"{name}.mtl", mtl_fixed)
 
-                # Download semua texture PNG
-                for i, tex_url in enumerate(tex_urls):
-                    try:
-                        tb = s.get(tex_url, timeout=20)
-                        if tb.status_code == 200:
-                            zf.writestr(tex_names[i], tb.content)
-                    except: pass
+                # GLTF mode: include textures. OBJ mode: geometry only
+                if fmt == "gltf":
+                    for i, tex_url in enumerate(tex_urls):
+                        try:
+                            tb = s.get(tex_url, timeout=20)
+                            if tb.status_code == 200:
+                                zf.writestr(tex_names[i], tb.content)
+                        except: pass
 
                 method = "real_mesh"
             else:
@@ -446,39 +537,69 @@ def avatar_v2():
 
 @app.get("/api/v2/item")
 def item_v2():
-    """Item download pakai assets-thumbnail-3d endpoint (Faizdzn method)"""
+    """Item download - cloudscraper + format OBJ/GLTF (Faizdzn method)"""
     aid = request.args.get("id","")
+    fmt = request.args.get("format","gltf").lower()
     if not aid: return jsonify({"error":"id required"}),400
     try:
         file_id = int(aid)
+        s = get_scraper()
 
-        # Get manifest URL - pakai assets-thumbnail-3d bukan assetdelivery!
-        d    = rget(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}")
+        # Get item name
+        try:
+            d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
+            item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
+            safe_name = "".join(c if c.isalnum() or c in" _-" else "_" for c in item_name).strip()
+        except:
+            item_name = str(file_id); safe_name = str(file_id)
+
+        # Get 3D manifest pakai scraper
+        r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
+        if r3d.status_code != 200:
+            return jsonify({"error":f"3D thumbnail item error {r3d.status_code}"}),503
+        d = r3d.json()
         manifest_url = d.get("imageUrl")
-        if not manifest_url: return jsonify({"error":"3D thumbnail item tidak tersedia"}),503
+        if not manifest_url:
+            return jsonify({"error":"3D thumbnail item tidak tersedia — item ini mungkin tidak punya model 3D"}),503
 
-        manifest = rget(manifest_url)
+        # Fetch manifest JSON
+        manifest = s.get(manifest_url, timeout=15).json()
 
-        # Convert hash -> URL
+        # Convert hash -> CDN URL
         obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
+        tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
 
-        # Download files
-        obj_data = rget_cdn(obj_url).decode("utf-8","replace")
-        mtl_data = rget_cdn(mtl_url).decode("utf-8","replace")
-        tex_names = [f"{file_id}_Tex{i+1}.png" for i in range(len(tex_hashes))]
-        mtl_fixed = fix_mtl_textures(mtl_data, tex_hashes, tex_names)
+        # Download OBJ + MTL pakai scraper
+        obj_data  = s.get(obj_url, timeout=30).text
+        mtl_raw   = s.get(mtl_url, timeout=15).text
+        mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f"{file_id}.obj", obj_data)
-            zf.writestr(f"{file_id}.mtl", mtl_fixed)
-            for i, tex_url in enumerate(tex_urls):
-                try: zf.writestr(tex_names[i], rget_bytes(tex_url))
-                except: pass
+            zf.writestr(f"{safe_name}.obj", obj_data)
+            zf.writestr(f"{safe_name}.mtl", mtl_fixed)
+
+            if fmt == "gltf":
+                # Include all UV textures
+                for i, tex_url in enumerate(tex_urls):
+                    try:
+                        tb = s.get(tex_url, timeout=20)
+                        if tb.status_code == 200:
+                            zf.writestr(tex_names[i], tb.content)
+                    except: pass
+            # OBJ mode: no textures
+
+            zf.writestr("README.txt",
+                f"Item  : {item_name}\nFormat: {fmt.upper()}\n\n"
+                f"NOMAD SCULPT:\n  Files > Import > {safe_name}.obj\n"
+                + (f"  Material > Base Color > {tex_names[0] if tex_names else ''}\n" if fmt=="gltf" else "")
+                + f"\nPRISMA 3D:\n  + > Import > OBJ > {safe_name}.obj"
+            )
 
         buf.seek(0)
+        fname = f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="item_{file_id}.zip"'})
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
     except Exception as e: return jsonify({"error":str(e)}),500
 
 @app.get("/api/proxy/avatar-3d")
