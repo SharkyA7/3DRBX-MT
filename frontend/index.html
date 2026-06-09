@@ -106,6 +106,37 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 @keyframes scan{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
 .lang-flag{font-size:14px}
 
+
+/* ── PATCH NOTES ─────────────────────────────────────────── */
+.patch-section{max-width:860px;margin:0 auto;padding:0 16px 60px}
+.patch-header{font-family:'Press Start 2P',monospace;font-size:11px;color:#e8000b;
+  letter-spacing:2px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
+.patch-header::before{content:'▶';font-size:8px}
+.patch-header::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--red),transparent)}
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;
+  background:linear-gradient(180deg,var(--red),rgba(232,0,11,.1))}
+.tl-item{position:relative;margin-bottom:28px}
+.tl-dot{position:absolute;left:-28px;top:4px;width:10px;height:10px;border-radius:50%;
+  border:2px solid var(--red);background:var(--bg);flex-shrink:0}
+.tl-item.latest .tl-dot{background:var(--red);box-shadow:0 0 8px rgba(232,0,11,.6)}
+.tl-version{font-family:'Press Start 2P',monospace;font-size:9px;color:#fff;
+  margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tl-badge-new{background:var(--red);color:#fff;font-size:7px;padding:2px 6px;border-radius:2px;letter-spacing:1px}
+.tl-badge-fix{background:#0066cc;color:#fff;font-size:7px;padding:2px 6px;border-radius:2px}
+.tl-badge-feat{background:#007744;color:#fff;font-size:7px;padding:2px 6px;border-radius:2px}
+.tl-date{font-size:9px;color:var(--gray);letter-spacing:1px}
+.tl-card{background:var(--s1);border:1px solid var(--s3);border-radius:4px;padding:14px;margin-top:8px}
+.tl-item.latest .tl-card{border-color:rgba(232,0,11,.3)}
+.tl-changes{list-style:none;padding:0;margin:0}
+.tl-changes li{font-size:10px;color:#aaa;line-height:1.8;padding-left:14px;position:relative}
+.tl-changes li::before{content:'→';position:absolute;left:0;color:var(--red);font-size:9px}
+.tl-tag{display:inline-block;font-size:7px;padding:1px 5px;border-radius:2px;
+  margin-right:4px;vertical-align:middle}
+.tag-new{background:rgba(232,0,11,.15);color:#ff6666;border:1px solid rgba(232,0,11,.3)}
+.tag-fix{background:rgba(0,100,200,.15);color:#66aaff;border:1px solid rgba(0,100,200,.3)}
+.tag-feat{background:rgba(0,150,80,.15);color:#66ffaa;border:1px solid rgba(0,150,80,.3)}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
