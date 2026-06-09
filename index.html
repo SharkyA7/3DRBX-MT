@@ -78,33 +78,43 @@ select option{background:var(--s2)}
 code{background:var(--s2);border:1px solid var(--gray2);border-radius:3px;padding:2px 6px;font-size:10px;color:var(--green)}
 footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top:1px solid var(--s2);letter-spacing:1px}
 
-/* ── POPUP & I18N ─────────────────────────────────────────── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;
-  display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)}
-.modal-box{background:#0a0a18;border:1px solid #e8000b;border-radius:6px;max-width:420px;width:100%;
-  box-shadow:0 0 40px rgba(232,0,11,.3),0 0 80px rgba(232,0,11,.1);position:relative;overflow:hidden}
-.modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,#e8000b,#ff6600,#e8000b,transparent)}
-.modal-header{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
-.modal-title{font-family:'Press Start 2P',monospace;font-size:10px;color:#e8000b;letter-spacing:2px}
-.lang-btns{display:flex;gap:6px}
-.lang-btn{background:transparent;border:1px solid #3a3a5a;color:#5a5a7a;font-family:'Share Tech Mono',monospace;
-  font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;transition:all .2s}
-.lang-btn.active{border-color:#e8000b;color:#e8000b;background:rgba(232,0,11,.08)}
-.modal-body{padding:18px 20px}
-.security-item{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
-.sec-icon{font-size:18px;flex-shrink:0;margin-top:2px}
-.sec-text{font-size:10px;line-height:1.8;color:#aaa}
-.sec-text strong{color:#eef;font-family:'Share Tech Mono',monospace}
-.modal-footer{padding:0 20px 20px;display:flex;gap:10px}
-.modal-btn{flex:1;padding:12px;border:none;border-radius:3px;font-family:'Press Start 2P',monospace;
-  font-size:8px;cursor:pointer;letter-spacing:1px;transition:all .2s}
-.modal-btn-primary{background:#e8000b;color:#fff}
-.modal-btn-primary:hover{background:#ff1a24;box-shadow:0 0 14px rgba(232,0,11,.5)}
-.neon-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(232,0,11,.6),transparent);
-  animation:scan 3s linear infinite}
+
 @keyframes scan{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
 .lang-flag{font-size:14px}
+
+
+/* ── REDESIGNED SECURITY POPUP ─────────────────────────── */
+.modal-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.92);backdrop-filter:blur(8px)}
+.modal-box{background:#05050d;border:1px solid #00ffcc;border-radius:6px;max-width:440px;width:100%;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(0,255,204,.2)}
+.modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ffcc,#e8000b,#00ffcc,transparent)}
+.modal-header{padding:16px 16px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.modal-title-wrap{flex:1}
+.modal-badge{display:inline-block;background:rgba(232,0,11,.15);border:1px solid #e8000b;color:#e8000b;font-family:'Press Start 2P',monospace;font-size:7px;padding:3px 8px;border-radius:2px;letter-spacing:1px;margin-bottom:6px}
+.modal-title{font-family:'Press Start 2P',monospace;font-size:11px;color:#00ffcc;letter-spacing:2px;line-height:1.5;text-shadow:0 0 10px rgba(0,255,204,.5)}
+.lang-btns{display:flex;gap:5px;flex-shrink:0;margin-left:8px}
+.lang-btn{background:transparent;border:1px solid #2a2a4a;color:#5a5a7a;font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 8px;border-radius:3px;cursor:pointer;transition:all .2s}
+.lang-btn.active{border-color:#00ffcc;color:#00ffcc;background:rgba(0,255,204,.08)}
+.false-alert{margin:14px 16px 0;background:rgba(232,0,11,.08);border:1px solid rgba(232,0,11,.4);border-left:3px solid #e8000b;border-radius:4px;padding:12px}
+.false-alert-title{font-family:'Press Start 2P',monospace;font-size:8px;color:#e8000b;margin-bottom:6px}
+.false-alert-body{font-size:9px;color:#cc8888;line-height:1.8}
+.false-alert-body strong{color:#ffaaaa}
+.modal-body{padding:14px 16px}
+.sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.sec-card{background:#0a0a1a;border:1px solid #1a1a3a;border-radius:4px;padding:10px;transition:border-color .2s}
+.sec-card:hover{border-color:#00ffcc}
+.sec-card-icon{font-size:16px;margin-bottom:4px}
+.sec-card-title{font-family:'Press Start 2P',monospace;font-size:7px;color:#00ffcc;margin-bottom:4px;letter-spacing:1px}
+.sec-card-desc{font-size:8px;color:#6a6a8a;line-height:1.6}
+.proof-section{background:#0a0a1a;border:1px solid #1a1a3a;border-radius:4px;padding:12px;margin-bottom:14px}
+.proof-title{font-family:'Press Start 2P',monospace;font-size:8px;color:#ffaa00;margin-bottom:8px}
+.proof-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:9px;color:#888}
+.proof-item a{color:#00ffcc;text-decoration:none;font-family:'Share Tech Mono',monospace}
+.proof-dot{width:6px;height:6px;border-radius:50%;background:#00ffcc;flex-shrink:0}
+.modal-footer{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
+.modal-btn{width:100%;padding:12px;border:none;border-radius:3px;cursor:pointer;font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:1px;transition:all .2s}
+.modal-btn-primary{background:linear-gradient(135deg,#00aa88,#007755);color:#fff}
+.modal-btn-secondary{background:transparent;color:#5a5a7a;border:1px solid #2a2a4a;font-size:7px}
+.modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,204,.4),transparent);margin:0 16px 12px}
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -115,42 +125,42 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 <!-- SECURITY MODAL -->
 <div class="modal-overlay" id="security-modal">
   <div class="modal-box">
-    <div class="neon-scan"></div>
     <div class="modal-header">
-      <div class="modal-title" data-i18n="modal_title">⚡ SECURITY INFO</div>
-      <div class="lang-btns">
-        <button class="lang-btn active" onclick="setLang('id')"><span class="lang-flag">🇮🇩</span> ID</button>
-        <button class="lang-btn" onclick="setLang('en')"><span class="lang-flag">🇬🇧</span> EN</button>
+      <div class="modal-title-wrap">
+        <div class="modal-badge" data-i18n="badge_verified">✓ TERVERIFIKASI AMAN</div>
+        <div class="modal-title" data-i18n="modal_title">ROBLOX 3D<br>DOWNLOADER</div>
       </div>
+      <div class="lang-btns">
+        <button class="lang-btn active" onclick="setLang('id')">🇮🇩 ID</button>
+        <button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button>
+      </div>
+    </div>
+    <div class="false-alert">
+      <div class="false-alert-title">⚠ <span data-i18n="false_title">AI OVERVIEW TIDAK AKURAT</span></div>
+      <div class="false-alert-body" data-i18n="false_body">Google AI menyebut situs ini <strong>"phishing"</strong> — ini <strong>SALAH</strong>. AI menilai berdasarkan reputasi domain qzz.io, bukan konten situs ini yang <strong>100% open source</strong>.</div>
     </div>
     <div class="modal-body">
-      <div class="security-item">
-        <span class="sec-icon">🔒</span>
-        <div class="sec-text"><strong data-i18n="s1_title">100% AMAN</strong><br>
-          <span data-i18n="s1_desc">Website ini tidak pernah meminta atau menyimpan password Roblox kamu.</span></div>
+      <div class="sec-grid">
+        <div class="sec-card"><div class="sec-card-icon">🔒</div><div class="sec-card-title" data-i18n="c1_title">NO PASSWORD</div><div class="sec-card-desc" data-i18n="c1_desc">Tidak pernah meminta password Roblox</div></div>
+        <div class="sec-card"><div class="sec-card-icon">📵</div><div class="sec-card-title" data-i18n="c2_title">NO TRACKING</div><div class="sec-card-desc" data-i18n="c2_desc">Tidak ada analytics atau tracker</div></div>
+        <div class="sec-card"><div class="sec-card-icon">🖥️</div><div class="sec-card-title" data-i18n="c3_title">LOCAL/CLOUD</div><div class="sec-card-desc" data-i18n="c3_desc">Server bisa lokal atau Railway cloud</div></div>
+        <div class="sec-card"><div class="sec-card-icon">⚡</div><div class="sec-card-title" data-i18n="c4_title">API ONLY</div><div class="sec-card-desc" data-i18n="c4_desc">Hanya akses API publik Roblox</div></div>
       </div>
-      <div class="security-item">
-        <span class="sec-icon">🚫</span>
-        <div class="sec-text"><strong data-i18n="s2_title">TIDAK ADA TRACKING</strong><br>
-          <span data-i18n="s2_desc">Tidak ada data pribadi yang dikirim ke server manapun. Cookie hanya dipakai untuk akses API Roblox.</span></div>
-      </div>
-      <div class="security-item">
-        <span class="sec-icon">📂</span>
-        <div class="sec-text"><strong data-i18n="s3_title">LOCAL SERVER</strong><br>
-          <span data-i18n="s3_desc">Server berjalan di HP kamu sendiri (localhost). Data tidak pernah meninggalkan perangkat kamu.</span></div>
-      </div>
-      <div class="security-item">
-        <span class="sec-icon">⚡</span>
-        <div class="sec-text"><strong data-i18n="s4_title">OPEN SOURCE</strong><br>
-          <span data-i18n="s4_desc">Kode sumber tersedia di GitHub. Kamu bisa verifikasi sendiri keamanannya.</span></div>
+      <div class="proof-section">
+        <div class="proof-title">🔍 <span data-i18n="proof_title">BUKTI TRANSPARANSI</span></div>
+        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_1">Source code:</span>&nbsp;<a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank">GitHub @SharkyA7</a></div>
+        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_2">✓ Terverifikasi Google Search Console</span></div>
+        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_3">✓ Dilindungi Cloudflare SSL/TLS</span></div>
+        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_4">✓ Tidak ada form login / input password</span></div>
       </div>
     </div>
+    <div class="modal-scan"></div>
     <div class="modal-footer">
-      <button class="modal-btn modal-btn-primary" onclick="closeModal()" data-i18n="btn_understand">▶ MENGERTI, LANJUTKAN</button>
+      <button class="modal-btn modal-btn-primary" onclick="closeModal()" data-i18n="btn_understand">✓ SAYA MENGERTI, LANJUTKAN</button>
+      <button class="modal-btn modal-btn-secondary" onclick="window.open('https://github.com/SharkyA7/Roblox-downloader-backend','_blank')" data-i18n="btn_github">↗ LIHAT SOURCE CODE DI GITHUB</button>
     </div>
   </div>
 </div>
-
 <header>
   <h1>ROBLOX 3D DOWNLOADER</h1>
   <p class="sub">Avatar · Katalog · OBJ · GLTF · Backend API</p>
@@ -653,60 +663,56 @@ async function downloadProcedural(){
 
 // ── I18N ─────────────────────────────────────────────────────────
 const LANG = {
-  id: {
-    modal_title: '⚡ INFO KEAMANAN',
-    s1_title: '100% AMAN',
-    s1_desc: 'Website ini tidak pernah meminta atau menyimpan password Roblox kamu.',
-    s2_title: 'TIDAK ADA TRACKING',
-    s2_desc: 'Tidak ada data pribadi yang dikirim ke server manapun. Cookie hanya dipakai untuk akses API Roblox.',
-    s3_title: 'LOCAL SERVER',
-    s3_desc: 'Server berjalan di HP kamu sendiri (localhost). Data tidak pernah meninggalkan perangkat kamu.',
-    s4_title: 'OPEN SOURCE',
-    s4_desc: 'Kode sumber tersedia di GitHub. Kamu bisa verifikasi sendiri keamanannya.',
-    btn_understand: '▶ MENGERTI, LANJUTKAN',
+  id:{
+    badge_verified:'✓ TERVERIFIKASI AMAN',modal_title:'ROBLOX 3D DOWNLOADER',
+    false_title:'AI OVERVIEW TIDAK AKURAT',
+    false_body:'Google AI menyebut situs ini <strong>"phishing"</strong> — ini <strong>SALAH</strong>. AI menilai berdasarkan reputasi domain qzz.io, bukan konten situs ini yang <strong>100% open source</strong>.',
+    c1_title:'NO PASSWORD',c1_desc:'Tidak pernah meminta password Roblox',
+    c2_title:'NO TRACKING',c2_desc:'Tidak ada analytics atau tracker',
+    c3_title:'LOCAL/CLOUD',c3_desc:'Server bisa lokal atau Railway cloud',
+    c4_title:'API ONLY',c4_desc:'Hanya akses API publik Roblox',
+    proof_title:'BUKTI TRANSPARANSI',proof_1:'Source code:',
+    proof_2:'✓ Terverifikasi Google Search Console',
+    proof_3:'✓ Dilindungi Cloudflare SSL/TLS',
+    proof_4:'✓ Tidak ada form login / input password',
+    btn_understand:'✓ SAYA MENGERTI, LANJUTKAN',
+    btn_github:'↗ LIHAT SOURCE CODE DI GITHUB',
   },
-  en: {
-    modal_title: '⚡ SECURITY INFO',
-    s1_title: '100% SAFE',
-    s1_desc: 'This website never asks for or stores your Roblox password.',
-    s2_title: 'NO TRACKING',
-    s2_desc: 'No personal data is sent to any server. Cookie is only used for Roblox API access.',
-    s3_title: 'LOCAL SERVER',
-    s3_desc: 'Server runs on your own device (localhost). Data never leaves your device.',
-    s4_title: 'OPEN SOURCE',
-    s4_desc: 'Source code is available on GitHub. You can verify the security yourself.',
-    btn_understand: '▶ UNDERSTOOD, CONTINUE',
+  en:{
+    badge_verified:'✓ VERIFIED SAFE',modal_title:'ROBLOX 3D DOWNLOADER',
+    false_title:'AI OVERVIEW IS INACCURATE',
+    false_body:'Google AI labels this site as <strong>"phishing"</strong> — this is <strong>FALSE</strong>. The AI judges based on qzz.io domain reputation, not this site which is <strong>100% open source</strong>.',
+    c1_title:'NO PASSWORD',c1_desc:'Never asks for your Roblox password',
+    c2_title:'NO TRACKING',c2_desc:'No analytics or trackers',
+    c3_title:'LOCAL/CLOUD',c3_desc:'Server can be local or Railway cloud',
+    c4_title:'API ONLY',c4_desc:'Only accesses public Roblox API',
+    proof_title:'TRANSPARENCY PROOF',proof_1:'Source code:',
+    proof_2:'✓ Verified by Google Search Console',
+    proof_3:'✓ Protected by Cloudflare SSL/TLS',
+    proof_4:'✓ No login form / password input',
+    btn_understand:'✓ I UNDERSTAND, CONTINUE',
+    btn_github:'↗ VIEW SOURCE CODE ON GITHUB',
   }
 };
-
-let currentLang = localStorage.getItem('lang') || 'id';
-
-function setLang(lang) {
-  currentLang = lang;
-  localStorage.setItem('lang', lang);
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if(LANG[lang][key]) el.textContent = LANG[lang][key];
+let currentLang=localStorage.getItem('lang')||'id';
+function setLang(lang){
+  currentLang=lang; localStorage.setItem('lang',lang);
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n');
+    if(LANG[lang]&&LANG[lang][k]) el.innerHTML=LANG[lang][k];
   });
-  document.querySelectorAll('.lang-btn').forEach((btn,i) => {
-    btn.classList.toggle('active', (i===0&&lang==='id')||(i===1&&lang==='en'));
+  document.querySelectorAll('.lang-btn').forEach((b,i)=>{
+    b.classList.toggle('active',(i===0&&lang==='id')||(i===1&&lang==='en'));
   });
 }
-
-function closeModal() {
+function closeModal(){
   document.getElementById('security-modal').style.display='none';
   localStorage.setItem('modal_seen','1');
 }
-
-// Show modal on first visit
-if(!localStorage.getItem('modal_seen')) {
-  document.addEventListener('DOMContentLoaded', () => setLang(currentLang));
-} else {
-  document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('security-modal').style.display='none';
-    setLang(currentLang);
-  });
-}
+document.addEventListener('DOMContentLoaded',()=>{
+  if(localStorage.getItem('modal_seen')) document.getElementById('security-modal').style.display='none';
+  setLang(currentLang);
+});
 
 document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
 document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
