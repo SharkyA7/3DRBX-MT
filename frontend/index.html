@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roblox 3D Downloader</title>
+<title>Roblox 3D Downloader — Export Avatar OBJ & GLTF for Nomad Sculpt & Prisma 3D</title>
+<meta name="description" content="Open-source developer tool for 3D creators. Download Roblox avatar models and catalog items as OBJ or GLTF with UV textures. Compatible with Nomad Sculpt, Prisma 3D, and Blender.">
+<meta name="keywords" content="Roblox 3D model, avatar OBJ download, GLTF export, Nomad Sculpt, Prisma 3D, 3D creators, Roblox mesh, open source">
+<meta property="og:title" content="Roblox 3D Downloader — For 3D Creators">
+<meta property="og:description" content="Export Roblox avatars and catalog items as OBJ/GLTF. Open-source. Verified safe. Used by 3D artists on Nomad Sculpt and Prisma 3D.">
+<meta property="og:url" content="https://getrbx3d.qzz.io">
+<meta property="og:type" content="website">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#05050d;--s1:#0c0c1a;--s2:#12122a;--s3:#1a1a36;--red:#e8000b;--rb:#ff1a24;--rg:rgba(232,0,11,.18);--rd:rgba(232,0,11,.08);--green:#00ff99;--amber:#ffaa00;--white:#eeeef8;--gray:#5a5a7a;--gray2:#3a3a5a}
@@ -141,6 +147,46 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Roblox 3D Downloader",
+  "url": "https://getrbx3d.qzz.io",
+  "description": "A developer tool for 3D creators to download Roblox avatar models and catalog items in OBJ and GLTF format for use in Nomad Sculpt, Prisma 3D, and Blender.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Web, Android, iOS",
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+  "author": {
+    "@type": "Person",
+    "name": "SharkyA7",
+    "url": "https://github.com/SharkyA7"
+  },
+  "codeRepository": "https://github.com/SharkyA7/Roblox-downloader-backend",
+  "keywords": "Roblox 3D model downloader, avatar OBJ export, GLTF converter, Nomad Sculpt, Prisma 3D, 3D creators tool, Roblox mesh download",
+  "featureList": [
+    "Download Roblox avatar as OBJ with UV textures",
+    "Download catalog items in GLTF format",
+    "Compatible with Nomad Sculpt and Prisma 3D",
+    "Open source, self-hosted, privacy-first"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Roblox 3D Downloader",
+  "softwareVersion": "1.6.0",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Web",
+  "url": "https://getrbx3d.qzz.io",
+  "downloadUrl": "https://github.com/SharkyA7/Roblox-downloader-backend",
+  "description": "Open-source tool for 3D artists and Roblox creators to export avatar meshes and catalog items for Nomad Sculpt, Prisma 3D, and Blender.",
+  "isAccessibleForFree": true,
+  "license": "https://github.com/SharkyA7/Roblox-downloader-backend/blob/main/LICENSE"
+}
+</script>
 </head>
 <body>
 
@@ -159,8 +205,8 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
       </div>
     </div>
     <div class="false-alert">
-      <div class="false-alert-title">⚠ <span data-i18n="false_title">AI OVERVIEW TIDAK AKURAT</span></div>
-      <div class="false-alert-body" data-i18n="false_body">Google AI menyebut situs ini <strong>"phishing"</strong> — ini <strong>SALAH</strong>. AI menilai berdasarkan reputasi domain qzz.io, bukan konten situs ini yang <strong>100% open source</strong>.</div>
+      <div class="false-alert-title">ℹ <span data-i18n="false_title">TOOL UNTUK 3D CREATORS</span></div>
+      <div class="false-alert-body" data-i18n="false_body">Dibuat untuk <strong>Nomad Sculpt</strong>, <strong>Prisma 3D</strong>, dan <strong>Blender</strong> users. Export avatar Roblox sebagai OBJ/GLTF dengan UV texture. <strong>100% open source</strong> &amp; dapat diverifikasi di GitHub.</div>
     </div>
     <div class="modal-body">
       <div class="sec-grid">
