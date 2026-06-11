@@ -678,11 +678,6 @@ def proxy_fetch():
     except Exception as e:
         return jsonify({"error":str(e)}),500
 
-if __name__ == "__main__":
-    port=int(os.getenv("PORT",8000))
-    print(f"Server jalan di http://0.0.0.0:{port}")
-    app.run(host="0.0.0.0",port=port,debug=False)
-
 
 @app.get("/api/audio/info")
 def audio_info():
@@ -756,3 +751,8 @@ application = app
 @app.get("/api/audio/test")
 def audio_test():
     return jsonify({"status":"audio ok"})
+
+if __name__ == "__main__":
+    port=int(os.getenv("PORT",8000))
+    print(f"Server jalan di http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0",port=port,debug=False)
