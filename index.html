@@ -478,10 +478,6 @@ document.addEventListener("click",function(e){
     if(m) m.style.display="none";
   }
 });
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['avatar','catalog','audio','api','texture'][i]===name));
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('panel-'+name).classList.add('active');
-}
 
 // ── UI HELPERS ────────────────────────────────────────────────────
 function st(id,msg,type){
