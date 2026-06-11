@@ -457,7 +457,11 @@ const BASE = 'https://web-production-62c2e.up.railway.app';
 
 // ── TABS ──────────────────────────────────────────────────────────
 function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['avatar','catalog','audio','api','texture'][i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
 }
+
 function toggleDropdown(e){
   e.stopPropagation();
   const m=document.getElementById('dropdown-menu');
