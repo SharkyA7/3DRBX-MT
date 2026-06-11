@@ -2,4 +2,4 @@
 rootDirectory = "backend"
 
 [deploy]
-startCommand = "python3 main.py"
+startCommand = "python3 -u main.py"
