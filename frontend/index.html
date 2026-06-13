@@ -866,6 +866,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   setLang(currentLang);
 });
 
+document.addEventListener('DOMContentLoaded',function(){
 document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
 document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
 
@@ -924,6 +925,7 @@ async function downloadAudio(){
 }
 
 document.getElementById("audio-input").addEventListener("keydown",e=>{ if(e.key==="Enter") fetchAudio(); });
+});
 
 // ── TEXTURE GENERATOR ────────────────────────────────────────────
 let texCanvas = null;
