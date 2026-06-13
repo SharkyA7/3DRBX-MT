@@ -670,12 +670,14 @@ const ROUTES=[
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
+document.addEventListener('DOMContentLoaded',function(){
 document.getElementById('api-table').innerHTML=ROUTES.map(([m,ep,desc])=>`
 <tr style="border-bottom:1px solid var(--s3)">
   <td style="padding:7px 6px;color:var(--green)">${m}</td>
   <td style="padding:7px 6px"><code>${ep}</code></td>
   <td style="padding:7px 6px;color:var(--gray);font-size:9px">${desc}</td>
 </tr>`).join('');
+});
 
 // Enter key
 async function downloadReal(){
