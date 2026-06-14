@@ -775,6 +775,27 @@ application = app
 def audio_test():
     return jsonify({"status":"audio ok"})
 
+@app.get("/api/debug/asset-raw")
+def debug_asset_raw():
+    """TEMPORARY - inspect raw asset file format"""
+    aid = request.args.get("id","")
+    if not aid: return jsonify({"error":"id required"}),400
+    try:
+        s = get_scraper()
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
+        content = r.content
+        is_xml = content[:20].strip().startswith(b"<roblox") or content[:10].startswith(b"<?xml")
+        return jsonify({
+            "status": r.status_code,
+            "content_type": r.headers.get("content-type"),
+            "size": len(content),
+            "is_xml": is_xml,
+            "first_200_bytes": content[:200].decode("utf-8","replace"),
+            "first_50_hex": content[:50].hex()
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")
