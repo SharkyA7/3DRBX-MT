@@ -512,7 +512,7 @@ async function fetchAvatar(){
     st('av-status','Mengambil info avatar…','loading'); prog('av-prog',20);
     const res=await fetch(`${BASE}/api/avatar/info?user=${encodeURIComponent(input)}`);
     const rawText=await res.text();
-    if(!res.ok){ let e={detail:rawText}; try{e=JSON.parse(rawText);}catch(_){} throw new Error(e.detail?.error||e.detail||res.statusText); }
+    if(!res.ok){ let e={error:rawText}; try{e=JSON.parse(rawText);}catch(_){} throw new Error(e.error||rawText||res.statusText||'Gagal mengambil info avatar'); }
     let data; try{ data=JSON.parse(rawText); }catch(pe){ throw new Error('INFO response bukan JSON: '+rawText.substring(0,150)); }
     currentUser=data;
     fillAvatarProfile(data);
@@ -617,7 +617,7 @@ async function fetchCatalog(){
   try{
     st('cat-status','Mengambil detail item…','loading'); prog('cat-prog',30);
     const res=await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||res.statusText||'Gagal mengambil data'); }
     const data=await res.json();
     currentAssetId=id;
     fillCatalogInfo(data);
@@ -646,7 +646,7 @@ async function downloadCatalog(format){
   st('cat-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
   try{
     const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=${encodeURIComponent(format)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
     const name=document.getElementById('cat-name').textContent||currentAssetId;
     const a=Object.assign(document.createElement('a'),{
