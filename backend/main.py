@@ -1046,6 +1046,46 @@ def model_info():
         return handle_roblox_error(e, "model_info")
 
 
+@app.get("/api/v2/model/mesh")
+def model_mesh():
+    """Fetch raw .mesh by ID (dari MeshId di manifest model/info), convert ke OBJ.
+    Dipanggil per-part dari browser saat assembly GLB untuk Model 3D create.roblox.com."""
+    raw_id = request.args.get("meshId", "")
+    if not raw_id:
+        return jsonify({"error": "meshId required"}), 400
+
+    # meshId bisa berupa "rbxassetid://123456" atau angka polos
+    try:
+        clean_id = raw_id.replace("rbxassetid://", "").strip()
+        mesh_asset_id = int(clean_id)
+    except ValueError:
+        return jsonify({"error": "meshId tidak valid"}), 400
+
+    try:
+        s = get_scraper()
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={mesh_asset_id}", timeout=25)
+        if r.status_code != 200:
+            return jsonify({"error": f"Gagal download mesh (HTTP {r.status_code})"}), 502
+
+        raw = r.content
+        if not raw.startswith(b"version"):
+            return jsonify({"error": "Bukan format .mesh yang dikenali"}), 422
+
+        from services.mesh_converter import parse_mesh, mesh_to_obj
+        mesh = parse_mesh(raw, name=f"mesh_{mesh_asset_id}")
+        obj_text = mesh_to_obj(mesh, mtl_name=f"mesh_{mesh_asset_id}")
+
+        return jsonify({
+            "meshAssetId": mesh_asset_id,
+            "vertexCount": len(mesh.vertices),
+            "faceCount": len(mesh.faces),
+            "meshVersion": mesh.version,
+            "obj": obj_text
+        })
+    except Exception as e:
+        return handle_roblox_error(e, "model_mesh")
+
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")
