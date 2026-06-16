@@ -798,6 +798,116 @@ def debug_asset_raw():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/api/v2/model/info")
+def model_info():
+    """MVP: parse RBXM (Model assets from create.roblox.com), return manifest.
+    Supports only MeshPart+Part, no UnionOperation, <=30 parts.
+    Rotation is identity-fallback (not yet decoded)."""
+    from services.rbxm_parser import (
+        parse_chunks, parse_inst_chunks, find_prop_chunk,
+        decode_string_array, decode_vector3_array, decode_cframe_positions,
+        decode_color3uint8_array, RBXMParseError
+    )
+
+    aid = request.args.get("id", "")
+    if not aid: return jsonify({"error": "id required"}), 400
+
+    try:
+        file_id = int(aid)
+        s = get_scraper()
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=25)
+        if r.status_code != 200:
+            return jsonify({"error": f"Gagal download asset (HTTP {r.status_code})", "supported": False}), 502
+
+        data = r.content
+
+        try:
+            chunks, num_types, num_instances = parse_chunks(data)
+        except RBXMParseError as e:
+            return jsonify({"error": str(e), "supported": False}), 422
+
+        type_map = parse_inst_chunks(chunks)
+
+        meshpart_tid = part_tid = union_tid = None
+        for tid, info in type_map.items():
+            cn = info["class_name"]
+            if cn == "MeshPart": meshpart_tid = tid
+            elif cn == "Part": part_tid = tid
+            elif cn == "UnionOperation": union_tid = tid
+
+        meshpart_count = type_map.get(meshpart_tid, {}).get("count", 0) if meshpart_tid is not None else 0
+        part_count = type_map.get(part_tid, {}).get("count", 0) if part_tid is not None else 0
+        union_count = type_map.get(union_tid, {}).get("count", 0) if union_tid is not None else 0
+        total_parts = meshpart_count + part_count
+
+        reasons = []
+        if union_count > 0:
+            reasons.append(f"Asset menggunakan UnionOperation/CSG ({union_count}x) - belum didukung")
+        if total_parts > 30:
+            reasons.append(f"Asset terlalu kompleks ({total_parts} parts, maksimum 30 untuk MVP)")
+        if total_parts == 0:
+            reasons.append("Tidak ada MeshPart/Part - asset ini mungkin bukan 3D Model (cek tipe asset)")
+
+        supported = (union_count == 0) and (0 < total_parts <= 30)
+
+        parts = []
+
+        def decode_class(type_id, count, class_name):
+            if type_id is None or count == 0:
+                return
+            _, size_raw = find_prop_chunk(chunks, type_id, "size")
+            sizes = decode_vector3_array(size_raw, count) if size_raw else [(1.0,1.0,1.0)]*count
+
+            _, cf_raw = find_prop_chunk(chunks, type_id, "CFrame")
+            if cf_raw:
+                positions, rot_ids = decode_cframe_positions(cf_raw, count)
+            else:
+                positions, rot_ids = [(0.0,0.0,0.0)]*count, [0]*count
+
+            _, name_raw = find_prop_chunk(chunks, type_id, "Name")
+            names = decode_string_array(name_raw, count) if name_raw else [f"{class_name}{i}" for i in range(count)]
+
+            _, color_raw = find_prop_chunk(chunks, type_id, "Color3uint8")
+            colors = decode_color3uint8_array(color_raw, count) if color_raw else [(163,162,165)]*count
+
+            mesh_ids = [None]*count
+            if class_name == "MeshPart":
+                _, mid_raw = find_prop_chunk(chunks, type_id, "MeshId")
+                if mid_raw:
+                    raw_ids = decode_string_array(mid_raw, count)
+                    mesh_ids = [m if m else None for m in raw_ids]
+
+            for i in range(count):
+                parts.append({
+                    "name": names[i],
+                    "className": class_name,
+                    "meshId": mesh_ids[i],
+                    "position": {"status": "decoded", "value": [round(v,4) for v in positions[i]]},
+                    "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
+                    "rotation": {"status": "identity-fallback", "value": [1,0,0,0,1,0,0,0,1], "rawRotationId": rot_ids[i]},
+                    "color": {"status": "best-effort", "value": list(colors[i])}
+                })
+
+        decode_class(meshpart_tid, meshpart_count, "MeshPart")
+        decode_class(part_tid, part_count, "Part")
+
+        return jsonify({
+            "assetId": file_id,
+            "supported": supported,
+            "reasons": reasons,
+            "meshPartCount": meshpart_count,
+            "partCount": part_count,
+            "unionCount": union_count,
+            "totalParts": total_parts,
+            "parts": parts
+        })
+
+    except ValueError:
+        return jsonify({"error": "id harus berupa angka"}), 400
+    except Exception as e:
+        return handle_roblox_error(e, "model_info")
+
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")
