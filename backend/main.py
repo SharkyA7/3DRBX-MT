@@ -1284,12 +1284,12 @@ def model_info():
         reasons = []
         if union_count > 0:
             reasons.append(f"Asset menggunakan UnionOperation/CSG ({union_count}x) - belum didukung")
-        if total_parts > 30:
-            reasons.append(f"Asset terlalu kompleks ({total_parts} parts, maksimum 30 untuk MVP)")
+        if total_parts > 100:
+            reasons.append(f"Asset terlalu kompleks ({total_parts} parts, maksimum 100 untuk MVP)")
         if total_parts == 0:
             reasons.append("Tidak ada MeshPart/Part - asset ini mungkin bukan 3D Model (cek tipe asset)")
 
-        supported = (union_count == 0) and (0 < total_parts <= 30)
+        supported = (union_count == 0) and (0 < total_parts <= 100)
 
         parts = []
 

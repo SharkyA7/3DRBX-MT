@@ -221,30 +221,50 @@ window.buildModelGLB = async function(){
     const boxParts  = data.parts.filter(p => p.className === "Part");
     const uniqueMeshIds = [...new Set(meshParts.map(p => p.meshId))];
 
-    statusEl.textContent = `⏳ Mengunduh ${uniqueMeshIds.length} mesh unik...`;
-
     const objLoader = new OBJLoader();
     const meshGeomCache = {};
+    let failedMeshes = 0;
 
-    await Promise.all(uniqueMeshIds.map(async (meshId) => {
+    // Concurrency-limited fetch pool - hindari overload Vercel/Roblox dgn ratusan request sekaligus
+    async function fetchPool(items, limit, taskFn){
+      let idx = 0, done = 0;
+      async function worker(){
+        while(idx < items.length){
+          const i = idx++;
+          try{
+            await taskFn(items[i]);
+          }catch(e){
+            console.warn("mesh fetch failed:", items[i], e);
+            failedMeshes++;
+          }
+          done++;
+          statusEl.textContent = `⏳ Mengunduh mesh ${done}/${items.length}...`;
+        }
+      }
+      const workers = Array.from({length: Math.min(limit, items.length)}, () => worker());
+      await Promise.all(workers);
+    }
+
+    await fetchPool(uniqueMeshIds, 6, async (meshId) => {
       const res = await fetch(`${BASE}/api/v2/model/mesh?meshId=${encodeURIComponent(meshId)}`);
       const json = await res.json();
-      if(!json.obj) throw new Error(`Gagal fetch mesh ${meshId}: ${json.error || "unknown"}`);
+      if(!json.obj) throw new Error(json.error || "unknown error");
       const group = objLoader.parse(json.obj);
       let geometry = null;
       group.traverse(child => {
         if(child.isMesh && !geometry) geometry = child.geometry;
       });
       if(geometry) meshGeomCache[meshId] = geometry;
-    }));
+    });
 
     statusEl.textContent = "⏳ Menyusun model...";
     const root = new THREE.Group();
     root.name = `model_${data.assetId}`;
 
+    let skippedParts = 0;
     for(const part of meshParts){
       const geom = meshGeomCache[part.meshId];
-      if(!geom) continue;
+      if(!geom){ skippedParts++; continue; }
       const [r,g,b] = part.color.value;
       const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r/255, g/255, b/255) });
       const mesh = new THREE.Mesh(geom.clone(), mat);
@@ -276,7 +296,8 @@ window.buildModelGLB = async function(){
       });
       a.click();
       URL.revokeObjectURL(a.href);
-      statusEl.textContent = `✓ GLB berhasil! ${meshParts.length} mesh + ${boxParts.length} box part. ⚠ Rotasi belum didukung (identity).`;
+      const failNote = failedMeshes > 0 ? ` (${failedMeshes} mesh gagal di-skip)` : "";
+      statusEl.textContent = `✓ GLB berhasil! ${meshParts.length} mesh + ${boxParts.length} box part${failNote}. ⚠ Rotasi belum didukung (identity).`;
       btn.disabled = false;
     }, (err) => {
       statusEl.textContent = "✗ Export GLB gagal: " + err.message;
