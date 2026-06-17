@@ -1388,6 +1388,19 @@ def model_mesh():
         return handle_roblox_error(e, "model_mesh")
 
 
+@app.get("/api/debug/thumbnail3d")
+def debug_thumbnail3d():
+    """TEMP: cek apakah Roblox punya 3D thumbnail render untuk asset Model (bypass CSG decode)."""
+    aid = request.args.get("id", "")
+    if not aid: return jsonify({"error": "id required"}), 400
+    try:
+        s = get_scraper()
+        r = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={aid}", timeout=20)
+        return jsonify({"status": r.status_code, "body": r.text[:1000]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")
