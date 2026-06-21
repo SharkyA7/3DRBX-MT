@@ -1,13 +1,39 @@
 {
   "version": 2,
   "builds": [
-    { "src": "backend/main.py", "use": "@vercel/python" },
-    { "src": "index.html", "use": "@vercel/static" }
+    {
+      "src": "backend/main.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "backend/main.py" },
-    { "src": "/health", "dest": "backend/main.py" },
-    { "src": "/", "dest": "index.html" },
-    { "src": "/(.*)", "dest": "$1" }
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/health",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/privacy",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/terms",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/",
+      "dest": "index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "$1"
+    }
   ]
 }

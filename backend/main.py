@@ -2080,6 +2080,17 @@ def model_mesh_union():
         return handle_roblox_error(e, "model_mesh_union")
 
 
+@app.get("/privacy")
+def privacy_page():
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "privacy.html")
+
+@app.get("/terms")
+def terms_page():
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "terms.html")
+
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")

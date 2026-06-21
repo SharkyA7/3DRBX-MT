@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy — ROBLOX 3D DOWNLOADER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#05050d;--s1:#0c0c1a;--s2:#12122a;--red:#e8000b;--rb:#ff1a24;--rg:rgba(232,0,11,.18);--rd:rgba(232,0,11,.08);--green:#00ff99;--white:#eeeef8;--gray:#5a5a7a;--gray2:#3a3a5a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:'Share Tech Mono',monospace;min-height:100vh;
+  background-image:linear-gradient(rgba(232,0,11,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(232,0,11,.04) 1px,transparent 1px);
+  background-size:40px 40px}
+header{text-align:center;padding:40px 20px 24px}
+h1{font-family:'Press Start 2P',monospace;font-size:clamp(10px,2vw,16px);color:var(--rb);
+   text-shadow:0 0 20px rgba(232,0,11,.6);letter-spacing:2px;line-height:1.8}
+.sub{font-size:10px;color:var(--gray);letter-spacing:3px;margin-top:8px}
+.scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--red),transparent);margin-top:20px;opacity:.5}
+main{max-width:760px;margin:0 auto;padding:24px 16px 80px}
+.card{background:var(--s1);border:1px solid var(--red);
+  box-shadow:0 0 0 1px var(--rd),0 0 24px var(--rg);border-radius:4px;padding:28px;margin-bottom:18px;position:relative}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--rb),transparent)}
+.section-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--rb);letter-spacing:2px;margin-bottom:16px;display:flex;align-items:center;gap:6px}
+.section-title::before{content:'▶';font-size:7px}
+p{font-size:12px;line-height:1.9;color:var(--white);margin-bottom:12px}
+ul{margin:10px 0 12px 18px}
+li{font-size:12px;line-height:1.8;color:var(--white);margin-bottom:6px}
+li::marker{color:var(--red)}
+.highlight{color:var(--green);font-weight:bold}
+.warn{color:#ffaa00}
+.back{display:inline-block;font-family:'Press Start 2P',monospace;font-size:8px;color:var(--gray);
+  text-decoration:none;padding:10px 16px;border:1px solid var(--gray2);border-radius:3px;
+  margin-bottom:20px;transition:all .2s}
+.back:hover{color:var(--white);border-color:var(--red)}
+.updated{font-size:10px;color:var(--gray);text-align:right;margin-top:8px}
+footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
+</style>
+</head>
+<body>
+<header>
+  <h1>ROBLOX 3D DOWNLOADER</h1>
+  <div class="sub">PRIVACY POLICY</div>
+  <div class="scan"></div>
+</header>
+<main>
+  <a href="/" class="back">← BACK TO APP</a>
+
+  <div class="card">
+    <div class="section-title">OVERVIEW</div>
+    <p>This Privacy Policy describes how <span class="highlight">ROBLOX 3D DOWNLOADER</span> ("the Tool", "we", "us") collects, uses, and handles information when you use our service at <strong>getrbx3d.qzz.io</strong>.</p>
+    <p>This Tool is operated by an independent developer and is <span class="highlight">not affiliated with, endorsed by, or sponsored by Roblox Corporation</span>.</p>
+    <p class="updated">Last updated: June 2026</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">1. INFORMATION WE COLLECT</div>
+    <p><strong>1.1 Information You Provide</strong></p>
+    <ul>
+      <li><strong>Roblox Username or User ID</strong> — entered to fetch avatar data. Used only to make API requests to Roblox and is not stored on our servers.</li>
+      <li><strong>Roblox Asset IDs</strong> — entered to fetch catalog items, audio, or 3D models. Used only to retrieve asset data from Roblox APIs and is not stored.</li>
+      <li><strong>Uploaded .RBXM Files</strong> — uploaded locally via your browser for conversion. These files are processed in-memory on our server and immediately discarded. We do not retain any uploaded file data.</li>
+    </ul>
+    <p><strong>1.2 Roblox OAuth 2.0 (when applicable)</strong></p>
+    <ul>
+      <li>If you choose to authenticate via Roblox OAuth 2.0, we receive an <strong>access token</strong> and basic profile information (Roblox username, user ID) from Roblox.</li>
+      <li>OAuth tokens are used solely to authenticate API requests on your behalf and are stored temporarily in your browser session only — never in our database or server storage.</li>
+      <li>We do not access, read, or store your Roblox password.</li>
+      <li>We only request the minimum OAuth scopes necessary to provide the service.</li>
+    </ul>
+    <p><strong>1.3 Automatically Collected Data</strong></p>
+    <ul>
+      <li><strong>Server logs</strong> — standard web server logs may include your IP address, browser type, and request timestamps. These are retained for a maximum of 7 days for debugging purposes and are never sold or shared.</li>
+      <li>We do not use tracking pixels, fingerprinting, or behavioral analytics.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="section-title">2. HOW WE USE YOUR INFORMATION</div>
+    <p>We use the information collected solely to:</p>
+    <ul>
+      <li>Fulfill your requests (fetching avatar/catalog/audio/3D model data from Roblox APIs)</li>
+      <li>Authenticate API requests to Roblox on your behalf (via OAuth token or server cookie)</li>
+      <li>Convert and deliver 3D asset files (RBXM → GLB/OBJ) back to your browser</li>
+      <li>Diagnose technical errors and maintain service stability</li>
+    </ul>
+    <p><span class="highlight">We do not:</span></p>
+    <ul>
+      <li>Sell, rent, or share your data with third parties for commercial purposes</li>
+      <li>Build user profiles or track your activity across sessions</li>
+      <li>Use your data for advertising or marketing</li>
+      <li>Store downloaded asset files on our servers after delivery</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="section-title">3. DATA STORAGE & RETENTION</div>
+    <ul>
+      <li><span class="highlight">No persistent user accounts</span> — we do not require registration and do not maintain user records.</li>
+      <li><span class="highlight">No asset storage</span> — 3D files, textures, audio, and mesh data are proxied directly to your browser and never written to permanent storage on our end.</li>
+      <li><span class="highlight">No cookie tracking</span> — we do not set tracking cookies. Any session-related data is stored in your browser's memory and cleared when you close the page.</li>
+      <li>Server-side authentication cookies (.ROBLOSECURITY or OAuth tokens) used to communicate with Roblox APIs are stored as environment variables or temporary session state, not in a database.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="section-title">4. THIRD-PARTY SERVICES</div>
+    <p>This Tool interacts with the following third-party services:</p>
+    <ul>
+      <li><strong>Roblox Corporation</strong> — all asset data is fetched from Roblox's public and authenticated APIs. Your interactions with those APIs are subject to <a href="https://en.help.roblox.com/hc/en-us/articles/115004647846" style="color:var(--green)">Roblox's Privacy Policy</a>.</li>
+      <li><strong>Vercel</strong> — our hosting provider. Vercel may collect server-side telemetry per their own privacy policy.</li>
+      <li><strong>Cloudflare</strong> — used for DNS and CDN. Cloudflare may process network-level data per their own privacy policy.</li>
+    </ul>
+    <p>We have no control over the data practices of these third parties.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">5. CHILDREN'S PRIVACY</div>
+    <p>This Tool is not directed at children under the age of 13. We do not knowingly collect personal information from children. If you believe a child has provided us with personal data, please contact us and we will delete it promptly.</p>
+    <p class="warn">Note: Roblox itself has its own policies regarding users under 13. Please refer to Roblox's own privacy documentation.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">6. SECURITY</div>
+    <p>We implement reasonable technical measures to protect information in transit, including HTTPS/TLS encryption for all connections. However, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security.</p>
+    <p>Since we do not store personal data persistently, the risk of a data breach affecting your personal information is minimal.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">7. YOUR RIGHTS</div>
+    <p>Since we do not maintain persistent user records or databases of personal information, there is typically no stored data to access, correct, or delete. However, you may:</p>
+    <ul>
+      <li>Revoke OAuth access granted to this Tool at any time via your <a href="https://www.roblox.com/my/account#!/privacy" style="color:var(--green)">Roblox account settings</a></li>
+      <li>Clear your browser session/cache to remove any locally stored session data</li>
+      <li>Contact us if you believe we have inadvertently retained data about you</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="section-title">8. CHANGES TO THIS POLICY</div>
+    <p>We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated date. Continued use of the Tool after changes constitutes acceptance of the updated policy.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">9. CONTACT</div>
+    <p>This Tool is maintained by an independent developer. For privacy-related concerns, please open an issue on our <a href="https://github.com/SharkyA7/Roblox-downloader-backend" style="color:var(--green)">GitHub repository</a>.</p>
+  </div>
+</main>
+<footer>ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
+</body>
+</html>
