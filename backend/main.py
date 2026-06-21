@@ -1618,7 +1618,7 @@ def model_info():
         if total_parts_all == 0:
             reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
 
-        supported = (0 < total_parts_all <= 2000)  # raised for Union support testing
+        supported = (0 < total_parts_all <= 500)
 
         parts = []
 
@@ -1902,7 +1902,7 @@ def model_convert():
         if total_parts_all == 0:
             reasons.append("Tidak ada MeshPart/Part/Union ditemukan")
 
-        supported = (0 < total_parts_all <= 2000)  # raised for Union support testing
+        supported = (0 < total_parts_all <= 500)
 
         parts = []
 

@@ -313,20 +313,33 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     const unionGeomCache = {};
     let failedMeshes = 0;
 
-    // Concurrency-limited fetch pool - hindari overload Vercel/Roblox dgn ratusan request sekaligus
+    // Concurrency-limited fetch pool dengan exponential backoff retry
     async function fetchPool(items, limit, taskFn){
       let idx = 0, done = 0;
+      async function withRetry(item, maxRetries=3){
+        let delay = 1000;
+        for(let attempt=0; attempt<=maxRetries; attempt++){
+          try{
+            await taskFn(item);
+            return;
+          }catch(e){
+            if(attempt === maxRetries){
+              console.warn("fetch failed after retries:", item, e);
+              failedMeshes++;
+              return;
+            }
+            // Exponential backoff: 1s, 2s, 4s
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2;
+          }
+        }
+      }
       async function worker(){
         while(idx < items.length){
           const i = idx++;
-          try{
-            await taskFn(items[i]);
-          }catch(e){
-            console.warn("mesh fetch failed:", items[i], e);
-            failedMeshes++;
-          }
+          await withRetry(items[i]);
           done++;
-          statusEl.textContent = `⏳ Mengunduh mesh ${done}/${items.length}...`;
+          statusEl.textContent = `⏳ Mengunduh ${done}/${items.length}...`;
         }
       }
       const workers = Array.from({length: Math.min(limit, items.length)}, () => worker());
