@@ -1,5 +1,5 @@
-from flask import Flask, jsonify, request, Response
-import httpx, os, io, zipfile, time, json, struct
+from flask import Flask, jsonify, request, Response, redirect
+import httpx, os, io, zipfile, time, json, struct, requests
 import lz4.block, re
 
 # ── INLINED MESH CONVERTER (avoids services import issue on Vercel) ──
@@ -319,6 +319,15 @@ def add_cors(response):
     return response
 
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
+
+# ── ROBLOX OAUTH 2.0 CONFIG ──────────────────────────────────────
+OAUTH_CLIENT_ID     = os.getenv("ROBLOX_OAUTH_CLIENT_ID", "")
+OAUTH_CLIENT_SECRET = os.getenv("ROBLOX_OAUTH_CLIENT_SECRET", "")
+OAUTH_REDIRECT_URI  = os.getenv("ROBLOX_OAUTH_REDIRECT_URI", "https://getrbx3d.qzz.io/auth/callback")
+OAUTH_SCOPES        = "openid profile asset:read"
+OAUTH_AUTH_URL      = "https://apis.roblox.com/oauth/v1/authorize"
+OAUTH_TOKEN_URL     = "https://apis.roblox.com/oauth/v1/token"
+OAUTH_USERINFO_URL  = "https://apis.roblox.com/oauth/v1/userinfo"
 _cache = {}
 CACHE_TTL = 300
 
@@ -2089,6 +2098,127 @@ def privacy_page():
 def terms_page():
     from flask import send_from_directory
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "terms.html")
+
+
+# ── ROBLOX OAUTH 2.0 ENDPOINTS ───────────────────────────────────
+
+@app.get("/auth/login")
+def auth_login():
+    """Step 1: Redirect user ke Roblox OAuth page."""
+    import secrets, urllib.parse
+    if not OAUTH_CLIENT_ID:
+        return jsonify({"error": "OAuth not configured yet - waiting for Roblox app approval"}), 503
+
+    state = secrets.token_urlsafe(16)
+    params = {
+        "client_id": OAUTH_CLIENT_ID,
+        "redirect_uri": OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": OAUTH_SCOPES,
+        "state": state
+    }
+    auth_url = OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params)
+
+    resp = redirect(auth_url)
+    resp.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="Lax", secure=True)
+    return resp
+
+@app.get("/auth/callback")
+def auth_callback():
+    """Step 2: Roblox redirect ke sini dengan authorization code."""
+    import base64, urllib.parse
+    if not OAUTH_CLIENT_ID:
+        return jsonify({"error": "OAuth not configured yet"}), 503
+
+    code_param = request.args.get("code", "")
+    state = request.args.get("state", "")
+    error = request.args.get("error", "")
+
+    if error:
+        return redirect(f"/?oauth_error={urllib.parse.quote(error)}")
+
+    # Verify state
+    saved_state = request.cookies.get("oauth_state", "")
+    if not saved_state or saved_state != state:
+        return redirect("/?oauth_error=invalid_state")
+
+    # Exchange code for token
+    try:
+        credentials = base64.b64encode(f"{OAUTH_CLIENT_ID}:{OAUTH_CLIENT_SECRET}".encode()).decode()
+        token_resp = requests.post(OAUTH_TOKEN_URL, headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }, data={
+            "grant_type": "authorization_code",
+            "code": code_param,
+            "redirect_uri": OAUTH_REDIRECT_URI
+        }, timeout=15)
+
+        if token_resp.status_code != 200:
+            return redirect(f"/?oauth_error=token_exchange_failed")
+
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token", "")
+
+        # Get user info
+        userinfo_resp = requests.get(OAUTH_USERINFO_URL, headers={
+            "Authorization": f"Bearer {access_token}"
+        }, timeout=10)
+        userinfo = userinfo_resp.json() if userinfo_resp.status_code == 200 else {}
+
+        # Redirect ke frontend dengan token (stored di client-side)
+        import urllib.parse
+        params = urllib.parse.urlencode({
+            "oauth_success": "1",
+            "access_token": access_token,
+            "username": userinfo.get("name", ""),
+            "user_id": userinfo.get("sub", ""),
+            "expires_in": token_data.get("expires_in", 3600)
+        })
+        resp = redirect(f"/?{params}")
+        resp.delete_cookie("oauth_state")
+        return resp
+
+    except Exception as e:
+        return redirect(f"/?oauth_error={urllib.parse.quote(str(e))}")
+
+@app.get("/auth/me")
+def auth_me():
+    """Validate OAuth token dan return user info."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"authenticated": False}), 401
+
+    token = auth_header[7:]
+    try:
+        resp = requests.get(OAUTH_USERINFO_URL, headers={
+            "Authorization": f"Bearer {token}"
+        }, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return jsonify({
+                "authenticated": True,
+                "username": data.get("name", ""),
+                "userId": data.get("sub", ""),
+                "displayName": data.get("preferred_username", data.get("name", ""))
+            })
+        return jsonify({"authenticated": False}), 401
+    except Exception as e:
+        return jsonify({"authenticated": False, "error": str(e)}), 500
+
+@app.get("/auth/logout")
+def auth_logout():
+    """Clear session - token di-clear di sisi client."""
+    return jsonify({"success": True, "message": "Token cleared client-side"})
+
+@app.get("/auth/status")
+def auth_status():
+    """Check apakah OAuth sudah dikonfigurasi."""
+    return jsonify({
+        "oauth_configured": bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
+        "client_id_set": bool(OAUTH_CLIENT_ID),
+        "redirect_uri": OAUTH_REDIRECT_URI
+    })
 
 
 if __name__ == "__main__":
