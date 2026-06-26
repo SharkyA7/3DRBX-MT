@@ -854,10 +854,8 @@ const BASE = '';
 
 // ── TABS ──────────────────────────────────────────────────────────
 function switchTab(name){
-  alert('switchTab called: ' + name);
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   const next=document.getElementById('panel-'+name);
-  alert('next panel: ' + (next ? next.id : 'NULL'));
   if(next) next.classList.add('active');
 }
 
