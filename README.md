@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="favicon.png" width="500">
+  <img src="favicon.png" width="300">
   <img src="3DRBXMT BANNER.png" width="500">
 </div>
 
