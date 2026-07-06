@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="3DRBXM.png" width="500">
+  <img src="3DRBXMT BANNER.png" width="500">
 </div>
 
 ---
