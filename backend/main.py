@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request, Response, redirect
 import httpx, os, io, zipfile, time, json, struct, requests
 import lz4.block, re
 
+def safe_filename(name):
+    return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
+
 # ── INLINED MESH CONVERTER (avoids services import issue on Vercel) ──
 from dataclasses import dataclass, field
 from typing import Optional
