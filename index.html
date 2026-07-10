@@ -191,6 +191,23 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .tag-fix{background:rgba(0,100,200,.15);color:#66aaff;border:1px solid rgba(0,100,200,.3)}
 .tag-feat{background:rgba(0,150,80,.15);color:#66ffaa;border:1px solid rgba(0,150,80,.3)}
 
+
+.nudge-overlay{position:fixed;inset:0;background:rgba(3,3,10,.85);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;z-index:99998;padding:16px;}
+.nudge-box{max-width:420px;width:100%;background:var(--s1);border:1px solid var(--accent);
+  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(0,212,255,.15);}
+.nudge-icon{font-size:28px;margin-bottom:12px;}
+.nudge-title{font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px;}
+.nudge-body{font-family:var(--font-ui);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;}
+.nudge-body strong{color:var(--accent)}
+.nudge-actions{display:flex;flex-direction:column;gap:8px;}
+.nudge-btn-login{background:var(--accent);color:#000;border:none;border-radius:8px;
+  font-family:var(--font-ui);font-size:13px;font-weight:700;padding:12px;cursor:pointer;}
+.nudge-btn-login:hover{background:#00EEFF;}
+.nudge-btn-continue{background:transparent;color:var(--muted);border:1px solid var(--border2);
+  border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
+.nudge-btn-continue:hover{color:var(--white);border-color:var(--muted);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -528,6 +545,25 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 <script src="https://cdn.jsdelivr.net/npm/motion@12/dist/motion.js"></script>
 </head>
 <body>
+
+<div class="nudge-overlay" id="nudge-overlay" style="display:none">
+  <div class="nudge-box" id="nudge-box">
+    <div class="nudge-icon">👋</div>
+    <div class="nudge-title">Hey, kamu aktif banget nih!</div>
+    <div class="nudge-body">
+      Kamu udah download beberapa kali. Kami rekomendasikan <strong>Login dengan Roblox</strong> supaya kamu dapat limit personal, gak keganggu limit shared dari pengguna lain.
+      <br><br>
+      Tapi tenang — akun kamu <strong>cuma tersimpan di sisi Roblox</strong>, situs ini gak pernah nyimpen password atau data pribadimu.
+      <br><br>
+      Kalau kamu udah nyaman dengan limit yang ada sekarang, klik <strong>Lanjutkan</strong> aja. Happy creating! 🎨
+    </div>
+    <div class="nudge-actions">
+      <button class="nudge-btn-login" onclick="location.href='/auth/login'">🔑 Login dengan Roblox</button>
+      <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- SECURITY MODAL -->
@@ -1942,5 +1978,54 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(typeof Motion!=='undefined') initMainAnimations();
 });
 </script>
+
+<script>
+function trackFetchAction(){
+  let count = parseInt(localStorage.getItem('rbx3d_fetch_count') || '0', 10);
+  count += 1;
+  localStorage.setItem('rbx3d_fetch_count', count.toString());
+  if(count % 5 === 0){
+    showNudge();
+  }
+}
+function showNudge(){
+  const overlay = document.getElementById('nudge-overlay');
+  overlay.style.display = 'flex';
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    const box = document.getElementById('nudge-box');
+    box.style.opacity = '0';
+    box.style.transform = 'scale(0.92)';
+    animate(box, { opacity:[0,1], scale:[0.92,1] }, { duration:0.35, easing:[0.22,1,0.36,1] });
+  }
+}
+function closeNudge(){
+  const overlay = document.getElementById('nudge-overlay');
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    animate(overlay, { opacity:[1,0] }, { duration:0.2 }).then(() => {
+      overlay.style.display = 'none';
+      overlay.style.opacity = '1';
+    });
+  } else {
+    overlay.style.display = 'none';
+  }
+}
+
+// Wrap existing fetch/download functions to track usage
+document.addEventListener('DOMContentLoaded', () => {
+  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar'];
+  fnNames.forEach(name => {
+    if(typeof window[name] === 'function'){
+      const original = window[name];
+      window[name] = function(...args){
+        trackFetchAction();
+        return original.apply(this, args);
+      };
+    }
+  });
+});
+</script>
+
 </body>
 </html>
