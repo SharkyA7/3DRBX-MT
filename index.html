@@ -484,6 +484,22 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       root.add(mesh);
     }
 
+    for(const part of unionParts){
+      const geom = unionGeomCache[part.unionAssetId];
+      if(!geom){ skippedParts++; continue; }
+      const [r,g,b] = part.color.value;
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      if(part.textureId && textureCache[part.textureId]){
+        matOpts.map = textureCache[part.textureId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mesh = new THREE.Mesh(geom.clone(), mat);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "UnionOperation";
+      root.add(mesh);
+    }
+
     statusEl.textContent = "⏳ Export GLB...";
     const exporter = new GLTFExporter();
     exporter.parse(root, (result) => {
