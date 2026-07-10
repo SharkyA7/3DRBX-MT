@@ -208,6 +208,15 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
 .nudge-btn-continue:hover{color:var(--white);border-color:var(--muted);}
 
+
+.fetch-progress-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.fetch-progress-label{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--font-ui);font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:.04em;}
+.fetch-progress-label span.count{color:var(--accent);font-weight:700;}
+.fetch-progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.fetch-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
+  width:0%;transition:width .35s ease;border-radius:2px;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -652,7 +661,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ FETCH</button>
+        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-avatar">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-avatar"></div></div></div>
       </div>
       <div class="status-box idle" id="av-status"><div class="dot"></div><span id="av-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="av-prog"></div></div>
@@ -724,7 +733,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ FETCH</button>
+        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-catalog">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-catalog"></div></div></div>
       </div>
       <div class="status-box idle" id="cat-status"><div class="dot"></div><span id="cat-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="cat-prog"></div></div>
@@ -769,7 +778,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div class="label">CARI AUDIO</div>
       <input class="inp" id="audio-input" type="number" placeholder="Audio ID (contoh: 139084379039051)">
       <p style="font-size:9px;color:var(--gray);margin-top:4px">Ambil ID dari URL: roblox.com/library/ID/nama-audio</p>
-      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ FETCH</button>
+      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-audio">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-audio"></div></div></div>
       <div id="audio-status" style="margin-top:8px;font-size:9px"></div>
     </div>
     <div class="card" id="audio-result" style="display:none">
@@ -799,7 +808,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ FETCH &amp; ANALYZE</button>
+        <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ FETCH &amp; ANALYZE</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-model">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-model"></div></div></div>
         <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" style="flex:1;background:#5865f2">⬇ DOWNLOAD RBXM</button>
       </div>
       <p style="font-size:9px;color:var(--gray);margin-top:4px">
@@ -1984,10 +1993,32 @@ function trackFetchAction(){
   let count = parseInt(localStorage.getItem('rbx3d_fetch_count') || '0', 10);
   count += 1;
   localStorage.setItem('rbx3d_fetch_count', count.toString());
+  updateProgressBars(count);
   if(count % 5 === 0){
     showNudge();
   }
 }
+function updateProgressBars(count){
+  const remainder = count % 5;
+  const display = remainder === 0 ? 5 : remainder;
+  const pct = (display / 5) * 100;
+  const ids = [
+    ['fp-count-avatar','fp-fill-avatar'],
+    ['fp-count-catalog','fp-fill-catalog'],
+    ['fp-count-audio','fp-fill-audio'],
+    ['fp-count-model','fp-fill-model']
+  ];
+  ids.forEach(([countId, fillId]) => {
+    const countEl = document.getElementById(countId);
+    const fillEl = document.getElementById(fillId);
+    if(countEl) countEl.textContent = display + '/5';
+    if(fillEl) fillEl.style.width = pct + '%';
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const initCount = parseInt(localStorage.getItem('rbx3d_fetch_count') || '0', 10);
+  updateProgressBars(initCount);
+});
 function showNudge(){
   const overlay = document.getElementById('nudge-overlay');
   overlay.style.display = 'flex';
