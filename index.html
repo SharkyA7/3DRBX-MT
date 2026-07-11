@@ -232,6 +232,14 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
 .warn-btn-cancel:hover{color:var(--white);border-color:var(--muted);}
 
+
+@keyframes texspin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.tex-loading-wrap{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px;
+  background:var(--s2);border-radius:8px;border:1px solid var(--border2);}
+.tex-spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);
+  border-radius:50%;animation:texspin 0.7s linear infinite;flex-shrink:0;}
+.tex-loading-text{font-family:var(--font-ui);font-size:12px;color:var(--white);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -1782,9 +1790,15 @@ function finishLoadTexture(img, url){
   const ctx = texCanvas.getContext("2d");
   ctx.drawImage(img, 0, 0);
   URL.revokeObjectURL(url);
-  generateMaps(texCanvas);
-  document.getElementById("tex-result").style.display = "block";
-  document.getElementById("tex-status").textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+
+  const st = document.getElementById("tex-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating 9 texture maps ('+img.width+'x'+img.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+
+  setTimeout(() => {
+    generateMaps(texCanvas);
+    document.getElementById("tex-result").style.display = "block";
+    st.textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+  }, 50);
 }
 function cancelTexWarn(){
   document.getElementById("texwarn-overlay").style.display = "none";
