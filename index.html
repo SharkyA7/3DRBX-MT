@@ -217,6 +217,21 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .fetch-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
   width:0%;transition:width .35s ease;border-radius:2px;}
 
+
+.warn-box{max-width:420px;width:100%;background:var(--s1);border:1px solid var(--amber);
+  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(255,209,102,.15);}
+.warn-icon{font-size:28px;margin-bottom:12px;}
+.warn-title{font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px;}
+.warn-body{font-family:var(--font-ui);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;}
+.warn-body strong{color:var(--amber)}
+.warn-actions{display:flex;flex-direction:column;gap:8px;}
+.warn-btn-continue{background:var(--amber);color:#000;border:none;border-radius:8px;
+  font-family:var(--font-ui);font-size:13px;font-weight:700;padding:12px;cursor:pointer;}
+.warn-btn-continue:hover{background:#FFE08A;}
+.warn-btn-cancel{background:transparent;color:var(--muted);border:1px solid var(--border2);
+  border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
+.warn-btn-cancel:hover{color:var(--white);border-color:var(--muted);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -554,6 +569,23 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 <script src="https://cdn.jsdelivr.net/npm/motion@12/dist/motion.js"></script>
 </head>
 <body>
+
+<div class="nudge-overlay" id="texwarn-overlay" style="display:none">
+  <div class="warn-box" id="texwarn-box">
+    <div class="warn-icon">⚠️</div>
+    <div class="warn-title">Resolusi Texture Tinggi Terdeteksi</div>
+    <div class="warn-body" id="texwarn-body">
+      Texture ini <strong>berukuran besar</strong>. Generate 9 map sekaligus di resolusi ini bisa bikin device kamu <strong>lag</strong> dan preview <strong>loading lambat</strong>, terutama di HP dengan spesifikasi standar.
+      <br><br>
+      Rekomendasi: gunakan resolusi 1K-2K untuk performa terbaik. Tapi kamu tetap bisa lanjut kalau device kamu mumpuni.
+    </div>
+    <div class="warn-actions">
+      <button class="warn-btn-continue" id="texwarn-continue-btn">Lanjutkan Tetap</button>
+      <button class="warn-btn-cancel" onclick="cancelTexWarn()">Batalkan</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="nudge-overlay" id="nudge-overlay" style="display:none">
   <div class="nudge-box" id="nudge-box">
@@ -1722,6 +1754,7 @@ document.getElementById("model-input").addEventListener("keydown", e=>{ if(e.key
 let texCanvas = null;
 
 let texOriginalName = "texture";
+let pendingTexImg = null, pendingTexUrl = null;
 function loadTexture(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -1730,18 +1763,43 @@ function loadTexture(event){
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = function(){
-    texCanvas = document.createElement("canvas");
-    texCanvas.width = img.width;
-    texCanvas.height = img.height;
-    const ctx = texCanvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    generateMaps(texCanvas);
-    document.getElementById("tex-result").style.display = "block";
-    document.getElementById("tex-status").textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+    if(img.width >= 4096 || img.height >= 4096){
+      pendingTexImg = img; pendingTexUrl = url;
+      document.getElementById("texwarn-body").innerHTML =
+        'Texture ini berukuran <strong>'+img.width+'x'+img.height+'</strong> (4K+). Generate 9 map sekaligus di resolusi ini bisa bikin device kamu <strong>lag</strong> dan preview <strong>loading lambat</strong>, terutama di HP dengan spesifikasi standar.<br><br>Rekomendasi: gunakan resolusi 1K-2K untuk performa terbaik. Tapi kamu tetap bisa lanjut kalau device kamu mumpuni.';
+      document.getElementById("texwarn-overlay").style.display = "flex";
+      document.getElementById("tex-status").textContent = "⚠ Menunggu konfirmasi...";
+      return;
+    }
+    finishLoadTexture(img, url);
   };
   img.src = url;
 }
+function finishLoadTexture(img, url){
+  texCanvas = document.createElement("canvas");
+  texCanvas.width = img.width;
+  texCanvas.height = img.height;
+  const ctx = texCanvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  URL.revokeObjectURL(url);
+  generateMaps(texCanvas);
+  document.getElementById("tex-result").style.display = "block";
+  document.getElementById("tex-status").textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+}
+function cancelTexWarn(){
+  document.getElementById("texwarn-overlay").style.display = "none";
+  if(pendingTexUrl) URL.revokeObjectURL(pendingTexUrl);
+  pendingTexImg = null; pendingTexUrl = null;
+  document.getElementById("tex-status").textContent = "Dibatalkan.";
+  document.getElementById("tex-input").value = "";
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("texwarn-continue-btn").addEventListener("click", () => {
+    document.getElementById("texwarn-overlay").style.display = "none";
+    if(pendingTexImg) finishLoadTexture(pendingTexImg, pendingTexUrl);
+    pendingTexImg = null; pendingTexUrl = null;
+  });
+});
 
 function generateMaps(src){
   const w = src.width, h = src.height;
