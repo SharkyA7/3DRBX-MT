@@ -1712,9 +1712,11 @@ document.getElementById("model-input").addEventListener("keydown", e=>{ if(e.key
 // ── TEXTURE GENERATOR ────────────────────────────────────────────
 let texCanvas = null;
 
+let texOriginalName = "texture";
 function loadTexture(event){
   const file = event.target.files[0];
   if(!file) return;
+  texOriginalName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_") || "texture";
   document.getElementById("tex-status").textContent = "Loading texture...";
   const img = new Image();
   const url = URL.createObjectURL(file);
@@ -1855,12 +1857,12 @@ async function downloadTextures(){
   for(const id of ids){
     const c = document.getElementById("canvas-"+id);
     const blob = await new Promise(r=>c.toBlob(r,"image/png"));
-    zip.file(id+".png", blob);
+    zip.file(texOriginalName+"_"+id+".png", blob);
   }
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
     href: URL.createObjectURL(content),
-    download: "texture_maps.zip"
+    download: texOriginalName+"_maps.zip"
   });
   a.click(); URL.revokeObjectURL(a.href);
   document.getElementById("tex-status").textContent="✓ Download selesai!";
@@ -1885,7 +1887,7 @@ async function bakeForPrisma(){
     d1.data[i+3]=255;
   }
   x1.putImageData(d1,0,0);
-  zip.file("1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
 
   // SLOT 2: Normal + Bump blended
   const nrm=getD("normal"), bmp=getD("bump");
@@ -1897,7 +1899,7 @@ async function bakeForPrisma(){
     d2.data[i+3]=255;
   }
   x2.putImageData(d2,0,0);
-  zip.file("2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
 
   // SLOT 3: Roughness + Specular + Metallic + Curvature baked into Reflection
   const rgh=getD("roughness"), spec=getD("specular"), met=getD("metallic"), curv=getD("curvature");
@@ -1909,9 +1911,9 @@ async function bakeForPrisma(){
     d3.data[i+3]=255;
   }
   x3.putImageData(d3,0,0);
-  zip.file("3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
 
-  zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: 1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: 2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: 3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
+  zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
 
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
