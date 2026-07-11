@@ -1780,12 +1780,16 @@ function generateMaps(src){
   }
   putImageData("canvas-ao",ao,w,h);
 
-  // Emissive map (bright areas)
+  // Emissive map (bright areas - preserves original RGB color)
   const emi = new ImageData(w,h);
   for(let i=0;i<data.length;i+=4){
     const g=gray(i);
-    const v=g>200?g:0;
-    emi.data[i]=emi.data[i+1]=emi.data[i+2]=v; emi.data[i+3]=255;
+    if(g>200){
+      emi.data[i]=data[i]; emi.data[i+1]=data[i+1]; emi.data[i+2]=data[i+2];
+    } else {
+      emi.data[i]=emi.data[i+1]=emi.data[i+2]=0;
+    }
+    emi.data[i+3]=255;
   }
   putImageData("canvas-emissive",emi,w,h);
 
