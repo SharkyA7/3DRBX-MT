@@ -1959,7 +1959,8 @@ let bakedCanvases = null;
 async function previewBakePrisma(){
   if(!texCanvas){ return; }
   const st = document.getElementById("bake-status");
-  st.textContent = "Generating preview...";
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Baking 3 slot texture ('+texCanvas.width+'x'+texCanvas.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+  await new Promise(r => setTimeout(r, 50));
   const w = texCanvas.width, h = texCanvas.height;
   function getD(id){ return document.getElementById("canvas-"+id).getContext("2d").getImageData(0,0,w,h).data; }
   function newC(){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
@@ -2003,7 +2004,7 @@ async function previewBakePrisma(){
 
   bakedCanvases = { c1, c2, c3 };
   document.getElementById("bake-download-btn").style.display = "block";
-  st.textContent = "✓ Preview siap! Klik Download untuk simpan ZIP.";
+  st.innerHTML = "✓ Preview siap! Klik Download untuk simpan ZIP.";
 }
 
 async function downloadBakePrisma(){
