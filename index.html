@@ -886,7 +886,8 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
           <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
         </div>
       </div>
-      <button class="btn" onclick="bakeForPrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 BAKE FOR PRISMA 3D</button>
+      <button class="btn" onclick="previewBakePrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 PREVIEW BAKE PRISMA 3D</button>
+      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none">⬇ DOWNLOAD BAKED ZIP</button>
       <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
@@ -1882,12 +1883,12 @@ function drawBakePreview(canvasId, sourceCanvas){
   target.height = sourceCanvas.height;
   target.getContext("2d").drawImage(sourceCanvas, 0, 0);
 }
-async function bakeForPrisma(){
+let bakedCanvases = null;
+async function previewBakePrisma(){
   if(!texCanvas){ return; }
   const st = document.getElementById("bake-status");
-  st.textContent = "Baking all maps for Prisma 3D...";
+  st.textContent = "Generating preview...";
   const w = texCanvas.width, h = texCanvas.height;
-  const zip = new JSZip();
   function getD(id){ return document.getElementById("canvas-"+id).getContext("2d").getImageData(0,0,w,h).data; }
   function newC(){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
 
@@ -1901,7 +1902,6 @@ async function bakeForPrisma(){
     d1.data[i+3]=255;
   }
   x1.putImageData(d1,0,0);
-  zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
   drawBakePreview("bake-preview-1", c1);
 
   // SLOT 2: Normal + Bump blended
@@ -1914,7 +1914,6 @@ async function bakeForPrisma(){
     d2.data[i+3]=255;
   }
   x2.putImageData(d2,0,0);
-  zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
   drawBakePreview("bake-preview-2", c2);
 
   // SLOT 3: Roughness + Specular + Metallic + Curvature baked into Reflection
@@ -1927,19 +1926,33 @@ async function bakeForPrisma(){
     d3.data[i+3]=255;
   }
   x3.putImageData(d3,0,0);
-  zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
   drawBakePreview("bake-preview-3", c3);
   document.getElementById("bake-preview-wrap").style.display = "block";
 
+  bakedCanvases = { c1, c2, c3 };
+  document.getElementById("bake-download-btn").style.display = "block";
+  st.textContent = "✓ Preview siap! Klik Download untuk simpan ZIP.";
+}
+
+async function downloadBakePrisma(){
+  if(!bakedCanvases){ return; }
+  const st = document.getElementById("bake-status");
+  st.textContent = "Generating ZIP...";
+  const zip = new JSZip();
+  const { c1, c2, c3 } = bakedCanvases;
+
+  zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
   zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
 
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
     href: URL.createObjectURL(content),
-    download: "prisma3d_baked.zip"
+    download: texOriginalName+"_prisma3d_baked.zip"
   });
   a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ All maps baked and downloaded!";
+  st.textContent = "✓ Download selesai!";
 }
 </script>
 
