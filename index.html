@@ -567,7 +567,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       Kalau kamu udah nyaman dengan limit yang ada sekarang, klik <strong>Lanjutkan</strong> aja. Happy creating! 🎨
     </div>
     <div class="nudge-actions">
-      <button class="nudge-btn-login" onclick="location.href='/auth/login'">🔑 Login dengan Roblox</button>
+      <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/login'">🔑 Login dengan Roblox</button>
       <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
     </div>
   </div>
@@ -1994,7 +1994,8 @@ function trackFetchAction(){
   count += 1;
   localStorage.setItem('rbx3d_fetch_count', count.toString());
   updateProgressBars(count);
-  if(count % 5 === 0){
+  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1';
+  if(count % 5 === 0 && !alreadyDismissed){
     showNudge();
   }
 }
@@ -2031,6 +2032,7 @@ function showNudge(){
   }
 }
 function closeNudge(){
+  localStorage.setItem('rbx3d_nudge_dismissed', '1');
   const overlay = document.getElementById('nudge-overlay');
   if(typeof Motion !== 'undefined'){
     const { animate } = Motion;
