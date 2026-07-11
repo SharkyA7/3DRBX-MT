@@ -878,6 +878,14 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</div>
       <button class="btn btn-green" onclick="downloadTextures()">⬇ DOWNLOAD ALL MAPS (ZIP)</button>
+      <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
+        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px">PREVIEW HASIL BAKE</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
+        </div>
+      </div>
       <button class="btn" onclick="bakeForPrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 BAKE FOR PRISMA 3D</button>
       <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
@@ -1868,6 +1876,12 @@ async function downloadTextures(){
   document.getElementById("tex-status").textContent="✓ Download selesai!";
 }
 
+function drawBakePreview(canvasId, sourceCanvas){
+  const target = document.getElementById(canvasId);
+  target.width = sourceCanvas.width;
+  target.height = sourceCanvas.height;
+  target.getContext("2d").drawImage(sourceCanvas, 0, 0);
+}
 async function bakeForPrisma(){
   if(!texCanvas){ return; }
   const st = document.getElementById("bake-status");
@@ -1888,6 +1902,7 @@ async function bakeForPrisma(){
   }
   x1.putImageData(d1,0,0);
   zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-1", c1);
 
   // SLOT 2: Normal + Bump blended
   const nrm=getD("normal"), bmp=getD("bump");
@@ -1900,6 +1915,7 @@ async function bakeForPrisma(){
   }
   x2.putImageData(d2,0,0);
   zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-2", c2);
 
   // SLOT 3: Roughness + Specular + Metallic + Curvature baked into Reflection
   const rgh=getD("roughness"), spec=getD("specular"), met=getD("metallic"), curv=getD("curvature");
@@ -1912,6 +1928,8 @@ async function bakeForPrisma(){
   }
   x3.putImageData(d3,0,0);
   zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-3", c3);
+  document.getElementById("bake-preview-wrap").style.display = "block";
 
   zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
 
