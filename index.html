@@ -240,6 +240,13 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   border-radius:50%;animation:texspin 0.7s linear infinite;flex-shrink:0;}
 .tex-loading-text{font-family:var(--font-ui);font-size:12px;color:var(--white);}
 
+
+.topbar-lang-toggle{display:flex;gap:2px;margin-right:8px;}
+.topbar-lang-btn{padding:5px 9px;font-family:var(--font-ui);font-size:11px;font-weight:600;
+  background:transparent;border:1px solid var(--border2);color:var(--muted);cursor:pointer;
+  border-radius:6px;transition:all .15s;}
+.topbar-lang-btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -665,7 +672,11 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   </div>
   <h1>3DRBXMT</h1>
   <p class="sub">3D ROBLOX MODEL MOBILE TOOLS</p>
-  <div style="display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+  <div style="display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+    <div class="topbar-lang-toggle">
+      <button class="topbar-lang-btn active" id="topbar-lang-id" onclick="setGlobalLang('id')">ID</button>
+      <button class="topbar-lang-btn" id="topbar-lang-en" onclick="setGlobalLang('en')">EN</button>
+    </div>
     <a href="/auth/login" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(0,212,255,.15)'" onmouseout="this.style.background='rgba(0,212,255,.08)'">🔑 Login with Roblox</a>
     <a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--gray)'">↗ GitHub</a>
   </div>
@@ -2183,5 +2194,40 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+
+<script>
+let globalLang = localStorage.getItem('rbx3d_lang') || 'id';
+
+function setGlobalLang(lang){
+  globalLang = lang;
+  localStorage.setItem('rbx3d_lang', lang);
+  document.getElementById('topbar-lang-id').classList.toggle('active', lang === 'id');
+  document.getElementById('topbar-lang-en').classList.toggle('active', lang === 'en');
+  applyGlobalTranslations();
+}
+
+function applyGlobalTranslations(){
+  document.querySelectorAll('[data-t-id]').forEach(el => {
+    const idText = el.getAttribute('data-t-id');
+    const enText = el.getAttribute('data-t-en');
+    if(idText !== null && enText !== null){
+      el.textContent = globalLang === 'id' ? idText : enText;
+    }
+  });
+  document.querySelectorAll('[data-t-ph-id]').forEach(el => {
+    const idText = el.getAttribute('data-t-ph-id');
+    const enText = el.getAttribute('data-t-ph-en');
+    if(idText !== null && enText !== null){
+      el.placeholder = globalLang === 'id' ? idText : enText;
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('topbar-lang-id').classList.toggle('active', globalLang === 'id');
+  document.getElementById('topbar-lang-en').classList.toggle('active', globalLang === 'en');
+  applyGlobalTranslations();
+});
+</script>
 </body>
 </html>
