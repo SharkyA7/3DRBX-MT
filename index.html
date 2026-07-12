@@ -247,6 +247,13 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   border-radius:6px;transition:all .15s;}
 .topbar-lang-btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
 
+
+.footer-contact{display:flex;gap:16px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+.footer-contact-item{display:flex;align-items:center;gap:6px;font-family:var(--font-ui);
+  font-size:11px;color:var(--muted);cursor:pointer;transition:color .15s;background:none;
+  border:none;padding:4px 8px;border-radius:6px;}
+.footer-contact-item:hover{color:var(--accent);background:rgba(0,212,255,.06);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -1059,7 +1066,17 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 </section>
 
 
-<footer><span data-t-id="ROBLOX 3D DOWNLOADER · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION" data-t-en="ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION">ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span></footer>
+<footer>
+  <span data-t-id="ROBLOX 3D DOWNLOADER · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION" data-t-en="ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION">ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span>
+  <div class="footer-contact">
+    <button class="footer-contact-item" onclick="location.href='mailto:shafarois5@gmail.com?subject=Bug Report - 3DRBXMT'">
+      ✉️ <span data-t-id="Laporkan Bug via Email" data-t-en="Report Bug via Email">Laporkan Bug via Email</span>
+    </button>
+    <button class="footer-contact-item" onclick="navigator.clipboard.writeText('sh4shark').then(()=>this.querySelector('span').textContent=(document.documentElement.getAttribute('data-lang')==='en'?'Copied!':'Tersalin!'))">
+      💬 Discord: sh4shark <span style="font-size:9px;opacity:.6" data-t-id="(klik untuk copy)" data-t-en="(click to copy)">(klik untuk copy)</span>
+    </button>
+  </div>
+</footer>
 
 <script>
 const BASE = '';
