@@ -936,7 +936,8 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
-      <select id="single-map-select" style="width:100%;margin-top:10px">
+      <button class="btn" onclick="downloadSingleMap()" style="width:100%;margin-top:10px">⬇ <span data-t-id="DOWNLOAD 1 MAP" data-t-en="DOWNLOAD 1 MAP">DOWNLOAD 1 MAP</span></button>
+      <select id="single-map-select" style="width:100%;margin-top:8px">
         <option value="albedo">Albedo</option>
         <option value="normal">Normal</option>
         <option value="roughness">Roughness</option>
@@ -947,7 +948,6 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <option value="bump">Bump</option>
         <option value="metallic">Metallic</option>
       </select>
-      <button class="btn" onclick="downloadSingleMap()" style="width:100%;margin-top:8px">⬇ <span data-t-id="DOWNLOAD 1 MAP" data-t-en="DOWNLOAD 1 MAP">DOWNLOAD 1 MAP</span></button>
       <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
         <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
