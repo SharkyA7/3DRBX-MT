@@ -254,6 +254,14 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   border:none;padding:4px 8px;border-radius:6px;}
 .footer-contact-item:hover{color:var(--accent);background:rgba(0,212,255,.06);}
 
+
+.rgba-channel-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.rgba-channel{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border2);
+  border-radius:8px;padding:8px 10px;}
+.rgba-channel-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.rgba-channel select{flex:1;background:transparent;border:none;color:var(--white);
+  font-family:var(--font-ui);font-size:12px;padding:0;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -963,6 +971,39 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <option value="bump">Bump</option>
         <option value="metallic">Metallic</option>
       </select>
+    </div>
+
+    <div class="card" id="tex-rgba-card">
+      <div class="label"><span data-t-id="RGBA PACKED EXPORT" data-t-en="RGBA PACKED EXPORT">RGBA PACKED EXPORT</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:10px;line-height:1.8">
+        <span data-t-id="Gabungkan 4 map ke dalam channel warna R/G/B/A. Untuk workflow Unity/Unreal/game engine (ORM texture)." data-t-en="Combine 4 maps into R/G/B/A color channels. For Unity/Unreal/game engine workflow (ORM texture).">Gabungkan 4 map ke dalam channel warna R/G/B/A. Untuk workflow Unity/Unreal/game engine (ORM texture).</span>
+      </p>
+      <div class="rgba-channel-row">
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#ff4444"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">R</span>
+          <select id="rgba-r"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#44ff44"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">G</span>
+          <select id="rgba-g"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#4488ff"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">B</span>
+          <select id="rgba-b"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#aaaaaa"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">A</span>
+          <select id="rgba-a"></select>
+        </div>
+      </div>
+      <canvas id="rgba-preview-canvas" style="width:100%;border-radius:8px;margin-top:12px;display:none"></canvas>
+      <button class="btn" onclick="generateRGBAPacked()" style="width:100%;margin-top:10px">▶ <span data-t-id="GENERATE PACKED TEXTURE" data-t-en="GENERATE PACKED TEXTURE">GENERATE PACKED TEXTURE</span></button>
+      <button class="btn btn-green" id="rgba-download-btn" onclick="downloadRGBAPacked()" style="width:100%;margin-top:8px;display:none">⬇ <span data-t-id="DOWNLOAD PACKED PNG" data-t-en="DOWNLOAD PACKED PNG">DOWNLOAD PACKED PNG</span></button>
+      <div id="rgba-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
 
@@ -2289,6 +2330,78 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('topbar-lang-en').classList.toggle('active', globalLang === 'en');
   applyGlobalTranslations();
 });
+</script>
+
+<script>
+const RGBA_MAP_OPTIONS = ["none","albedo","normal","roughness","ao","emissive","curvature","specular","bump","metallic"];
+function populateRGBASelects(){
+  const ids = ["rgba-r","rgba-g","rgba-b","rgba-a"];
+  const defaults = {"rgba-r":"ao","rgba-g":"roughness","rgba-b":"metallic","rgba-a":"none"};
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    if(!sel || sel.options.length > 0) return;
+    RGBA_MAP_OPTIONS.forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt === "none" ? "None" : opt.charAt(0).toUpperCase()+opt.slice(1);
+      if(opt === defaults[id]) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+let rgbaPackedCanvas = null;
+function generateRGBAPacked(){
+  if(!texCanvas) return;
+  const st = document.getElementById("rgba-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating packed texture...</div></div>';
+
+  setTimeout(() => {
+    const w = texCanvas.width, h = texCanvas.height;
+    function getData(id){
+      if(id === "none") return null;
+      const c = document.getElementById("canvas-"+id);
+      return c ? c.getContext("2d").getImageData(0,0,w,h).data : null;
+    }
+    const rData = getData(document.getElementById("rgba-r").value);
+    const gData = getData(document.getElementById("rgba-g").value);
+    const bData = getData(document.getElementById("rgba-b").value);
+    const aData = getData(document.getElementById("rgba-a").value);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(w, h);
+
+    for(let i=0;i<imgData.data.length;i+=4){
+      imgData.data[i]   = rData ? rData[i] : 0;
+      imgData.data[i+1] = gData ? gData[i] : 0;
+      imgData.data[i+2] = bData ? bData[i] : 0;
+      imgData.data[i+3] = aData ? aData[i] : 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    rgbaPackedCanvas = canvas;
+
+    const preview = document.getElementById("rgba-preview-canvas");
+    preview.width = w; preview.height = h;
+    preview.getContext("2d").drawImage(canvas, 0, 0);
+    preview.style.display = "block";
+
+    document.getElementById("rgba-download-btn").style.display = "block";
+    st.textContent = "✓ Packed texture siap! Klik Download untuk simpan.";
+  }, 50);
+}
+function downloadRGBAPacked(){
+  if(!rgbaPackedCanvas) return;
+  rgbaPackedCanvas.toBlob(blob => {
+    const a = Object.assign(document.createElement("a"),{
+      href: URL.createObjectURL(blob),
+      download: texOriginalName+"_packed_rgba.png"
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    document.getElementById("rgba-status").textContent = "✓ Download selesai!";
+  }, "image/png");
+}
+document.addEventListener("DOMContentLoaded", populateRGBASelects);
 </script>
 </body>
 </html>
