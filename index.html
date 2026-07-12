@@ -2053,6 +2053,10 @@ function putImageData(id,imgData,w,h){
 }
 
 function downloadSingleMap(){
+  if(!texCanvas){
+    alert("Upload texture terlebih dahulu sebelum download.");
+    return;
+  }
   const id = document.getElementById("single-map-select").value;
   const c = document.getElementById("canvas-"+id);
   if(!c) return;
