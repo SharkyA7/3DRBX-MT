@@ -936,6 +936,20 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <select id="single-map-select" style="flex:1;min-width:140px">
+          <option value="albedo">Albedo</option>
+          <option value="normal">Normal</option>
+          <option value="roughness">Roughness</option>
+          <option value="ao">AO</option>
+          <option value="emissive">Emissive</option>
+          <option value="curvature">Curvature</option>
+          <option value="specular">Specular</option>
+          <option value="bump">Bump</option>
+          <option value="metallic">Metallic</option>
+        </select>
+        <button class="btn" onclick="downloadSingleMap()" style="flex:0 0 auto">⬇ <span data-t-id="DOWNLOAD 1 MAP" data-t-en="DOWNLOAD 1 MAP">DOWNLOAD 1 MAP</span></button>
+      </div>
       <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
         <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
@@ -1974,6 +1988,18 @@ function putImageData(id,imgData,w,h){
   c.getContext("2d").putImageData(imgData,0,0);
 }
 
+function downloadSingleMap(){
+  const id = document.getElementById("single-map-select").value;
+  const c = document.getElementById("canvas-"+id);
+  if(!c) return;
+  c.toBlob(blob => {
+    const a = Object.assign(document.createElement("a"),{
+      href: URL.createObjectURL(blob),
+      download: texOriginalName+"_"+id+".png"
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  }, "image/png");
+}
 async function downloadTextures(){
   if(!texCanvas){return;}
   document.getElementById("tex-status").textContent="Generating ZIP...";
