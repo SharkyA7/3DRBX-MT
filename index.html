@@ -702,17 +702,17 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   <!-- ── AVATAR PANEL ── -->
   <div class="panel active" id="panel-avatar">
     <div class="card">
-      <div class="label">CARI AVATAR</div>
+      <div class="label"><span data-t-id="CARI AVATAR" data-t-en="SEARCH AVATAR">CARI AVATAR</span></div>
       <div class="row">
         <div style="flex:1;min-width:180px">
-          <input type="text" id="av-input" placeholder="Username atau User ID…">
-          <p class="hint">Contoh: "Roblox" · "builderman" · "156"</p>
+          <input type="text" id="av-input" data-t-ph-id="Username atau User ID…" data-t-ph-en="Username or User ID…" placeholder="Username atau User ID…">
+          <p class="hint"><span data-t-id='Contoh: "Roblox" · "builderman" · "156"' data-t-en='Example: "Roblox" · "builderman" · "156"'>Contoh: "Roblox" · "builderman" · "156"</span></p>
         </div>
         <select id="av-format" style="flex:0 0 120px;min-width:120px">
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-avatar">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-avatar"></div></div></div>
+        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span data-t-id="Menuju rekomendasi login" data-t-en="Towards login recommendation">Menuju rekomendasi login</span><span class="count" id="fp-count-avatar">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-avatar"></div></div></div>
       </div>
       <div class="status-box idle" id="av-status"><div class="dot"></div><span id="av-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="av-prog"></div></div>
@@ -721,15 +721,15 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div id="av-result" style="display:none">
       <!-- Profile -->
       <div class="card" id="av-profile-card">
-        <div class="label">PROFIL</div>
+        <div class="label"><span data-t-id="PROFIL" data-t-en="PROFILE">PROFIL</span></div>
         <div class="result-grid">
           <div class="av-img" id="av-thumb">👤</div>
           <div class="info-list">
-            <div class="irow"><span class="ikey">USERNAME</span><span class="ival big" id="av-name">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="USERNAME" data-t-en="USERNAME">USERNAME</span></span><span class="ival big" id="av-name">—</span></div>
             <div class="irow"><span class="ikey">USER ID</span><span class="ival" id="av-id">—</span></div>
-            <div class="irow"><span class="ikey">RIG TYPE</span><span class="ival" id="av-rig">—</span></div>
-            <div class="irow"><span class="ikey">DIBUAT</span><span class="ival" id="av-created">—</span></div>
-            <a id="av-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA PROFIL ROBLOX</a>
+            <div class="irow"><span class="ikey"><span data-t-id="RIG TYPE" data-t-en="RIG TYPE">RIG TYPE</span></span><span class="ival" id="av-rig">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="DIBUAT" data-t-en="CREATED">DIBUAT</span></span><span class="ival" id="av-created">—</span></div>
+            <a id="av-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ <span data-t-id="BUKA PROFIL ROBLOX" data-t-en="OPEN ROBLOX PROFILE">BUKA PROFIL ROBLOX</span></a>
           </div>
         </div>
         <div class="chips" id="av-chips"></div>
@@ -737,25 +737,25 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
       <!-- Download -->
       <div class="card">
-        <div class="label">DOWNLOAD 3D MODEL</div>
+        <div class="label"><span data-t-id="DOWNLOAD 3D MODEL" data-t-en="DOWNLOAD 3D MODEL">DOWNLOAD 3D MODEL</span></div>
         <div style="margin-bottom:12px;background:rgba(0,255,153,.06);border:1px solid rgba(0,255,153,.3);border-radius:4px;padding:14px">
           <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⭐ REAL MODEL + TEXTURE</div>
           <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:10px">
-            Download langsung dari Roblox CDN via browser.<br>
-            Berisi <strong style="color:#fff">mesh asli + UV texture PNG</strong> — cocok untuk Nomad Sculpt &amp; Prisma 3D.
+            <span data-t-id='Download langsung dari Roblox CDN via browser.' data-t-en='Download directly from Roblox CDN via browser.'>Download langsung dari Roblox CDN via browser.</span><br>
+            <span data-t-id='Berisi ' data-t-en='Contains '>Berisi </span><strong style="color:#fff" data-t-id="mesh asli + UV texture PNG" data-t-en="original mesh + UV texture PNG">mesh asli + UV texture PNG</strong><span data-t-id=" — cocok untuk Nomad Sculpt &amp; Prisma 3D." data-t-en=" — perfect for Nomad Sculpt &amp; Prisma 3D."> — cocok untuk Nomad Sculpt &amp; Prisma 3D.</span>
           </div>
-          <button class="btn btn-green" id="btn-real" onclick="downloadReal()" disabled>⬇ DOWNLOAD OBJ + TEXTURE (REAL)</button>
+          <button class="btn btn-green" id="btn-real" onclick="downloadReal()" disabled>⬇ <span data-t-id="DOWNLOAD OBJ + TEXTURE (REAL)" data-t-en="DOWNLOAD OBJ + TEXTURE (REAL)">DOWNLOAD OBJ + TEXTURE (REAL)</span></button>
           <div style="margin-top:8px;font-size:9px;color:var(--gray)" id="real-status"></div>
         </div>
         <div class="dl-grid">
           <div class="dl-card" id="dl-av-obj">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-w" id="bd-obj">LOADING…</span></div>
-            <div class="dl-desc">Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D.</div>
+            <div class="dl-desc"><span data-t-id="Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D." data-t-en="Wavefront OBJ + MTL. Open in Blender, Maya, Cinema 4D.">Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D.</span></div>
             <button class="btn btn-green" id="btn-av-obj" onclick="downloadAvatar('obj')" disabled>⬇ DOWNLOAD ZIP</button>
           </div>
           <div class="dl-card" id="dl-av-gltf">
             <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-w" id="bd-gltf">LOADING…</span></div>
-            <div class="dl-desc">GL Transmission Format. Untuk game engine &amp; AR/VR.</div>
+            <div class="dl-desc"><span data-t-id="GL Transmission Format. Untuk game engine &amp; AR/VR." data-t-en="GL Transmission Format. For game engines &amp; AR/VR.">GL Transmission Format. Untuk game engine &amp; AR/VR.</span></div>
             <button class="btn btn-amber" id="btn-av-gltf" onclick="downloadAvatar('gltf')" disabled>⬇ DOWNLOAD ZIP</button>
           </div>
         </div>
