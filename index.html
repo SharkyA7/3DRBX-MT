@@ -1161,6 +1161,8 @@ function toggleDropdown(e){
     if(btn){
       const r = btn.getBoundingClientRect();
       m.style.top = (r.bottom + 4) + 'px';
+      m.style.left = r.left + 'px';
+      m.style.right = 'auto';
     }
     m.style.display='block';
   } else {
