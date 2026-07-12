@@ -686,15 +686,15 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 <main>
   <!-- TABS -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('avatar')">👤 AVATAR</div>
-    <div class="tab" onclick="switchTab('catalog')">🛍️ KATALOG</div>
-    <div class="tab" onclick="switchTab('audio')">🎵 AUDIO</div>
-    <div class="tab" onclick="switchTab('model3d')">📦 3D MODEL</div>
+    <div class="tab active" onclick="switchTab('avatar')">👤 <span data-t-id="AVATAR" data-t-en="AVATAR">AVATAR</span></div>
+    <div class="tab" onclick="switchTab('catalog')">🛍️ <span data-t-id="KATALOG" data-t-en="CATALOG">KATALOG</span></div>
+    <div class="tab" onclick="switchTab('audio')">🎵 <span data-t-id="AUDIO" data-t-en="AUDIO">AUDIO</span></div>
+    <div class="tab" onclick="switchTab('model3d')">📦 <span data-t-id="3D MODEL" data-t-en="3D MODEL">3D MODEL</span></div>
     <div class="tab-dropdown">
-      <div class="tab" onclick="toggleDropdown(event)">⚙️ MORE ▼</div>
+      <div class="tab" onclick="toggleDropdown(event)">⚙️ <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
-        <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 TEXTURE</div>
-        <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 API DOCS</div>
+        <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
+        <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
   </div>
