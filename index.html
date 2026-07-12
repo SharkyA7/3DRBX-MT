@@ -774,17 +774,17 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   <!-- ── KATALOG PANEL ── -->
   <div class="panel" id="panel-catalog">
     <div class="card">
-      <div class="label">CARI ITEM KATALOG</div>
+      <div class="label"><span data-t-id="CARI ITEM KATALOG" data-t-en="SEARCH CATALOG ITEM">CARI ITEM KATALOG</span></div>
       <div class="row">
         <div style="flex:1;min-width:180px">
-          <input type="number" id="cat-input" placeholder="Asset ID (misal: 102611803)">
-          <p class="hint">Ambil ID dari URL: roblox.com/catalog/<strong>ID</strong>/nama-item</p>
+          <input type="number" id="cat-input" data-t-ph-id="Asset ID (misal: 102611803)" data-t-ph-en="Asset ID (e.g: 102611803)" placeholder="Asset ID (misal: 102611803)">
+          <p class="hint"><span data-t-id="Ambil ID dari URL: roblox.com/catalog/" data-t-en="Get ID from URL: roblox.com/catalog/">Ambil ID dari URL: roblox.com/catalog/</span><strong>ID</strong><span data-t-id="/nama-item" data-t-en="/item-name">/nama-item</span></p>
         </div>
         <select id="cat-format" style="flex:0 0 120px;min-width:120px">
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-catalog">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-catalog"></div></div></div>
+        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-catalog">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-catalog"></div></div></div>
       </div>
       <div class="status-box idle" id="cat-status"><div class="dot"></div><span id="cat-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="cat-prog"></div></div>
@@ -792,25 +792,25 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
     <div id="cat-result" style="display:none">
       <div class="card">
-        <div class="label">DETAIL ITEM</div>
+        <div class="label"><span data-t-id="DETAIL ITEM" data-t-en="ITEM DETAILS">DETAIL ITEM</span></div>
         <div class="result-grid">
           <div class="av-img" id="cat-thumb">🧢</div>
           <div class="info-list">
-            <div class="irow"><span class="ikey">NAMA</span><span class="ival big" id="cat-name">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="NAMA" data-t-en="NAME">NAMA</span></span><span class="ival big" id="cat-name">—</span></div>
             <div class="irow"><span class="ikey">ASSET ID</span><span class="ival" id="cat-id">—</span></div>
-            <div class="irow"><span class="ikey">TIPE</span><span class="ival" id="cat-type">—</span></div>
-            <div class="irow"><span class="ikey">PEMBUAT</span><span class="ival" id="cat-creator">—</span></div>
-            <div class="irow"><span class="ikey">HARGA</span><span class="ival" id="cat-price">—</span></div>
-            <a id="cat-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA DI KATALOG</a>
+            <div class="irow"><span class="ikey"><span data-t-id="TIPE" data-t-en="TYPE">TIPE</span></span><span class="ival" id="cat-type">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="PEMBUAT" data-t-en="CREATOR">PEMBUAT</span></span><span class="ival" id="cat-creator">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="HARGA" data-t-en="PRICE">HARGA</span></span><span class="ival" id="cat-price">—</span></div>
+            <a id="cat-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ <span data-t-id="BUKA DI KATALOG" data-t-en="OPEN IN CATALOG">BUKA DI KATALOG</span></a>
           </div>
         </div>
       </div>
       <div class="card">
-        <div class="label">DOWNLOAD</div>
+        <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
         <div class="dl-grid">
           <div class="dl-card ready">
-            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok">SIAP</span></div>
-            <div class="dl-desc">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</div>
+            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
             <button class="btn btn-green" onclick="downloadCatalog('obj')">⬇ OBJ ZIP</button>
           </div>
           <div class="dl-card ready">
@@ -826,80 +826,80 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   <!-- ── AUDIO PANEL ── -->
   <div class="panel" id="panel-audio">
     <div class="card">
-      <div class="label">CARI AUDIO</div>
-      <input class="inp" id="audio-input" type="number" placeholder="Audio ID (contoh: 139084379039051)">
-      <p style="font-size:9px;color:var(--gray);margin-top:4px">Ambil ID dari URL: roblox.com/library/ID/nama-audio</p>
-      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ FETCH</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-audio">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-audio"></div></div></div>
+      <div class="label"><span data-t-id="CARI AUDIO" data-t-en="SEARCH AUDIO">CARI AUDIO</span></div>
+      <input class="inp" id="audio-input" type="number" data-t-ph-id="Audio ID (contoh: 139084379039051)" data-t-ph-en="Audio ID (e.g: 139084379039051)" placeholder="Audio ID (contoh: 139084379039051)">
+      <p style="font-size:9px;color:var(--gray);margin-top:4px"><span data-t-id="Ambil ID dari URL: roblox.com/library/ID/nama-audio" data-t-en="Get ID from URL: roblox.com/library/ID/audio-name">Ambil ID dari URL: roblox.com/library/ID/nama-audio</span></p>
+      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-audio">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-audio"></div></div></div>
       <div id="audio-status" style="margin-top:8px;font-size:9px"></div>
     </div>
     <div class="card" id="audio-result" style="display:none">
-      <div class="label">DETAIL AUDIO</div>
+      <div class="label"><span data-t-id="DETAIL AUDIO" data-t-en="AUDIO DETAILS">DETAIL AUDIO</span></div>
       <div id="audio-name" style="font-size:11px;color:var(--red);margin-bottom:8px"></div>
       <div style="font-size:9px;color:var(--gray);line-height:2">
-        <div>CREATOR: <span id="audio-creator" style="color:var(--white)"></span></div>
+        <div><span data-t-id="CREATOR" data-t-en="CREATOR">CREATOR</span>: <span id="audio-creator" style="color:var(--white)"></span></div>
         <div>ASSET ID: <span id="audio-id" style="color:var(--green)"></span></div>
-        <div>DIBUAT: <span id="audio-created" style="color:var(--white)"></span></div>
+        <div><span data-t-id="DIBUAT" data-t-en="CREATED">DIBUAT</span>: <span id="audio-created" style="color:var(--white)"></span></div>
       </div>
       <div style="margin-top:12px;padding:10px;background:rgba(232,0,11,.08);border:1px solid rgba(232,0,11,.3);border-radius:4px;font-size:9px;color:#ffaaaa">
-        ⚠ Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin.<br><br>
+        ⚠ <span data-t-id="Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin." data-t-en="This audio may be copyrighted. Only download audio you own or have permission to use.">Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin.</span><br><br>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--white)">
-          <input type="checkbox" id="audio-agree" onchange="toggleAudioDownload()"> Saya mengerti dan bertanggung jawab atas penggunaan audio ini
+          <input type="checkbox" id="audio-agree" onchange="toggleAudioDownload()"> <span data-t-id="Saya mengerti dan bertanggung jawab atas penggunaan audio ini" data-t-en="I understand and am responsible for the use of this audio">Saya mengerti dan bertanggung jawab atas penggunaan audio ini</span>
         </label>
       </div>
-      <button class="btn" id="audio-dl-btn" onclick="downloadAudio()" disabled style="margin-top:10px;opacity:0.5">⬇ DOWNLOAD AUDIO + INFO</button>
+      <button class="btn" id="audio-dl-btn" onclick="downloadAudio()" disabled style="margin-top:10px;opacity:0.5">⬇ <span data-t-id="DOWNLOAD AUDIO + INFO" data-t-en="DOWNLOAD AUDIO + INFO">DOWNLOAD AUDIO + INFO</span></button>
     </div>
   </div>
 
   <!-- ── 3D MODEL PANEL ── -->
   <div class="panel" id="panel-model3d">
     <div class="card">
-      <div class="label">CARI 3D MODEL (create.roblox.com)</div>
-      <input class="inp" id="model-input" type="text" placeholder="Asset ID atau URL create.roblox.com">
+      <div class="label"><span data-t-id="CARI 3D MODEL (create.roblox.com)" data-t-en="SEARCH 3D MODEL (create.roblox.com)">CARI 3D MODEL (create.roblox.com)</span></div>
+      <input class="inp" id="model-input" type="text" data-t-ph-id="Asset ID atau URL create.roblox.com" data-t-ph-en="Asset ID or create.roblox.com URL" placeholder="Asset ID atau URL create.roblox.com">
       <p style="font-size:9px;color:var(--gray);margin-top:4px">
-        Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."
+        <span data-t-id='Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."' data-t-en='Example: "9797218535" or "https://create.roblox.com/store/asset/9797218535/..."'>Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."</span>
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ FETCH &amp; ANALYZE</button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-model">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-model"></div></div></div>
-        <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" style="flex:1;background:#5865f2">⬇ DOWNLOAD RBXM</button>
+        <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ <span data-t-id="FETCH &amp; ANALYZE" data-t-en="FETCH &amp; ANALYZE">FETCH &amp; ANALYZE</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-model">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-model"></div></div></div>
+        <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" style="flex:1;background:#5865f2">⬇ <span data-t-id="DOWNLOAD RBXM" data-t-en="DOWNLOAD RBXM">DOWNLOAD RBXM</span></button>
       </div>
       <p style="font-size:9px;color:var(--gray);margin-top:4px">
-        RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)
+        <span data-t-id="RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)" data-t-en="RBXM = original Roblox file, open in Roblox Studio. Convert to GLB: FETCH first then BUILD GLB (≤500 parts, Union/CSG supported)">RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)</span>
       </p>
       <div id="model-status" style="margin-top:8px;font-size:9px"></div>
     </div>
 
     <div class="card" id="model-result" style="display:none">
-      <div class="label">ANALISIS MODEL</div>
+      <div class="label"><span data-t-id="ANALISIS MODEL" data-t-en="MODEL ANALYSIS">ANALISIS MODEL</span></div>
       <div id="model-support-badge" style="font-size:11px;margin-bottom:10px"></div>
       <div style="font-size:10px;line-height:1.8;color:var(--gray)">
-        <div>MESH PARTS: <span id="model-meshpart-count" style="color:var(--white)"></span></div>
-        <div>PARTS: <span id="model-part-count" style="color:var(--white)"></span></div>
+        <div><span data-t-id="MESH PARTS" data-t-en="MESH PARTS">MESH PARTS</span>: <span id="model-meshpart-count" style="color:var(--white)"></span></div>
+        <div><span data-t-id="PARTS" data-t-en="PARTS">PARTS</span>: <span id="model-part-count" style="color:var(--white)"></span></div>
         <div>UNION/CSG: <span id="model-union-count" style="color:var(--white)"></span></div>
-        <div>TOTAL: <span id="model-total-count" style="color:var(--white)"></span></div>
+        <div><span data-t-id="TOTAL" data-t-en="TOTAL">TOTAL</span>: <span id="model-total-count" style="color:var(--white)"></span></div>
       </div>
       <div id="model-reasons" style="margin-top:10px;font-size:9px;color:#ff7777"></div>
-      <button class="btn btn-green" id="model-build-btn" onclick="buildModelGLB()" disabled style="margin-top:14px;opacity:0.5">⬇ BUILD GLB</button>
+      <button class="btn btn-green" id="model-build-btn" onclick="buildModelGLB()" disabled style="margin-top:14px;opacity:0.5">⬇ <span data-t-id="BUILD GLB" data-t-en="BUILD GLB">BUILD GLB</span></button>
     </div>
 
     <div class="card" style="margin-top:12px">
-      <div class="label">CONVERT RBXM → GLB</div>
+      <div class="label"><span data-t-id="CONVERT RBXM → GLB" data-t-en="CONVERT RBXM → GLB">CONVERT RBXM → GLB</span></div>
       <p style="font-size:9px;color:var(--gray);margin-top:4px;margin-bottom:8px">
-        Upload file .rbxm yang sudah kamu download → parse → export GLB. Tidak perlu ID, tidak perlu internet ke Roblox untuk parsing.
+        <span data-t-id="Upload file .rbxm yang sudah kamu download → parse → export GLB. Tidak perlu ID, tidak perlu internet ke Roblox untuk parsing." data-t-en="Upload the .rbxm file you already downloaded → parse → export GLB. No ID needed, no internet to Roblox needed for parsing.">Upload file .rbxm yang sudah kamu download → parse → export GLB. Tidak perlu ID, tidak perlu internet ke Roblox untuk parsing.</span>
       </p>
       <input type="file" id="rbxm-file-input" accept=".rbxm,.rbxmx" style="display:none" onchange="handleRBXMUpload(event)">
-      <button class="btn" onclick="document.getElementById('rbxm-result').style.display='none'; document.getElementById('rbxm-upload-status').textContent=''; document.getElementById('rbxm-file-input').value=''; document.getElementById('rbxm-file-input').click()" style="width:100%">📁 PILIH FILE .RBXM</button>
+      <button class="btn" onclick="document.getElementById('rbxm-result').style.display='none'; document.getElementById('rbxm-upload-status').textContent=''; document.getElementById('rbxm-file-input').value=''; document.getElementById('rbxm-file-input').click()" style="width:100%">📁 <span data-t-id="PILIH FILE .RBXM" data-t-en="CHOOSE .RBXM FILE">PILIH FILE .RBXM</span></button>
       <div id="rbxm-upload-status" style="margin-top:8px;font-size:9px"></div>
       <div class="card" id="rbxm-result" style="display:none;margin-top:10px">
         <div id="rbxm-support-badge" style="font-size:11px;margin-bottom:8px"></div>
         <div style="font-size:10px;line-height:1.8;color:var(--gray)">
-          <div>FILE: <span id="rbxm-filename" style="color:var(--white)"></span></div>
-          <div>MESH PARTS: <span id="rbxm-meshpart-count" style="color:var(--white)"></span></div>
-          <div>PARTS: <span id="rbxm-part-count" style="color:var(--white)"></span></div>
+          <div><span data-t-id="FILE" data-t-en="FILE">FILE</span>: <span id="rbxm-filename" style="color:var(--white)"></span></div>
+          <div><span data-t-id="MESH PARTS" data-t-en="MESH PARTS">MESH PARTS</span>: <span id="rbxm-meshpart-count" style="color:var(--white)"></span></div>
+          <div><span data-t-id="PARTS" data-t-en="PARTS">PARTS</span>: <span id="rbxm-part-count" style="color:var(--white)"></span></div>
           <div>UNION/CSG: <span id="rbxm-union-count" style="color:var(--white)"></span></div>
-          <div>TOTAL: <span id="rbxm-total-count" style="color:var(--white)"></span></div>
+          <div><span data-t-id="TOTAL" data-t-en="TOTAL">TOTAL</span>: <span id="rbxm-total-count" style="color:var(--white)"></span></div>
         </div>
         <div id="rbxm-reasons" style="margin-top:8px;font-size:9px;color:#ff7777"></div>
-        <button class="btn btn-green" id="rbxm-build-btn" onclick="buildFromUpload()" disabled style="margin-top:12px;opacity:0.5;width:100%">⬇ BUILD GLB DARI FILE</button>
+        <button class="btn btn-green" id="rbxm-build-btn" onclick="buildFromUpload()" disabled style="margin-top:12px;opacity:0.5;width:100%">⬇ <span data-t-id="BUILD GLB DARI FILE" data-t-en="BUILD GLB FROM FILE">BUILD GLB DARI FILE</span></button>
       </div>
     </div>
   </div>
@@ -915,7 +915,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div id="tex-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
     <div class="card" id="tex-result" style="display:none">
-      <div class="label">PREVIEW</div>
+      <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">ALBEDO</p><canvas id="canvas-albedo" style="width:100%;border-radius:4px"></canvas></div>
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">NORMAL</p><canvas id="canvas-normal" style="width:100%;border-radius:4px"></canvas></div>
@@ -927,60 +927,60 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">BUMP</p><canvas id="canvas-bump" style="width:100%;border-radius:4px"></canvas></div>
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">METALLIC</p><canvas id="canvas-metallic" style="width:100%;border-radius:4px"></canvas></div>
       </div>
-      <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</div>
-      <button class="btn btn-green" onclick="downloadTextures()">⬇ DOWNLOAD ALL MAPS (ZIP)</button>
+      <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
+      <button class="btn btn-green" onclick="downloadTextures()">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
       <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px">PREVIEW HASIL BAKE</p>
+        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
           <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
           <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
           <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
         </div>
       </div>
-      <button class="btn" onclick="previewBakePrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 PREVIEW BAKE PRISMA 3D</button>
-      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none">⬇ DOWNLOAD BAKED ZIP</button>
+      <button class="btn" onclick="previewBakePrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 <span data-t-id="PREVIEW BAKE PRISMA 3D" data-t-en="PREVIEW BAKE PRISMA 3D">PREVIEW BAKE PRISMA 3D</span></button>
+      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none">⬇ <span data-t-id="DOWNLOAD BAKED ZIP" data-t-en="DOWNLOAD BAKED ZIP">DOWNLOAD BAKED ZIP</span></button>
       <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
 
   <div class="panel" id="panel-api">
     <div class="card">
-      <div class="label">ENDPOINT API</div>
+      <div class="label"><span data-t-id="ENDPOINT API" data-t-en="API ENDPOINT">ENDPOINT API</span></div>
       <p style="font-size:10px;color:var(--gray);line-height:1.9;margin-bottom:16px">
         Base URL: <code>http://localhost:8000</code><br>
-        Semua endpoint mengembalikan JSON kecuali <code>/download</code> yang mengembalikan ZIP.
+        <span data-t-id="Semua endpoint mengembalikan JSON kecuali " data-t-en="All endpoints return JSON except ">Semua endpoint mengembalikan JSON kecuali </span><code>/download</code><span data-t-id=" yang mengembalikan ZIP." data-t-en=" which returns ZIP."> yang mengembalikan ZIP.</span>
       </p>
       <table style="width:100%;border-collapse:collapse;font-size:10px">
         <thead>
           <tr style="color:var(--red);font-family:'Press Start 2P',monospace;font-size:8px">
             <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">METHOD</th>
             <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">ENDPOINT</th>
-            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">KETERANGAN</th>
+            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)"><span data-t-id="KETERANGAN" data-t-en="DESCRIPTION">KETERANGAN</span></th>
           </tr>
         </thead>
         <tbody id="api-table"></tbody>
       </table>
     </div>
     <div class="api-note">
-      <strong>⚠ KEAMANAN</strong> — API key dan cookie Roblox disimpan di file <code>.env</code> di server.
-      Tidak pernah dikirim ke browser. Jangan share file <code>.env</code> atau commit ke Git.
+      <strong>⚠ <span data-t-id="KEAMANAN" data-t-en="SECURITY">KEAMANAN</span></strong> — <span data-t-id="API key dan cookie Roblox disimpan di file " data-t-en="API key and Roblox cookies are stored in the ">API key dan cookie Roblox disimpan di file </span><code>.env</code><span data-t-id=" di server." data-t-en=" file on the server."> di server.</span>
+      <span data-t-id="Tidak pernah dikirim ke browser. Jangan share file " data-t-en="Never sent to the browser. Do not share the ">Tidak pernah dikirim ke browser. Jangan share file </span><code>.env</code><span data-t-id=" atau commit ke Git." data-t-en=" file or commit it to Git."> atau commit ke Git.</span>
     </div>
   </div>
 </main>
 
 <section class="patch-section">
-  <div class="patch-header">PATCH NOTES</div>
+  <div class="patch-header"><span data-t-id="PATCH NOTES" data-t-en="PATCH NOTES">PATCH NOTES</span></div>
   <div class="timeline">
 
     <div class="tl-item latest">
       <div class="tl-dot"></div>
       <div class="tl-version">v2.3 <span class="tl-badge-new">LATEST</span></div>
-      <div class="tl-date">10 Juli 2026</div>
+      <div class="tl-date"><span data-t-id="10 Juli 2026" data-t-en="July 10, 2026">10 Juli 2026</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
-          <li><span class="tl-tag tag-new">NEW</span>Nudge popup rekomendasi login Roblox setelah 5x fetch/download</li>
-          <li><span class="tl-tag tag-new">NEW</span>Progress bar limit di setiap panel (Avatar, Katalog, Audio, 3D Model)</li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span>Patch Notes section ditambahkan ke halaman utama</li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Nudge popup rekomendasi login Roblox setelah 5x fetch/download" data-t-en="Nudge popup recommending Roblox login after 5x fetch/download">Nudge popup rekomendasi login Roblox setelah 5x fetch/download</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Progress bar limit di setiap panel (Avatar, Katalog, Audio, 3D Model)" data-t-en="Limit progress bar in every panel (Avatar, Catalog, Audio, 3D Model)">Progress bar limit di setiap panel (Avatar, Katalog, Audio, 3D Model)</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Patch Notes section ditambahkan ke halaman utama" data-t-en="Patch Notes section added to the main page">Patch Notes section ditambahkan ke halaman utama</span></li>
         </ul>
       </div>
     </div>
@@ -988,12 +988,12 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="tl-item">
       <div class="tl-dot"></div>
       <div class="tl-version">v2.2</div>
-      <div class="tl-date">10 Juli 2026</div>
+      <div class="tl-date"><span data-t-id="10 Juli 2026" data-t-en="July 10, 2026">10 Juli 2026</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
-          <li><span class="tl-tag tag-fix">FIX</span>Union/CSG parts sekarang di-render dengan benar di GLB (sebelumnya hilang dari model akhir)</li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span>Texture mapping untuk MeshPart & Union diperbaiki</li>
-          <li><span class="tl-tag tag-new">NEW</span>Favicon custom 3DRBXMT</li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Union/CSG parts sekarang di-render dengan benar di GLB (sebelumnya hilang dari model akhir)" data-t-en="Union/CSG parts now render correctly in GLB (previously missing from the final model)">Union/CSG parts sekarang di-render dengan benar di GLB (sebelumnya hilang dari model akhir)</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Texture mapping untuk MeshPart & Union diperbaiki" data-t-en="Texture mapping for MeshPart & Union fixed">Texture mapping untuk MeshPart & Union diperbaiki</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Favicon custom 3DRBXMT" data-t-en="Custom 3DRBXMT favicon">Favicon custom 3DRBXMT</span></li>
         </ul>
       </div>
     </div>
@@ -1001,13 +1001,13 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="tl-item">
       <div class="tl-dot"></div>
       <div class="tl-version">v2.1</div>
-      <div class="tl-date">26 Juni 2026</div>
+      <div class="tl-date"><span data-t-id="26 Juni 2026" data-t-en="June 26, 2026">26 Juni 2026</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
-          <li><span class="tl-tag tag-new">NEW</span>Full UI redesign — tema cyan/blue premium menggantikan tema merah cyberpunk</li>
-          <li><span class="tl-tag tag-new">NEW</span>Animasi Motion.js — popup entry spring, stagger cards, button hover</li>
-          <li><span class="tl-tag tag-fix">FIX</span>Dropdown "More" tidak muncul karena overflow clipping</li>
-          <li><span class="tl-tag tag-fix">FIX</span>Tab switch active indicator tidak berpindah</li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Full UI redesign — tema cyan/blue premium menggantikan tema merah cyberpunk" data-t-en="Full UI redesign — premium cyan/blue theme replacing the red cyberpunk theme">Full UI redesign — tema cyan/blue premium menggantikan tema merah cyberpunk</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Animasi Motion.js — popup entry spring, stagger cards, button hover" data-t-en="Motion.js animations — popup entry spring, stagger cards, button hover">Animasi Motion.js — popup entry spring, stagger cards, button hover</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id='Dropdown "More" tidak muncul karena overflow clipping' data-t-en='"More" dropdown not appearing due to overflow clipping'>Dropdown "More" tidak muncul karena overflow clipping</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Tab switch active indicator tidak berpindah" data-t-en="Tab switch active indicator not moving">Tab switch active indicator tidak berpindah</span></li>
         </ul>
       </div>
     </div>
@@ -1015,12 +1015,12 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="tl-item">
       <div class="tl-dot"></div>
       <div class="tl-version">v2.0</div>
-      <div class="tl-date">25 Juni 2026</div>
+      <div class="tl-date"><span data-t-id="25 Juni 2026" data-t-en="June 25, 2026">25 Juni 2026</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
-          <li><span class="tl-tag tag-new">NEW</span>Rebrand ke 3DRBXMT (3D Roblox Model Mobile Tools)</li>
-          <li><span class="tl-tag tag-new">NEW</span>Security popup dengan penjelasan transparansi & bukti open source</li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span>Dukungan bilingual (ID/EN) di seluruh interface</li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Rebrand ke 3DRBXMT (3D Roblox Model Mobile Tools)" data-t-en="Rebranded to 3DRBXMT (3D Roblox Model Mobile Tools)">Rebrand ke 3DRBXMT (3D Roblox Model Mobile Tools)</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Security popup dengan penjelasan transparansi & bukti open source" data-t-en="Security popup with transparency explanation & open source proof">Security popup dengan penjelasan transparansi & bukti open source</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Dukungan bilingual (ID/EN) di seluruh interface" data-t-en="Bilingual support (ID/EN) across the interface">Dukungan bilingual (ID/EN) di seluruh interface</span></li>
         </ul>
       </div>
     </div>
@@ -1028,13 +1028,13 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="tl-item">
       <div class="tl-dot"></div>
       <div class="tl-version">v1.0</div>
-      <div class="tl-date">Rilis Awal</div>
+      <div class="tl-date"><span data-t-id="Rilis Awal" data-t-en="Initial Release">Rilis Awal</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
-          <li><span class="tl-tag tag-feat">CORE</span>Download avatar Roblox sebagai OBJ/GLTF dengan UV texture</li>
-          <li><span class="tl-tag tag-feat">CORE</span>Dukungan katalog item & audio Roblox</li>
-          <li><span class="tl-tag tag-feat">CORE</span>Convert RBXM → GLB dengan dukungan Union/CSG</li>
-          <li><span class="tl-tag tag-feat">CORE</span>Login Roblox OAuth opsional untuk limit lebih tinggi</li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Download avatar Roblox sebagai OBJ/GLTF dengan UV texture" data-t-en="Download Roblox avatars as OBJ/GLTF with UV texture">Download avatar Roblox sebagai OBJ/GLTF dengan UV texture</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Dukungan katalog item & audio Roblox" data-t-en="Roblox catalog item & audio support">Dukungan katalog item & audio Roblox</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Convert RBXM → GLB dengan dukungan Union/CSG" data-t-en="Convert RBXM → GLB with Union/CSG support">Convert RBXM → GLB dengan dukungan Union/CSG</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Login Roblox OAuth opsional untuk limit lebih tinggi" data-t-en="Optional Roblox OAuth login for higher limits">Login Roblox OAuth opsional untuk limit lebih tinggi</span></li>
         </ul>
       </div>
     </div>
@@ -1043,7 +1043,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 </section>
 
 
-<footer>ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
+<footer><span data-t-id="ROBLOX 3D DOWNLOADER · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION" data-t-en="ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION">ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span></footer>
 
 <script>
 const BASE = '';
