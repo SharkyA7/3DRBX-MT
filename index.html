@@ -936,6 +936,18 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
+
+      <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
+        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
+        </div>
+      </div>
+      <button class="btn" onclick="previewBakePrisma()" style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#4f46e5);width:100%">🔥 <span data-t-id="PREVIEW BAKE PRISMA 3D" data-t-en="PREVIEW BAKE PRISMA 3D">PREVIEW BAKE PRISMA 3D</span></button>
+      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none;width:100%">⬇ <span data-t-id="DOWNLOAD BAKED ZIP" data-t-en="DOWNLOAD BAKED ZIP">DOWNLOAD BAKED ZIP</span></button>
+      <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
 
     <div class="card" id="tex-single-card">
@@ -951,20 +963,6 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <option value="bump">Bump</option>
         <option value="metallic">Metallic</option>
       </select>
-    </div>
-
-    <div class="card" id="tex-bake-card">
-      <div id="bake-preview-wrap" style="display:none;margin-bottom:10px">
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
-        </div>
-      </div>
-      <button class="btn" onclick="previewBakePrisma()" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);width:100%">🔥 <span data-t-id="PREVIEW BAKE PRISMA 3D" data-t-en="PREVIEW BAKE PRISMA 3D">PREVIEW BAKE PRISMA 3D</span></button>
-      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none;width:100%">⬇ <span data-t-id="DOWNLOAD BAKED ZIP" data-t-en="DOWNLOAD BAKED ZIP">DOWNLOAD BAKED ZIP</span></button>
-      <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
 
