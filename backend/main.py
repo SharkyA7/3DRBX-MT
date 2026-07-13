@@ -1626,7 +1626,7 @@ def model_info():
         total_parts_all = meshpart_count + part_count + union_count
         reasons = []
         if total_parts_all > 100:
-            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100)")
+            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
         if total_parts_all == 0:
             reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
 
@@ -1910,7 +1910,7 @@ def model_convert():
         total_parts_all = meshpart_count + part_count + union_count
         reasons = []
         if total_parts_all > 100:
-            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100)")
+            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
         if total_parts_all == 0:
             reasons.append("Tidak ada MeshPart/Part/Union ditemukan")
 
