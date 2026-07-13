@@ -712,6 +712,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div class="tab" onclick="toggleDropdown(event)">⚙️ <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
         <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
+        <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'">🔮 <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
@@ -1007,6 +1008,55 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <button class="btn" onclick="generateRGBAPacked()" style="width:100%;margin-top:10px">▶ <span data-t-id="GENERATE PACKED TEXTURE" data-t-en="GENERATE PACKED TEXTURE">GENERATE PACKED TEXTURE</span></button>
       <button class="btn btn-green" id="rgba-download-btn" onclick="downloadRGBAPacked()" style="width:100%;margin-top:8px;display:none">⬇ <span data-t-id="DOWNLOAD PACKED PNG" data-t-en="DOWNLOAD PACKED PNG">DOWNLOAD PACKED PNG</span></button>
       <div id="rgba-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-viewer3d">
+    <div class="card">
+      <div class="label">🔮 <span data-t-id="3D MATERIAL PREVIEW" data-t-en="3D MATERIAL PREVIEW">3D MATERIAL PREVIEW</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <span data-t-id="Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D." data-t-en="Upload texture maps to preview material on a 3D object. Check the result before using it in 3D software.">Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D.</span>
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ALBEDO / BASE COLOR</label>
+          <input type="file" id="v3d-albedo-input" accept="image/*" onchange="loadV3DTexture(event,'albedo')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-albedo-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-albedo-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">NORMAL</label>
+          <input type="file" id="v3d-normal-input" accept="image/*" onchange="loadV3DTexture(event,'normal')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-normal-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-normal-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ROUGHNESS</label>
+          <input type="file" id="v3d-roughness-input" accept="image/*" onchange="loadV3DTexture(event,'roughness')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-roughness-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-roughness-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">METALLIC</label>
+          <input type="file" id="v3d-metallic-input" accept="image/*" onchange="loadV3DTexture(event,'metallic')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-metallic-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-metallic-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn" id="v3d-shape-sphere" onclick="setV3DShape('sphere')" style="flex:1;background:var(--accent)">⚪ SPHERE</button>
+        <button class="btn" id="v3d-shape-cube" onclick="setV3DShape('cube')" style="flex:1;background:var(--gray2);color:var(--gray)">⬜ CUBE</button>
+      </div>
+
+      <div id="v3d-canvas-wrap" style="width:100%;aspect-ratio:1;background:#0a0a0a;border-radius:8px;overflow:hidden;position:relative">
+        <canvas id="v3d-canvas" style="width:100%;height:100%;display:block"></canvas>
+        <div id="v3d-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;padding:20px">
+          Upload minimal Albedo untuk mulai preview
+        </div>
+      </div>
+      <p style="font-size:8px;color:var(--gray);margin-top:8px;text-align:center">Drag untuk rotate • Scroll/pinch untuk zoom</p>
     </div>
   </div>
 
@@ -2427,6 +2477,111 @@ function downloadRGBAPacked(){
   }, "image/png");
 }
 document.addEventListener("DOMContentLoaded", populateRGBASelects);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let v3dScene, v3dCamera, v3dRenderer, v3dControls, v3dMesh, v3dMaterial;
+let v3dTextures = { albedo:null, normal:null, roughness:null, metallic:null };
+let v3dShape = 'sphere';
+let v3dInitialized = false;
+
+function initV3DScene(){
+  if(v3dInitialized) return;
+  const canvas = document.getElementById('v3d-canvas');
+  const wrap = document.getElementById('v3d-canvas-wrap');
+
+  v3dScene = new THREE.Scene();
+  v3dScene.background = new THREE.Color(0x0a0a0a);
+
+  v3dCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  v3dCamera.position.set(0, 0, 3);
+
+  v3dRenderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  const size = wrap.clientWidth;
+  v3dRenderer.setSize(size, size);
+  v3dRenderer.setPixelRatio(window.devicePixelRatio);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  v3dScene.add(ambient);
+  const dir1 = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir1.position.set(2, 3, 4);
+  v3dScene.add(dir1);
+  const dir2 = new THREE.DirectionalLight(0x6699ff, 0.4);
+  dir2.position.set(-2, -1, -3);
+  v3dScene.add(dir2);
+
+  v3dControls = new OrbitControls(v3dCamera, v3dRenderer.domElement);
+  v3dControls.enableDamping = true;
+  v3dControls.dampingFactor = 0.08;
+
+  v3dMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.1 });
+  createV3DMesh();
+
+  function animate(){
+    requestAnimationFrame(animate);
+    v3dControls.update();
+    v3dRenderer.render(v3dScene, v3dCamera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    const s = wrap.clientWidth;
+    v3dRenderer.setSize(s, s);
+    v3dCamera.aspect = 1;
+    v3dCamera.updateProjectionMatrix();
+  });
+
+  v3dInitialized = true;
+}
+
+function createV3DMesh(){
+  if(v3dMesh) v3dScene.remove(v3dMesh);
+  const geom = v3dShape === 'sphere'
+    ? new THREE.SphereGeometry(1, 64, 64)
+    : new THREE.BoxGeometry(1.4, 1.4, 1.4);
+  v3dMesh = new THREE.Mesh(geom, v3dMaterial);
+  v3dScene.add(v3dMesh);
+}
+
+window.setV3DShape = function(shape){
+  v3dShape = shape;
+  document.getElementById('v3d-shape-sphere').style.background = shape === 'sphere' ? 'var(--accent)' : 'var(--gray2)';
+  document.getElementById('v3d-shape-sphere').style.color = shape === 'sphere' ? '#000' : 'var(--gray)';
+  document.getElementById('v3d-shape-cube').style.background = shape === 'cube' ? 'var(--accent)' : 'var(--gray2)';
+  document.getElementById('v3d-shape-cube').style.color = shape === 'cube' ? '#000' : 'var(--gray)';
+  if(v3dInitialized) createV3DMesh();
+};
+
+window.loadV3DTexture = function(event, slot){
+  const file = event.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('v3d-'+slot+'-status');
+  statusEl.textContent = 'Loading...';
+
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = function(){
+    if(!v3dInitialized) initV3DScene();
+    const tex = new THREE.Texture(img);
+    tex.needsUpdate = true;
+    if(THREE.SRGBColorSpace && slot === 'albedo') tex.colorSpace = THREE.SRGBColorSpace;
+    v3dTextures[slot] = tex;
+
+    if(slot === 'albedo') v3dMaterial.map = tex;
+    if(slot === 'normal') v3dMaterial.normalMap = tex;
+    if(slot === 'roughness') v3dMaterial.roughnessMap = tex;
+    if(slot === 'metallic') v3dMaterial.metalnessMap = tex;
+    v3dMaterial.needsUpdate = true;
+
+    document.getElementById('v3d-placeholder').style.display = 'none';
+    statusEl.textContent = '✓ Loaded';
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+};
 </script>
 </body>
 </html>
