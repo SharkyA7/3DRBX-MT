@@ -713,6 +713,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
         <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
         <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'">🔮 <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
+        <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
@@ -1084,6 +1085,34 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         </div>
       </div>
       <p style="font-size:8px;color:var(--gray);margin-top:8px;text-align:center">Drag untuk rotate • Scroll/pinch untuk zoom</p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-materials">
+    <div class="card">
+      <div class="label">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <span data-t-id="Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu." data-t-en="Official Roblox Studio PBR texture collection (Brick, Wood, Grass, Concrete, etc) to use as material reference in your 3D software.">Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu.</span>
+      </p>
+      <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">📦 Roblox-Materials Repository</div>
+        <p style="font-size:9px;color:var(--gray);line-height:1.8;margin-bottom:10px">
+          <span data-t-id="Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai." data-t-en="Each material includes ColorMap, NormalMap, MetalnessMap, RoughnessMap, and HeightMap in ready-to-use PNG format.">Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai.</span>
+        </p>
+        <a href="https://github.com/MaximumADHD/Roblox-Materials" target="_blank" class="btn" style="width:100%;display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+          ↗ <span data-t-id="BUKA REPOSITORY DI GITHUB" data-t-en="OPEN REPOSITORY ON GITHUB">BUKA REPOSITORY DI GITHUB</span>
+        </a>
+      </div>
+      <div style="font-size:8px;color:var(--gray);line-height:1.8;padding:10px;background:var(--s2);border-radius:6px">
+        <span data-t-id="Kredit: Koleksi material ini dikumpulkan oleh" data-t-en="Credit: This material collection was compiled by">Kredit: Koleksi material ini dikumpulkan oleh</span>
+        <a href="https://github.com/MaximumADHD" target="_blank" style="color:var(--accent);text-decoration:none">MaximumADHD</a>
+        <span data-t-id="dari asset resmi Roblox Studio. Semua hak milik Roblox Corporation." data-t-en="from official Roblox Studio assets. All rights belong to Roblox Corporation.">dari asset resmi Roblox Studio. Semua hak milik Roblox Corporation.</span>
+      </div>
+      <p style="font-size:8px;color:var(--gray);margin-top:10px;line-height:1.7">
+        💡 <span data-t-id="Tips: download file color.png + normal.png + roughness.png + metalness.png dari material yang kamu mau, lalu upload ke tab" data-t-en="Tip: download the color.png + normal.png + roughness.png + metalness.png files from the material you want, then upload them to the">Tips: download file color.png + normal.png + roughness.png + metalness.png dari material yang kamu mau, lalu upload ke tab</span>
+        <strong>3D Viewer</strong>
+        <span data-t-id="untuk preview langsung." data-t-en="tab for instant preview.">untuk preview langsung.</span>
+      </p>
     </div>
   </div>
 
