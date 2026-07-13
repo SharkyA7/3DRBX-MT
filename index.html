@@ -1020,7 +1020,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
         <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ALBEDO / BASE COLOR</label>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ALBEDO</label>
           <input type="file" id="v3d-albedo-input" accept="image/*" onchange="loadV3DTexture(event,'albedo')" style="display:none">
           <button class="btn" onclick="document.getElementById('v3d-albedo-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
           <div id="v3d-albedo-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
@@ -1036,6 +1036,30 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
           <input type="file" id="v3d-roughness-input" accept="image/*" onchange="loadV3DTexture(event,'roughness')" style="display:none">
           <button class="btn" onclick="document.getElementById('v3d-roughness-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
           <div id="v3d-roughness-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">AO</label>
+          <input type="file" id="v3d-ao-input" accept="image/*" onchange="loadV3DTexture(event,'ao')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-ao-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-ao-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">EMISSIVE</label>
+          <input type="file" id="v3d-emissive-input" accept="image/*" onchange="loadV3DTexture(event,'emissive')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-emissive-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-emissive-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">SPECULAR</label>
+          <input type="file" id="v3d-specular-input" accept="image/*" onchange="loadV3DTexture(event,'specular')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-specular-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-specular-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">BUMP</label>
+          <input type="file" id="v3d-bump-input" accept="image/*" onchange="loadV3DTexture(event,'bump')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-bump-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-bump-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
         </div>
         <div>
           <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">METALLIC</label>
@@ -2484,7 +2508,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let v3dScene, v3dCamera, v3dRenderer, v3dControls, v3dMesh, v3dMaterial;
-let v3dTextures = { albedo:null, normal:null, roughness:null, metallic:null };
+let v3dTextures = { albedo:null, normal:null, roughness:null, ao:null, emissive:null, specular:null, bump:null, metallic:null };
 let v3dShape = 'sphere';
 let v3dInitialized = false;
 
@@ -2585,6 +2609,10 @@ window.loadV3DTexture = function(event, slot){
     if(slot === 'albedo') v3dMaterial.map = tex;
     if(slot === 'normal') v3dMaterial.normalMap = tex;
     if(slot === 'roughness') v3dMaterial.roughnessMap = tex;
+    if(slot === 'ao') v3dMaterial.aoMap = tex;
+    if(slot === 'emissive'){ v3dMaterial.emissiveMap = tex; v3dMaterial.emissive = new THREE.Color(0xffffff); }
+    if(slot === 'specular') v3dMaterial.roughnessMap = v3dMaterial.roughnessMap || tex;
+    if(slot === 'bump') v3dMaterial.bumpMap = tex;
     if(slot === 'metallic') v3dMaterial.metalnessMap = tex;
     v3dMaterial.needsUpdate = true;
 
