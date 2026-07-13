@@ -1246,22 +1246,29 @@ function switchTab(name){
   if(typeof Motion!=='undefined'&&next) animatePanelCards(next);
 }
 
+let dropdownAnchorBtn = null;
 function toggleDropdown(e){
   if(e) e.stopPropagation();
   const m=document.getElementById('dropdown-menu');
   if(m.style.display==='none' || m.style.display===''){
-    const btn = e ? e.currentTarget : null;
-    if(btn){
-      const r = btn.getBoundingClientRect();
-      m.style.top = (r.bottom + 4) + 'px';
-      m.style.left = r.left + 'px';
-      m.style.right = 'auto';
-    }
+    dropdownAnchorBtn = e ? e.currentTarget : null;
+    updateDropdownPosition();
     m.style.display='block';
   } else {
     m.style.display='none';
+    dropdownAnchorBtn = null;
   }
 }
+function updateDropdownPosition(){
+  const m=document.getElementById('dropdown-menu');
+  if(!dropdownAnchorBtn || m.style.display !== 'block') return;
+  const r = dropdownAnchorBtn.getBoundingClientRect();
+  m.style.top = (r.bottom + 4) + 'px';
+  m.style.left = r.left + 'px';
+  m.style.right = 'auto';
+}
+window.addEventListener('scroll', updateDropdownPosition, { passive:true });
+window.addEventListener('resize', updateDropdownPosition);
 
 document.addEventListener("click",function(e){
   if(!e.target.closest(".tab-dropdown")){
