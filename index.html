@@ -2499,10 +2499,16 @@ function initV3DScene(){
   v3dCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   v3dCamera.position.set(0, 0, 3);
 
-  v3dRenderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  try {
+    v3dRenderer = new THREE.WebGLRenderer({ canvas, antialias:true, failIfMajorPerformanceCaveat:false });
+  } catch(err) {
+    document.getElementById('v3d-placeholder').textContent = '⚠ WebGL tidak didukung di browser/device ini. Coba browser lain atau update driver GPU.';
+    document.getElementById('v3d-placeholder').style.display = 'flex';
+    return;
+  }
   const size = wrap.clientWidth;
   v3dRenderer.setSize(size, size);
-  v3dRenderer.setPixelRatio(window.devicePixelRatio);
+  v3dRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   v3dScene.add(ambient);
@@ -2564,7 +2570,13 @@ window.loadV3DTexture = function(event, slot){
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = function(){
-    if(!v3dInitialized) initV3DScene();
+    try {
+      if(!v3dInitialized) initV3DScene();
+    } catch(err) {
+      statusEl.textContent = '✗ Error: ' + err.message;
+      URL.revokeObjectURL(url);
+      return;
+    }
     const tex = new THREE.Texture(img);
     tex.needsUpdate = true;
     if(THREE.SRGBColorSpace && slot === 'albedo') tex.colorSpace = THREE.SRGBColorSpace;
