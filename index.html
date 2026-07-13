@@ -265,6 +265,24 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .rgba-channel select{flex:1;background:transparent;border:none;color:var(--white);
   font-family:var(--font-ui);font-size:12px;padding:0;}
 
+
+body.maintenance-mode .tab,body.maintenance-mode .btn,body.maintenance-mode input,
+body.maintenance-mode select,body.maintenance-mode button:not(.maint-exempt){
+  pointer-events:none!important;opacity:.35!important;filter:grayscale(1);
+}
+body.maintenance-mode{
+  --accent:#FF3355!important;--accent2:#CC1133!important;
+}
+.maint-banner{display:none;background:linear-gradient(90deg,#FF3355,#CC1133);color:#fff;
+  text-align:center;padding:10px 16px;font-family:var(--font-ui);font-size:12px;font-weight:700;
+  letter-spacing:.04em;position:sticky;top:0;z-index:9999;}
+body.maintenance-mode .maint-banner{display:block;}
+.maint-pw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999999;
+  display:none;align-items:center;justify-content:center;padding:20px;}
+.maint-pw-box{background:var(--s1);border:1px solid var(--accent);border-radius:12px;
+  padding:24px;max-width:340px;width:100%;}
+.maint-pw-box input{width:100%;margin-top:10px;margin-bottom:12px;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="application/ld+json">
@@ -603,6 +621,18 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 </head>
 <body>
 
+<div class="maint-pw-overlay" id="maint-pw-overlay">
+  <div class="maint-pw-box">
+    <div style="font-family:var(--font-ui);font-weight:700;font-size:14px;margin-bottom:6px">🔒 Admin Access</div>
+    <div style="font-size:11px;color:var(--gray)">Masukkan password admin untuk toggle maintenance mode</div>
+    <input type="password" id="maint-pw-input" class="maint-exempt" placeholder="Password">
+    <button class="btn maint-exempt" onclick="submitMaintenancePassword()" style="width:100%">Submit</button>
+    <button class="btn maint-exempt" onclick="closeMaintPwOverlay()" style="width:100%;margin-top:8px;background:var(--gray2);color:var(--gray)">Batal</button>
+    <div id="maint-pw-error" style="font-size:10px;color:#ff5555;margin-top:8px"></div>
+  </div>
+</div>
+
+
 <div class="nudge-overlay" id="texwarn-overlay" style="display:none">
   <div class="warn-box" id="texwarn-box">
     <div class="warn-icon">⚠️</div>
@@ -688,7 +718,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <span id="oauth-username" style="font-size:10px;color:var(--accent)"></span>
     <button onclick="oauthLogout()" style="background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;border-radius:20px;cursor:pointer">Logout</button>
   </div>
-  <h1>3DRBXMT</h1>
+  <h1 id="admin-trigger-logo" onclick="handleLogoClick()" style="cursor:pointer">3DRBXMT</h1>
   <p class="sub">3D ROBLOX MODEL MOBILE TOOLS</p>
   <div style="display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
     <div class="topbar-lang-toggle">
@@ -700,6 +730,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   </div>
   <div class="scan" style="margin-top:16px"></div>
 </header>
+<div class="maint-banner">⚠ SITUS SEDANG DALAM PERBAIKAN / MAINTENANCE — MOHON TUNGGU SEBENTAR</div>
 
 <main>
   <!-- TABS -->
@@ -2676,6 +2707,67 @@ window.loadV3DTexture = function(event, slot){
   };
   img.src = url;
 };
+</script>
+
+<script>
+let logoClickCount = 0;
+let logoClickTimer = null;
+
+function handleLogoClick(){
+  logoClickCount++;
+  clearTimeout(logoClickTimer);
+  logoClickTimer = setTimeout(() => { logoClickCount = 0; }, 3000);
+
+  if(logoClickCount >= 7){
+    logoClickCount = 0;
+    document.getElementById('maint-pw-overlay').style.display = 'flex';
+    document.getElementById('maint-pw-input').value = '';
+    document.getElementById('maint-pw-error').textContent = '';
+    document.getElementById('maint-pw-input').focus();
+  }
+}
+
+function closeMaintPwOverlay(){
+  document.getElementById('maint-pw-overlay').style.display = 'none';
+}
+
+async function submitMaintenancePassword(){
+  const pw = document.getElementById('maint-pw-input').value;
+  const errEl = document.getElementById('maint-pw-error');
+  errEl.textContent = 'Memproses...';
+  try{
+    const res = await fetch(`${BASE}/api/maintenance/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = '✗ Password salah.';
+      return;
+    }
+    applyMaintenanceState(data.active);
+    closeMaintPwOverlay();
+  }catch(e){
+    errEl.textContent = '✗ Error: ' + e.message;
+  }
+}
+
+function applyMaintenanceState(active){
+  document.body.classList.toggle('maintenance-mode', active);
+}
+
+async function checkMaintenanceStatus(){
+  try{
+    const res = await fetch(`${BASE}/api/maintenance/status`);
+    const data = await res.json();
+    applyMaintenanceState(data.active);
+  }catch(e){
+    // silent fail - assume not in maintenance
+  }
+}
+
+document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
 </script>
 </body>
 </html>

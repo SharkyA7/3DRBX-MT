@@ -2214,6 +2214,34 @@ def auth_logout():
     """Clear session - token di-clear di sisi client."""
     return jsonify({"success": True, "message": "Token cleared client-side"})
 
+MAINTENANCE_STATE_FILE = "/tmp/maintenance_mode.json"
+
+def get_maintenance_state():
+    try:
+        with open(MAINTENANCE_STATE_FILE, "r") as f:
+            return json.load(f).get("active", False)
+    except:
+        return False
+
+def set_maintenance_state(active):
+    with open(MAINTENANCE_STATE_FILE, "w") as f:
+        json.dump({"active": active}, f)
+
+@app.get("/api/maintenance/status")
+def maintenance_status():
+    return jsonify({"active": get_maintenance_state()})
+
+@app.post("/api/maintenance/toggle")
+def maintenance_toggle():
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get("password", "")
+    admin_password = os.environ.get("MAINTENANCE_ADMIN_PASSWORD", "")
+    if not admin_password or password != admin_password:
+        return jsonify({"error": "Invalid password"}), 403
+    new_state = not get_maintenance_state()
+    set_maintenance_state(new_state)
+    return jsonify({"active": new_state})
+
 @app.get("/auth/status")
 def auth_status():
     """Check apakah OAuth sudah dikonfigurasi."""
