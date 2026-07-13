@@ -1014,8 +1014,11 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   <div class="panel" id="panel-viewer3d">
     <div class="card">
       <div class="label">🔮 <span data-t-id="3D MATERIAL PREVIEW" data-t-en="3D MATERIAL PREVIEW">3D MATERIAL PREVIEW</span></div>
-      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+      <p style="font-size:9px;color:var(--gray);margin-bottom:8px;line-height:1.8">
         <span data-t-id="Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D." data-t-en="Upload texture maps to preview material on a 3D object. Check the result before using it in 3D software.">Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D.</span>
+      </p>
+      <p style="font-size:8px;color:#ffaa00;margin-bottom:12px;line-height:1.7;background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);border-radius:6px;padding:8px 10px">
+        ⚠ <span data-t-id="Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material." data-t-en="Curvature is not available here since it isn't part of the standard PBR workflow &mdash; it's typically only used as helper data to generate other maps (e.g. AO or wear/edge effects), not applied directly to a material.">Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material.</span>
       </p>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
