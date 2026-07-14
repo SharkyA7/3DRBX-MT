@@ -266,9 +266,17 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   font-family:var(--font-ui);font-size:12px;padding:0;}
 
 
-body.maintenance-mode .tab,body.maintenance-mode .btn,body.maintenance-mode input,
-body.maintenance-mode select,body.maintenance-mode button:not(.maint-exempt){
+body.maintenance-mode .tab:not(.maint-exempt),
+body.maintenance-mode .btn:not(.maint-exempt),
+body.maintenance-mode input:not(.maint-exempt),
+body.maintenance-mode select:not(.maint-exempt),
+body.maintenance-mode button:not(.maint-exempt){
   pointer-events:none!important;opacity:.35!important;filter:grayscale(1);
+}
+body.maintenance-mode .maint-exempt,
+body.maintenance-mode #security-modal,
+body.maintenance-mode #security-modal *{
+  pointer-events:auto!important;opacity:1!important;filter:none!important;
 }
 body.maintenance-mode{
   --accent:#FF3355!important;--accent2:#CC1133!important;
