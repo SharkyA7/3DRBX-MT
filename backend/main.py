@@ -2214,18 +2214,43 @@ def auth_logout():
     """Clear session - token di-clear di sisi client."""
     return jsonify({"success": True, "message": "Token cleared client-side"})
 
-MAINTENANCE_STATE_FILE = "/tmp/maintenance_mode.json"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 def get_maintenance_state():
     try:
-        with open(MAINTENANCE_STATE_FILE, "r") as f:
-            return json.load(f).get("active", False)
-    except:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/app_state",
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            },
+            params={"key": "eq.maintenance_mode", "select": "value"},
+            timeout=5
+        )
+        data = r.json()
+        if data and len(data) > 0:
+            return data[0].get("value", False)
+        return False
+    except Exception as e:
+        print(f"Error getting maintenance state: {e}")
         return False
 
 def set_maintenance_state(active):
-    with open(MAINTENANCE_STATE_FILE, "w") as f:
-        json.dump({"active": active}, f)
+    try:
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/app_state",
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json"
+            },
+            params={"key": "eq.maintenance_mode"},
+            json={"value": active},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Error setting maintenance state: {e}")
 
 @app.get("/api/maintenance/status")
 def maintenance_status():
