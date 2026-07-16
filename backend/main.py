@@ -2238,17 +2238,19 @@ def get_maintenance_state():
 
 def set_maintenance_state(active):
     try:
-        requests.patch(
+        r = requests.patch(
             f"{SUPABASE_URL}/rest/v1/app_state",
             headers={
                 "apikey": SUPABASE_KEY,
                 "Authorization": f"Bearer {SUPABASE_KEY}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
             },
             params={"key": "eq.maintenance_mode"},
             json={"value": active},
             timeout=5
         )
+        print(f"Supabase PATCH status: {r.status_code}, body: {r.text}, url_used: {SUPABASE_URL[:20]}...")
     except Exception as e:
         print(f"Error setting maintenance state: {e}")
 
