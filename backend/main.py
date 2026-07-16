@@ -2228,12 +2228,13 @@ def get_maintenance_state():
             params={"key": "eq.maintenance_mode", "select": "value"},
             timeout=5
         )
+        print(f"GET status: {r.status_code}, body: {r.text}, url_prefix: {repr(SUPABASE_URL[:15])}, key_len: {len(SUPABASE_KEY) if SUPABASE_KEY else 0}")
         data = r.json()
         if data and len(data) > 0:
             return data[0].get("value", False)
         return False
     except Exception as e:
-        print(f"Error getting maintenance state: {e}")
+        print(f"Error getting maintenance state: {type(e).__name__}: {e}")
         return False
 
 def set_maintenance_state(active):
