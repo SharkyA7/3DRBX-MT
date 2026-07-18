@@ -911,6 +911,25 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
   <!-- ── 3D MODEL PANEL ── -->
   <div class="panel" id="panel-model3d">
+    <div class="card" style="border-color:var(--red);background:rgba(255,68,102,.05)">
+      <div style="text-align:center;padding:20px 10px">
+        <div style="font-size:32px;margin-bottom:12px">🚧</div>
+        <div style="font-family:var(--font-px);font-size:12px;color:var(--red);margin-bottom:14px;letter-spacing:1px">NOT AVAILABLE</div>
+        <p style="font-size:11px;color:var(--white);line-height:1.9;max-width:420px;margin:0 auto 10px">
+          <span data-t-id="Fitur 3D Model Assets Downloader sementara dinonaktifkan." data-t-en="The 3D Model Assets Downloader feature is temporarily disabled.">Fitur 3D Model Assets Downloader sementara dinonaktifkan.</span>
+        </p>
+        <p style="font-size:10px;color:var(--muted);line-height:1.8;max-width:420px;margin:0 auto">
+          <span data-t-id="Texture tidak berhasil di-download, hanya model/mesh yang berhasil. Masalah ini disebabkan cara Roblox menyimpan texture secara terpisah dari asset model, yang cukup kompleks untuk ditangani saat ini." data-t-en="Texture download is failing, only the model/mesh succeeds. This is caused by how Roblox stores textures separately from the model asset, which is complex to handle right now.">Texture tidak berhasil di-download, hanya model/mesh yang berhasil. Masalah ini disebabkan cara Roblox menyimpan texture secara terpisah dari asset model, yang cukup kompleks untuk ditangani saat ini.</span>
+        </p>
+        <p style="font-size:9px;color:var(--gray);margin-top:14px">
+          <span data-t-id="Terima kasih atas pengertiannya, happy modeling! 🎨" data-t-en="Thank you for your understanding, happy modeling! 🎨">Terima kasih atas pengertiannya, happy modeling! 🎨</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3D MODEL PANEL (DISABLED, KEPT FOR REFERENCE) ── -->
+  <div class="panel" id="panel-model3d-disabled" style="display:none">
     <div class="card">
       <div class="label"><span data-t-id="CARI 3D MODEL (create.roblox.com)" data-t-en="SEARCH 3D MODEL (create.roblox.com)">CARI 3D MODEL (create.roblox.com)</span></div>
       <input class="inp" id="model-input" type="text" data-t-ph-id="Asset ID atau URL create.roblox.com" data-t-ph-en="Asset ID or create.roblox.com URL" placeholder="Asset ID atau URL create.roblox.com">
