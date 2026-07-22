@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="nNew Project 14 [CE0815E].gif" alt="Banner GIF" width="300" height="200">
+  <img src="New Banner.gif" alt="Banner GIF" width="300" height="200">
 </div>
 
 ---
