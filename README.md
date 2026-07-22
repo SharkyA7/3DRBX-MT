@@ -6,7 +6,7 @@
 
 # IMPORTANT ANNOUNCEMENT
 BETA IS CLOSED | READY TO USE
-# Roblox 3D Downloader
+# 3DRBXMT DOWNLOADER
 
 FastAPI Backend + HTML Frontend to download Roblox avatar characters and catalog items in OBJ/GLTF format.
 
@@ -87,11 +87,11 @@ Open browser: http://localhost:8000
 
 | Version | Format | Status |
 |---------|--------|--------|
-| v1.00 | ASCII | ✅ support|
-| v2.00 | Binary | ✅ support|
-| v3.00 | Binary + LOD | ✅ support|
-| v4.00 | Binary + Skinning | ✅ (geometry only) |
-| v5.00 | Binary + CSG/UNION| ✅ support |
+| v1.00 | ASCII | support|
+| v2.00 | Binary | support|
+| v3.00 | Binary + LOD | support|
+| v4.00 | Binary + Skinning | (geometry only) |
+| v5.00 | Binary + CSG/UNION| support |
 | v6.00 | Coming soon | Unavailable |
 | v7.00 | Coming soon | Unavailable |
 | v8.00 | Coming soon | Unavailable |
@@ -99,15 +99,15 @@ Open browser: http://localhost:8000
 
 ## Important: API Key Security
 
-- ❌ **DO NOT** put API keys / cookies in frontend/JavaScript
-- ❌ **DO NOT** commit `.env` file to Git
-- ✅ API keys only on server (.env file)
-- ✅ For production: use hosting environment variables (Railway, Render, etc.)
-- ✅ Add rate limiting to prevent abuse
+- **DO NOT** put API keys / cookies in frontend/JavaScript
+- **DO NOT** commit `.env` file to Git
+- API keys only on server (.env file)
+- For production: use hosting environment variables (Railway, Render, etc.)
+- Add rate limiting to prevent abuse
 
 ---
 
-## ⚠️IMPORTANT TO READ⚠️
+## IMPORTANT TO READ!!!
 - **DO NOT** misused my repo for stealing people **ROBLOX ACCOUNT!**
 - **DO NOT** chnage the python file, if you know what your doing with it
 - **I AM NOT RESPONSIBLE** for those who download explicit characters, use them at your own risk.
