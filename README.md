@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="favicon.png" width="300">
-  <img src="3DRBXMT BANNER.png" width="500">
+  <img src="New Project 14 [CE0815E].gif" width="300">
 </div>
 
 ---
