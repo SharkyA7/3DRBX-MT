@@ -2267,6 +2267,221 @@ def maintenance_toggle():
     set_maintenance_state(new_state)
     return jsonify({"active": new_state})
 
+@app.post("/api/prisma/parse")
+def prisma_parse():
+    import msgpack, zipfile as zf_module, io, base64
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    upload = request.files['file']
+    if not upload.filename.endswith('.prisma'):
+        return jsonify({"error": "File must have .prisma extension"}), 400
+
+    try:
+        prisma_bytes = upload.read()
+        prisma_buffer = io.BytesIO(prisma_bytes)
+
+        meshes = []
+        textures = {}
+
+        with zf_module.ZipFile(prisma_buffer, 'r') as z:
+            pobject_files = [n for n in z.namelist() if n.endswith('.pobject')]
+            png_files = [n for n in z.namelist() if n.endswith('.png')]
+
+            if not pobject_files:
+                return jsonify({"error": "No mesh data (.pobject) found in .prisma file"}), 400
+
+            for png_name in png_files:
+                fname = os.path.basename(png_name)
+                png_bytes = z.read(png_name)
+                textures[fname] = base64.b64encode(png_bytes).decode('utf-8')
+
+            for pobj_name in pobject_files:
+                data = z.read(pobj_name)
+                unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+                unpacker.feed(data)
+                objs = []
+                try:
+                    while True:
+                        objs.append(unpacker.unpack())
+                except msgpack.OutOfData:
+                    pass
+
+                geo_container = None
+                for o in objs:
+                    if isinstance(o, list) and len(o) == 1 and isinstance(o[0], list) and len(o[0]) == 11:
+                        geo_container = o[0]
+                        break
+                if geo_container is None:
+                    continue
+
+                mesh_id = geo_container[0]
+                positions = geo_container[8]
+                normals = geo_container[3]
+                uvs = geo_container[5]
+                indices = geo_container[4]
+
+                meshes.append({
+                    "id": mesh_id,
+                    "positions": positions,
+                    "normals": normals,
+                    "uvs": uvs,
+                    "indices": indices
+                })
+
+        if not meshes:
+            return jsonify({"error": "Could not extract any valid mesh geometry from this .prisma file"}), 400
+
+        albedo_candidates = [f for f in textures if 'BaseColor' in f and 'baked' not in f and 'packed' not in f]
+        albedo_tex = albedo_candidates[0] if albedo_candidates else (list(textures.keys())[0] if textures else None)
+        normal_candidates = [f for f in textures if 'normal' in f.lower()]
+        normal_tex = normal_candidates[0] if normal_candidates else None
+
+        return jsonify({
+            "meshes": meshes,
+            "textures": textures,
+            "albedoTexture": albedo_tex,
+            "normalTexture": normal_tex
+        })
+
+    except zf_module.BadZipFile:
+        return jsonify({"error": "Invalid .prisma file (not a valid archive)"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Parsing failed: {str(e)}"}), 500
+
+
+@app.post("/api/prisma/convert")
+def prisma_convert():
+    import msgpack, zipfile as zf_module, io
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    upload = request.files['file']
+    if not upload.filename.endswith('.prisma'):
+        return jsonify({"error": "File must have .prisma extension"}), 400
+
+    try:
+        prisma_bytes = upload.read()
+        prisma_buffer = io.BytesIO(prisma_bytes)
+
+        obj_lines = ["# Converted from .prisma by 3DRBXMT"]
+        mtl_lines = []
+        vertex_offset = 0
+        uv_offset = 0
+        normal_offset = 0
+        material_names = set()
+        texture_data = {}
+
+        base_name = upload.filename.rsplit('.', 1)[0]
+        base_name = safe_filename(base_name)
+        obj_lines.insert(1, f"mtllib {base_name}.mtl")
+        obj_lines.append("")
+
+        with zf_module.ZipFile(prisma_buffer, 'r') as z:
+            pobject_files = [n for n in z.namelist() if n.endswith('.pobject')]
+            png_files = [n for n in z.namelist() if n.endswith('.png')]
+
+            if not pobject_files:
+                return jsonify({"error": "No mesh data (.pobject) found in .prisma file"}), 400
+
+            for png_name in png_files:
+                fname = os.path.basename(png_name)
+                texture_data[fname] = z.read(png_name)
+
+            albedo_candidates = [f for f in texture_data if 'BaseColor' in f and 'baked' not in f and 'packed' not in f]
+            albedo_tex = albedo_candidates[0] if albedo_candidates else (list(texture_data.keys())[0] if texture_data else None)
+            normal_candidates = [f for f in texture_data if 'normal' in f.lower()]
+            normal_tex = normal_candidates[0] if normal_candidates else None
+
+            for pobj_name in pobject_files:
+                data = z.read(pobj_name)
+                unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+                unpacker.feed(data)
+                objs = []
+                try:
+                    while True:
+                        objs.append(unpacker.unpack())
+                except msgpack.OutOfData:
+                    pass
+
+                geo_container = None
+                for o in objs:
+                    if isinstance(o, list) and len(o) == 1 and isinstance(o[0], list) and len(o[0]) == 11:
+                        geo_container = o[0]
+                        break
+                if geo_container is None:
+                    continue
+
+                mesh_id = geo_container[0]
+                positions = geo_container[8]
+                normals = geo_container[3]
+                uvs = geo_container[5]
+                indices = geo_container[4]
+
+                mat_name = f"mat_{mesh_id[:8]}"
+                material_names.add(mat_name)
+
+                obj_lines.append(f"g mesh_{mesh_id[:8]}")
+                obj_lines.append(f"o {mesh_id[:8]}")
+                obj_lines.append(f"usemtl {mat_name}")
+
+                for p in positions:
+                    obj_lines.append(f"v {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}")
+                for uv in uvs:
+                    obj_lines.append(f"vt {uv[0]:.6f} {uv[1]:.6f}")
+                for n in normals:
+                    obj_lines.append(f"vn {n[0]:.6f} {n[1]:.6f} {n[2]:.6f}")
+
+                num_tris = len(indices) // 3
+                for t in range(num_tris):
+                    i0, i1, i2 = indices[t*3], indices[t*3+1], indices[t*3+2]
+                    v0, v1, v2 = i0 + 1 + vertex_offset, i1 + 1 + vertex_offset, i2 + 1 + vertex_offset
+                    vt0, vt1, vt2 = t*3 + 1 + uv_offset, t*3 + 2 + uv_offset, t*3 + 3 + uv_offset
+                    vn0, vn1, vn2 = t*3 + 1 + normal_offset, t*3 + 2 + normal_offset, t*3 + 3 + normal_offset
+                    obj_lines.append(f"f {v0}/{vt0}/{vn0} {v1}/{vt1}/{vn1} {v2}/{vt2}/{vn2}")
+
+                vertex_offset += len(positions)
+                uv_offset += len(uvs)
+                normal_offset += len(normals)
+
+            for mat_name in material_names:
+                mtl_lines.append(f"newmtl {mat_name}")
+                mtl_lines.append("Ka 1.000000 1.000000 1.000000")
+                mtl_lines.append("Kd 1.000000 1.000000 1.000000")
+                mtl_lines.append("Ks 0.000000 0.000000 0.000000")
+                mtl_lines.append("d 1.0")
+                mtl_lines.append("illum 2")
+                if albedo_tex:
+                    mtl_lines.append(f"map_Kd {albedo_tex}")
+                if normal_tex:
+                    mtl_lines.append(f"map_Bump {normal_tex}")
+                mtl_lines.append("")
+
+        if vertex_offset == 0:
+            return jsonify({"error": "Could not extract any valid mesh geometry from this .prisma file"}), 400
+
+        out_buffer = io.BytesIO()
+        with zf_module.ZipFile(out_buffer, 'w', zf_module.ZIP_DEFLATED) as out_zip:
+            out_zip.writestr(f"{base_name}.obj", '\n'.join(obj_lines))
+            out_zip.writestr(f"{base_name}.mtl", '\n'.join(mtl_lines))
+            for fname, fdata in texture_data.items():
+                out_zip.writestr(fname, fdata)
+
+        out_buffer.seek(0)
+        return Response(
+            out_buffer.read(),
+            mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{base_name}_converted.zip"'}
+        )
+
+    except zf_module.BadZipFile:
+        return jsonify({"error": "Invalid .prisma file (not a valid archive)"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Conversion failed: {str(e)}"}), 500
+
+
 @app.get("/auth/status")
 def auth_status():
     """Check apakah OAuth sudah dikonfigurasi."""

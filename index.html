@@ -343,6 +343,7 @@ body.maintenance-mode .maint-banner{display:block;}
 </script>
 <script type="module">
 import * as THREE from 'three';
+window.__PRISMA_THREE__ = THREE;
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -752,6 +753,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
         <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
         <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'">🔮 <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
+        <div class="dropdown-item" onclick="switchTab('prisma');document.getElementById('dropdown-menu').style.display='none'">🔷 <span data-t-id="CONVERT PRISMA" data-t-en="CONVERT PRISMA">CONVERT PRISMA</span></div>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
@@ -1171,6 +1173,22 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <strong>3D Viewer</strong>
         <span data-t-id="untuk preview langsung." data-t-en="tab for instant preview.">untuk preview langsung.</span>
       </p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-prisma">
+    <div class="card">
+      <div class="label">🔷 <span data-t-id="CONVERT PRISMA → OBJ" data-t-en="CONVERT PRISMA → OBJ">CONVERT PRISMA → OBJ</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <span data-t-id="Upload file .prisma dari Prisma 3D untuk dikonversi ke OBJ + MTL + texture. Kompatibel dengan Blender, Nomad Sculpt, dan software 3D lainnya." data-t-en="Upload a .prisma file from Prisma 3D to convert to OBJ + MTL + textures. Compatible with Blender, Nomad Sculpt, and other 3D software.">Upload file .prisma dari Prisma 3D untuk dikonversi ke OBJ + MTL + texture. Kompatibel dengan Blender, Nomad Sculpt, dan software 3D lainnya.</span>
+      </p>
+      <input type="file" id="prisma-file-input" accept=".prisma" style="display:none" onchange="handlePrismaUpload(event)">
+      <button class="btn" onclick="document.getElementById('prisma-file-input').click()" style="width:100%">📁 <span data-t-id="PILIH FILE .PRISMA" data-t-en="CHOOSE .PRISMA FILE">PILIH FILE .PRISMA</span></button>
+      <div id="prisma-download-options" style="display:none;margin-top:8px">
+        <button class="btn" id="prisma-obj-btn" onclick="downloadPrismaOBJ()" style="width:100%">⬇ <span data-t-id="DOWNLOAD SEBAGAI OBJ" data-t-en="DOWNLOAD AS OBJ">DOWNLOAD SEBAGAI OBJ</span></button>
+        <button class="btn btn-green" id="prisma-glb-btn" onclick="buildPrismaGLB()" style="width:100%;margin-top:8px">⬇ <span data-t-id="DOWNLOAD SEBAGAI GLB" data-t-en="DOWNLOAD AS GLB">DOWNLOAD SEBAGAI GLB</span></button>
+      </div>
+      <div id="prisma-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
 
@@ -2807,6 +2825,213 @@ async function checkMaintenanceStatus(){
 }
 
 document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
+</script>
+<script>
+let prismaParsedData = null;
+let prismaFileName = "model";
+
+async function handlePrismaUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  prismaFileName = file.name.replace(".prisma", "");
+  const st = document.getElementById("prisma-status");
+  document.getElementById("prisma-download-options").style.display = "none";
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file... Mohon tunggu.</div></div>';
+
+  try{
+    const parseFormData = new FormData();
+    parseFormData.append("file", file);
+    const parseRes = await fetch(`${BASE}/api/prisma/parse`, {
+      method: "POST",
+      body: parseFormData
+    });
+
+    if(!parseRes.ok){
+      const errData = await parseRes.json();
+      st.textContent = "✗ " + (errData.error || "Processing failed");
+      return;
+    }
+
+    prismaParsedData = await parseRes.json();
+    document.getElementById("prisma-download-options").style.display = "block";
+    st.textContent = "✓ File berhasil diproses! Pilih format download di bawah.";
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
+
+  document.getElementById("prisma-file-input").value = "";
+}
+
+async function downloadPrismaOBJ(){
+  if(!prismaParsedData){
+    alert("Upload file .prisma terlebih dahulu.");
+    return;
+  }
+
+  const st = document.getElementById("prisma-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating OBJ + textures ZIP...</div></div>';
+
+  try{
+    const fileInput = document.getElementById("prisma-file-input");
+    // Re-fetch the original file isn't possible after input reset, so we regenerate from cached parsed data instead
+    const obj_lines = ["# Converted from .prisma by 3DRBXMT", `mtllib ${prismaFileName}.mtl`, ""];
+    const mtl_lines = [];
+    let vertexOffset = 0;
+
+    const albedoTex = prismaParsedData.albedoTexture;
+    const normalTex = prismaParsedData.normalTexture;
+
+    prismaParsedData.meshes.forEach((mesh, idx) => {
+      const matName = `mat_${idx}`;
+      obj_lines.push(`g mesh_${idx}`);
+      obj_lines.push(`o ${mesh.id.substring(0,8)}`);
+      obj_lines.push(`usemtl ${matName}`);
+
+      mesh.positions.forEach(p => obj_lines.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`));
+      mesh.uvs.forEach(uv => obj_lines.push(`vt ${uv[0].toFixed(6)} ${uv[1].toFixed(6)}`));
+
+      const numTriangles = Math.floor(mesh.indices.length / 3);
+      for(let t = 0; t < numTriangles; t++){
+        const norm = mesh.normals[t];
+        obj_lines.push(`vn ${norm[0].toFixed(6)} ${norm[1].toFixed(6)} ${norm[2].toFixed(6)}`);
+      }
+
+      for(let t = 0; t < numTriangles; t++){
+        const i0 = mesh.indices[t*3], i1 = mesh.indices[t*3+1], i2 = mesh.indices[t*3+2];
+        const v0 = i0+1+vertexOffset, v1 = i1+1+vertexOffset, v2 = i2+1+vertexOffset;
+        const vtBase = t*3;
+        const vnIdx = t+1;
+        obj_lines.push(`f ${v0}/${vtBase+1+vertexOffset}/${vnIdx} ${v1}/${vtBase+2+vertexOffset}/${vnIdx} ${v2}/${vtBase+3+vertexOffset}/${vnIdx}`);
+      }
+
+      mtl_lines.push(`newmtl ${matName}`);
+      mtl_lines.push("Ka 1.000000 1.000000 1.000000");
+      mtl_lines.push("Kd 1.000000 1.000000 1.000000");
+      mtl_lines.push("Ks 0.000000 0.000000 0.000000");
+      mtl_lines.push("d 1.0");
+      mtl_lines.push("illum 2");
+      if(albedoTex) mtl_lines.push(`map_Kd ${albedoTex}`);
+      if(normalTex) mtl_lines.push(`map_Bump ${normalTex}`);
+      mtl_lines.push("");
+
+      vertexOffset += mesh.positions.length;
+    });
+
+    // Build zip using JSZip (already loaded elsewhere in the app)
+    const zip = new JSZip();
+    zip.file(`${prismaFileName}.obj`, obj_lines.join("\n"));
+    zip.file(`${prismaFileName}.mtl`, mtl_lines.join("\n"));
+
+    for(const [fname, base64] of Object.entries(prismaParsedData.textures)){
+      zip.file(fname, base64, { base64: true });
+    }
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(content),
+      download: `${prismaFileName}_converted.zip`
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    st.textContent = "✓ ZIP (OBJ+MTL+texture) berhasil didownload!";
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
+}
+
+async function buildPrismaGLB(){
+  if(!prismaParsedData){
+    alert("Upload file .prisma terlebih dahulu.");
+    return;
+  }
+
+  const st = document.getElementById("prisma-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Building GLB...</div></div>';
+
+  try{
+    const THREE = window.__PRISMA_THREE__;
+    const GLTFExporter = window.__GLTFExporter;
+
+    if(!THREE || !GLTFExporter){
+      st.textContent = "✗ Three.js belum siap, coba reload halaman.";
+      return;
+    }
+
+    const root = new THREE.Group();
+
+    // Load albedo texture if available
+    let albedoTexture = null;
+    if(prismaParsedData.albedoTexture && prismaParsedData.textures[prismaParsedData.albedoTexture]){
+      const base64 = prismaParsedData.textures[prismaParsedData.albedoTexture];
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for(let i = 0; i < binaryStr.length; i++){
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "image/png" });
+      const bitmap = await createImageBitmap(blob);
+      albedoTexture = new THREE.Texture(bitmap);
+      albedoTexture.needsUpdate = true;
+      if(THREE.SRGBColorSpace) albedoTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+
+    for(const mesh of prismaParsedData.meshes){
+      const geometry = new THREE.BufferGeometry();
+
+      const indices = mesh.indices;
+      const numTriangles = Math.floor(indices.length / 3);
+
+      const expandedPositions = [];
+      const expandedNormals = [];
+      const expandedUVs = [];
+
+      for(let t = 0; t < numTriangles; t++){
+        const norm = mesh.normals[t];
+
+        for(let corner = 0; corner < 3; corner++){
+          const i = t * 3 + corner;
+          const vIdx = indices[i];
+          const pos = mesh.positions[vIdx];
+          expandedPositions.push(pos[0], pos[1], pos[2]);
+          expandedNormals.push(norm[0], norm[1], norm[2]);
+          const uv = mesh.uvs[i];
+          expandedUVs.push(uv[0], uv[1]);
+        }
+      }
+
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(expandedPositions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(expandedNormals, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(expandedUVs, 2));
+
+      const matOpts = { color: 0xffffff };
+      if(albedoTexture) matOpts.map = albedoTexture;
+
+      const material = new THREE.MeshStandardMaterial(matOpts);
+      const threeMesh = new THREE.Mesh(geometry, material);
+      threeMesh.name = mesh.id.substring(0, 8);
+      root.add(threeMesh);
+    }
+
+    const exporter = new GLTFExporter();
+    exporter.parse(root, (result) => {
+      const blob = new Blob([result], { type: "application/octet-stream" });
+      const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(blob),
+        download: "prisma_model.glb"
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+      st.textContent = "✓ GLB berhasil didownload!";
+    }, (error) => {
+      st.textContent = "✗ Gagal export GLB: " + error.message;
+    }, { binary: true });
+
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
+}
 </script>
 </body>
 </html>

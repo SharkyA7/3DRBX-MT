@@ -3,126 +3,173 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roblox 3D Downloader — Export Avatar OBJ & GLTF for Nomad Sculpt & Prisma 3D</title>
-<link rel="icon" type="image/png" href="/favicon.png">
+<title>3DRBXMT — 3D Roblox Model Mobile Tools</title>
 <meta name="description" content="Open-source developer tool for 3D creators. Download Roblox avatar models and catalog items as OBJ or GLTF with UV textures. Compatible with Nomad Sculpt, Prisma 3D, and Blender.">
 <meta name="keywords" content="Roblox 3D model, avatar OBJ download, GLTF export, Nomad Sculpt, Prisma 3D, 3D creators, Roblox mesh, open source">
 <meta property="og:title" content="Roblox 3D Downloader — For 3D Creators">
 <meta property="og:description" content="Export Roblox avatars and catalog items as OBJ/GLTF. Open-source. Verified safe. Used by 3D artists on Nomad Sculpt and Prisma 3D.">
 <meta property="og:url" content="https://getrbx3d.qzz.io">
 <meta property="og:type" content="website">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#05050d;--s1:#0c0c1a;--s2:#12122a;--s3:#1a1a36;--red:#e8000b;--rb:#ff1a24;--rg:rgba(232,0,11,.18);--rd:rgba(232,0,11,.08);--green:#00ff99;--amber:#ffaa00;--white:#eeeef8;--gray:#5a5a7a;--gray2:#3a3a5a}
+:root{
+  --bg:#03030A;--s1:#07071A;--s2:#0B0B20;--s3:#101028;--s4:#181838;--s5:#202048;
+  --accent:#00D4FF;--accent2:#0EA5E9;--accent3:#38BDF8;
+  --ag:rgba(0,212,255,.1);--ab:rgba(0,212,255,.06);
+  --green:#00FFB3;--green-g:rgba(0,255,179,.1);
+  --amber:#FFD166;--red:#FF4466;--white:#F4F4FF;--muted:#8888AA;
+  --border:#1A1A3A;--border2:#242448;
+  --font-px:'Press Start 2P',monospace;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-ui:'Space Grotesk',sans-serif;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--white);font-family:'Share Tech Mono',monospace;min-height:100vh;
-  background-image:linear-gradient(rgba(232,0,11,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(232,0,11,.04) 1px,transparent 1px);
-  background-size:40px 40px}
-header{text-align:center;padding:40px 20px 24px}
-h1{font-family:'Press Start 2P',monospace;font-size:clamp(12px,2.5vw,20px);color:var(--rb);
-   text-shadow:0 0 20px rgba(232,0,11,.6);letter-spacing:2px;line-height:1.5}
-.sub{font-size:10px;color:var(--gray);letter-spacing:3px;text-transform:uppercase;margin-top:8px}
-.scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--red),transparent);margin-top:20px;opacity:.5}
-main{max-width:860px;margin:0 auto;padding:24px 16px 80px}
-.tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--gray2)}
-.tab{flex:1;text-align:center;padding:12px;font-family:'Press Start 2P',monospace;font-size:9px;
-.tab-dropdown{position:relative;flex:1}.dropdown-menu{position:absolute;top:100%;right:0;background:var(--s1);border:1px solid var(--gray2);border-radius:4px;z-index:9999;min-width:140px}.dropdown-item{padding:10px 14px;font-family:"Press Start 2P",monospace;font-size:8px;color:var(--gray);cursor:pointer;white-space:nowrap}.dropdown-item:hover{background:var(--s2);color:var(--red)}
-     color:var(--gray);cursor:pointer;transition:all .2s;letter-spacing:1px;border-bottom:2px solid transparent;margin-bottom:-2px}
+body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-height:100vh;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:56px 56px;}
+.topbar{position:sticky;top:0;z-index:500;display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;background:rgba(3,3,10,.9);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);}
+.topbar-brand{display:flex;align-items:center;gap:10px;font-family:var(--font-px);font-size:9px;color:var(--accent);text-shadow:0 0 16px rgba(0,212,255,.5);letter-spacing:2px;}
+.topbar-brand .brand-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulsedot 2s infinite;}
+@keyframes pulsedot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.topbar-links{display:flex;align-items:center;gap:4px;}
+.topbar-link{padding:6px 12px;font-family:var(--font-ui);font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;border:1px solid transparent;border-radius:6px;transition:all .15s;cursor:pointer;background:transparent;}
+.topbar-link:hover{color:var(--white);border-color:var(--border2);}
+.topbar-link.primary{background:var(--accent);color:#000;font-weight:700;border-color:var(--accent);}
+.topbar-link.primary:hover{background:#00EEFF;box-shadow:0 0 16px rgba(0,212,255,.4);}
+header{text-align:center;padding:56px 20px 40px;position:relative;}
+header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:500px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-ui);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(0,212,255,.25);padding:4px 12px;border-radius:20px;background:rgba(0,212,255,.06);margin-bottom:20px;}
+.hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulsedot 2s infinite;}
+h1{font-family:var(--font-px);font-size:clamp(14px,3vw,24px);color:var(--white);letter-spacing:4px;line-height:1.5;margin-bottom:10px;}
+h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(0,212,255,.6);}
+.sub{font-family:var(--font-ui);font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;}
+.scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);margin-top:32px;opacity:.2;}
+main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
+.tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border);overflow-x:auto;overflow-y:visible;scrollbar-width:none;}
+@media (min-width:768px){
+  .tabs{justify-content:center;}
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;gap:6px;padding:12px 16px;font-family:var(--font-ui);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:color .2s;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;background:transparent;border-top:none;border-left:none;border-right:none;letter-spacing:.04em;}
 .tab:hover{color:var(--white)}
-.tab.active{color:var(--red);border-bottom-color:var(--red)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-dropdown{position:relative;flex-shrink:0}
+.dropdown-menu{position:fixed;top:auto;right:16px;background:var(--s2);border:1px solid var(--border2);box-shadow:0 16px 48px rgba(0,0,0,.7),0 0 0 1px rgba(0,212,255,.06);z-index:99999;min-width:160px;border-radius:8px;overflow:hidden;}
+.dropdown-item{display:flex;align-items:center;gap:8px;padding:11px 16px;font-family:var(--font-ui);font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;}
+.dropdown-item:hover{background:var(--ab);color:var(--accent);}
 .panel{display:none}.panel.active{display:block}
-.card{background:var(--s1);border:1px solid var(--red);
-  box-shadow:0 0 0 1px var(--rd),0 0 24px var(--rg);border-radius:4px;padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
-.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--rb),transparent)}
-.label{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--red);letter-spacing:2px;margin-bottom:14px;display:flex;align-items:center;gap:6px}
-.label::before{content:'▶';font-size:7px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:16px;position:relative;overflow:hidden;transition:border-color .25s,box-shadow .25s;}
+.card:hover{border-color:rgba(0,212,255,.2);box-shadow:0 0 32px rgba(0,0,0,.4),0 0 0 1px rgba(0,212,255,.06);}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.3),transparent);}
+.label{display:flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px;}
+.label::before{content:'▶';font-size:8px;opacity:.6;}
 .row{display:flex;gap:10px;flex-wrap:wrap}
-input[type=text],input[type=number],select{
-  flex:1;min-width:180px;background:var(--s2);border:1px solid var(--gray2);border-radius:3px;
-  color:var(--white);font-family:'Share Tech Mono',monospace;font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s}
-input:focus,select:focus{border-color:var(--red);box-shadow:0 0 0 2px var(--rd)}
+input[type=text],input[type=number],select{flex:1;min-width:180px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-family:var(--font-ui);font-size:13px;padding:11px 14px;outline:none;transition:border-color .2s,box-shadow .2s;}
+input[type=text]::placeholder{color:var(--muted)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1);}
 select option{background:var(--s2)}
-.hint{font-size:9px;color:var(--gray);margin-top:4px;letter-spacing:.5px}
-.btn{background:var(--red);color:#fff;border:none;border-radius:3px;font-family:'Press Start 2P',monospace;
-  font-size:9px;padding:12px 20px;cursor:pointer;letter-spacing:1px;transition:background .15s,box-shadow .15s;white-space:nowrap}
-.btn:hover{background:var(--rb);box-shadow:0 0 14px rgba(232,0,11,.5)}
+.hint{font-family:var(--font-ui);font-size:11px;color:var(--muted);margin-top:6px;}
+.btn{background:var(--accent);color:#000;border:none;border-radius:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;padding:11px 20px;cursor:pointer;letter-spacing:.04em;transition:background .15s,box-shadow .15s,transform .1s;white-space:nowrap;}
+.btn:hover{background:#00EEFF;box-shadow:0 0 20px rgba(0,212,255,.4);}
 .btn:active{transform:scale(.97)}
-.btn:disabled{background:var(--gray2);cursor:not-allowed;box-shadow:none}
-.btn-green{background:#009955}.btn-green:hover{background:#00bb66;box-shadow:0 0 14px rgba(0,255,153,.3)}
-.btn-amber{background:#b07800}.btn-amber:hover{background:#cc8c00}
-.status-box{min-height:20px;display:flex;align-items:flex-start;gap:8px;font-size:11px;margin-top:12px}
-.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px}
-.idle{color:var(--gray)}.idle .dot{background:var(--gray)}
-.loading{color:var(--amber)}.loading .dot{background:var(--amber);animation:blink .7s infinite}
-.ok{color:var(--green)}.ok .dot{background:var(--green)}
-.err{color:#ff7777}.err .dot{background:var(--red)}
+.btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;box-shadow:none;}
+.btn-green{background:var(--green);color:#000;}
+.btn-green:hover{background:#00FFD0;box-shadow:0 0 20px rgba(0,255,179,.4);}
+.btn-amber{background:var(--amber);color:#000;}
+.btn-amber:hover{background:#FFE08A;box-shadow:0 0 16px rgba(255,209,102,.35);}
+.status-box{min-height:20px;display:flex;align-items:flex-start;gap:8px;font-family:var(--font-ui);font-size:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.idle{color:var(--muted)}.idle .dot{background:var(--muted)}
+.loading{color:var(--amber)}.loading .dot{background:var(--amber);animation:blink .7s infinite;box-shadow:0 0 8px var(--amber)}
+.ok{color:var(--green)}.ok .dot{background:var(--green);box-shadow:0 0 8px var(--green)}
+.err{color:var(--red)}.err .dot{background:var(--red);box-shadow:0 0 8px var(--red)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.prog{height:3px;background:var(--s2);border-radius:2px;overflow:hidden;margin-top:10px}
-.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--rb));width:0%;transition:width .4s}
-.result-grid{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start}
+.prog{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:10px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));width:0%;transition:width .4s}
+.result-grid{display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:start}
 @media(max-width:540px){.result-grid{grid-template-columns:1fr}}
-.av-img{background:var(--s2);border:1px solid var(--gray2);border-radius:4px;aspect-ratio:1;
-  display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
+.av-img{background:var(--s2);border:1px solid var(--border2);border-radius:8px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
 .av-img img{width:100%;height:100%;object-fit:cover}
-.info-list{display:flex;flex-direction:column;gap:9px}
-.irow{display:flex;flex-direction:column;gap:2px}
-.ikey{font-size:8px;color:var(--gray);letter-spacing:2px;text-transform:uppercase}
-.ival{font-size:13px}.ival.big{font-family:'Press Start 2P',monospace;font-size:11px;color:var(--rb)}
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
-.chip{background:var(--s3);border:1px solid var(--gray2);border-radius:3px;padding:3px 8px;font-size:9px;color:var(--gray)}
+.info-list{display:flex;flex-direction:column;gap:10px}
+.irow{display:flex;flex-direction:column;gap:3px}
+.ikey{font-family:var(--font-ui);font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+.ival{font-family:var(--font-ui);font-size:13px}
+.ival.big{font-family:var(--font-px);font-size:10px;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{background:var(--s3);border:1px solid var(--border2);border-radius:6px;padding:3px 10px;font-family:var(--font-ui);font-size:11px;color:var(--muted)}
 .dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 @media(max-width:460px){.dl-grid{grid-template-columns:1fr}}
-.dl-card{background:var(--s2);border:1px solid var(--gray2);border-radius:4px;padding:14px;transition:border-color .2s}
-.dl-card.ready{border-color:var(--green);box-shadow:0 0 10px rgba(0,255,153,.1)}
-.dl-title{font-family:'Press Start 2P',monospace;font-size:10px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
-.dl-desc{font-size:9px;color:var(--gray);line-height:1.6;margin-bottom:10px}
-.badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:8px;letter-spacing:1px}
-.b-ok{background:rgba(0,255,153,.12);color:var(--green);border:1px solid rgba(0,255,153,.3)}
-.b-w{background:rgba(255,170,0,.1);color:var(--amber);border:1px solid rgba(255,170,0,.3)}
-.b-na{background:rgba(90,90,122,.2);color:var(--gray);border:1px solid var(--gray2)}
-.api-note{background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);border-radius:4px;
-  padding:12px 14px;font-size:10px;color:#ccaa55;line-height:1.8;margin-top:14px}
+.dl-card{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;transition:border-color .2s}
+.dl-card.ready{border-color:var(--accent);box-shadow:0 0 16px rgba(0,212,255,.1)}
+.dl-title{font-family:var(--font-ui);font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.dl-desc{font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
+.b-ok{background:rgba(0,255,179,.1);color:var(--green);border:1px solid rgba(0,255,179,.25)}
+.b-w{background:rgba(255,209,102,.1);color:var(--amber);border:1px solid rgba(255,209,102,.25)}
+.b-na{background:rgba(136,136,170,.1);color:var(--muted);border:1px solid var(--border)}
+.api-note{background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.15);border-radius:8px;padding:14px;font-family:var(--font-ui);font-size:12px;color:#BBA055;line-height:1.8;margin-top:14px}
 .api-note strong{color:var(--amber)}
-code{background:var(--s2);border:1px solid var(--gray2);border-radius:3px;padding:2px 6px;font-size:10px;color:var(--green)}
-footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top:1px solid var(--s2);letter-spacing:1px}
-
-
+code{background:var(--s3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-family:var(--font-mono);font-size:11px;color:var(--green)}
+.patch-section{max-width:880px;margin:0 auto;padding:0 16px 60px}
+.patch-header{font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:2px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
+.patch-header::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--accent),transparent)}
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:linear-gradient(180deg,var(--accent),rgba(0,212,255,.1))}
+.tl-item{position:relative;margin-bottom:28px}
+.tl-dot{position:absolute;left:-28px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--accent);background:var(--bg)}
+.tl-item.latest .tl-dot{background:var(--accent);box-shadow:0 0 10px rgba(0,212,255,.6)}
+.tl-version{font-family:var(--font-px);font-size:9px;color:var(--white);margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tl-badge-new{background:var(--accent);color:#000;font-size:7px;padding:2px 7px;border-radius:4px;font-weight:700}
+.tl-date{font-family:var(--font-ui);font-size:11px;color:var(--muted);letter-spacing:.06em}
+.tl-card{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:8px}
+.tl-item.latest .tl-card{border-color:rgba(0,212,255,.2)}
+.tl-changes{list-style:none;padding:0;margin:0}
+.tl-changes li{font-family:var(--font-ui);font-size:12px;color:#9999BB;line-height:1.8;padding-left:16px;position:relative}
+.tl-changes li::before{content:'→';position:absolute;left:0;color:var(--accent);font-size:11px}
+.tl-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:4px;margin-right:4px;vertical-align:middle;font-weight:600}
+.tag-new{background:rgba(255,68,102,.12);color:#FF7799;border:1px solid rgba(255,68,102,.25)}
+.tag-fix{background:rgba(14,165,233,.12);color:#38BDF8;border:1px solid rgba(14,165,233,.25)}
+.tag-feat{background:rgba(0,255,179,.1);color:var(--green);border:1px solid rgba(0,255,179,.2)}
+footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;color:var(--muted);border-top:1px solid var(--border);background:var(--s1);letter-spacing:.08em;}
 @keyframes scan{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
 .lang-flag{font-size:14px}
 
-
 /* ── REDESIGNED SECURITY POPUP ─────────────────────────── */
-.modal-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.92);backdrop-filter:blur(8px)}
-.modal-box{background:#05050d;border:1px solid #00ffcc;border-radius:6px;max-width:440px;width:100%;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(0,255,204,.2)}
-.modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ffcc,#e8000b,#00ffcc,transparent)}
-.modal-header{padding:16px 16px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.modal-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px)}
+.modal-box{background:rgba(13,13,26,.97);border:1px solid rgba(0,212,255,.2);border-radius:16px;max-width:460px;width:100%;position:relative;overflow:hidden;box-shadow:0 0 60px rgba(0,212,255,.1),0 24px 48px rgba(0,0,0,.6)}
+.modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent)}
+.modal-header{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
 .modal-title-wrap{flex:1}
-.modal-badge{display:inline-block;background:rgba(232,0,11,.15);border:1px solid #e8000b;color:#e8000b;font-family:'Press Start 2P',monospace;font-size:7px;padding:3px 8px;border-radius:2px;letter-spacing:1px;margin-bottom:6px}
-.modal-title{font-family:'Press Start 2P',monospace;font-size:11px;color:#00ffcc;letter-spacing:2px;line-height:1.5;text-shadow:0 0 10px rgba(0,255,204,.5)}
+.modal-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:4px 10px;border-radius:20px;letter-spacing:1px;margin-bottom:8px}
+.modal-title{font-family:'Press Start 2P',monospace;font-size:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;line-height:1.6;filter:drop-shadow(0 0 12px rgba(0,212,255,.3))}
 .lang-btns{display:flex;gap:5px;flex-shrink:0;margin-left:8px}
-.lang-btn{background:transparent;border:1px solid #2a2a4a;color:#5a5a7a;font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 8px;border-radius:3px;cursor:pointer;transition:all .2s}
-.lang-btn.active{border-color:#00ffcc;color:#00ffcc;background:rgba(0,255,204,.08)}
-.false-alert{margin:14px 16px 0;background:rgba(232,0,11,.08);border:1px solid rgba(232,0,11,.4);border-left:3px solid #e8000b;border-radius:4px;padding:12px}
-.false-alert-title{font-family:'Press Start 2P',monospace;font-size:8px;color:#e8000b;margin-bottom:6px}
-.false-alert-body{font-size:9px;color:#cc8888;line-height:1.8}
-.false-alert-body strong{color:#ffaaaa}
-.modal-body{padding:14px 16px}
+.lang-btn{background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .2s}
+.lang-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08)}
+.modal-desc{margin:12px 20px 0;font-size:11px;color:var(--gray);line-height:1.8}
+.modal-desc strong{color:var(--white)}
+.modal-body{padding:16px 20px}
 .sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-.sec-card{background:#0a0a1a;border:1px solid #1a1a3a;border-radius:4px;padding:10px;transition:border-color .2s}
-.sec-card:hover{border-color:#00ffcc}
-.sec-card-icon{font-size:16px;margin-bottom:4px}
-.sec-card-title{font-family:'Press Start 2P',monospace;font-size:7px;color:#00ffcc;margin-bottom:4px;letter-spacing:1px}
-.sec-card-desc{font-size:8px;color:#6a6a8a;line-height:1.6}
-.proof-section{background:#0a0a1a;border:1px solid #1a1a3a;border-radius:4px;padding:12px;margin-bottom:14px}
-.proof-title{font-family:'Press Start 2P',monospace;font-size:8px;color:#ffaa00;margin-bottom:8px}
-.proof-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:9px;color:#888}
-.proof-item a{color:#00ffcc;text-decoration:none;font-family:'Share Tech Mono',monospace}
-.proof-dot{width:6px;height:6px;border-radius:50%;background:#00ffcc;flex-shrink:0}
-.modal-footer{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
-.modal-btn{width:100%;padding:12px;border:none;border-radius:3px;cursor:pointer;font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:1px;transition:all .2s}
-.modal-btn-primary{background:linear-gradient(135deg,#00aa88,#007755);color:#fff}
-.modal-btn-secondary{background:transparent;color:#5a5a7a;border:1px solid #2a2a4a;font-size:7px}
-.modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,204,.4),transparent);margin:0 16px 12px}
+.sec-card{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:10px;padding:12px;transition:all .2s}
+.sec-card:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.08);transform:translateY(-1px)}
+.sec-card-icon{font-size:18px;margin-bottom:6px}
+.sec-card-title{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:1px}
+.sec-card-desc{font-size:8px;color:var(--gray);line-height:1.6}
+.proof-section{background:rgba(0,232,150,.04);border:1px solid rgba(0,232,150,.15);border-radius:10px;padding:12px;margin-bottom:14px}
+.proof-title{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--green);margin-bottom:10px;letter-spacing:1px}
+.proof-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:9px;color:var(--gray)}
+.proof-item a{color:var(--accent);text-decoration:none}
+.proof-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0}
+.login-hint{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.2);border-radius:10px;padding:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
+.login-hint-icon{font-size:20px;flex-shrink:0}
+.login-hint-text{font-size:9px;color:var(--gray);line-height:1.8}
+.login-hint-text strong{color:var(--accent2)}
+.modal-footer{padding:0 20px 20px;display:flex;flex-direction:column;gap:8px}
+.modal-btn{width:100%;padding:13px;border:none;border-radius:10px;cursor:pointer;font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:1px;transition:all .2s}
+.modal-btn-primary{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#09090f;font-weight:700}
+.modal-btn-primary:hover{filter:brightness(1.1);box-shadow:0 0 20px rgba(0,212,255,.3)}
+.modal-btn-login{background:rgba(14,165,233,.1);color:var(--accent2);border:1px solid rgba(14,165,233,.3);font-size:8px}
+.modal-btn-login:hover{background:rgba(14,165,233,.2)}
+.modal-btn-secondary{background:transparent;color:var(--gray);border:1px solid var(--gray2);font-size:7px}
+.modal-btn-secondary:hover{color:var(--white);border-color:var(--gray)}
+.modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.3),transparent);margin:0 20px 12px}
 
 
 /* ── PATCH NOTES ─────────────────────────────────────────── */
@@ -146,6 +193,103 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 .tag-new{background:rgba(232,0,11,.15);color:#ff6666;border:1px solid rgba(232,0,11,.3)}
 .tag-fix{background:rgba(0,100,200,.15);color:#66aaff;border:1px solid rgba(0,100,200,.3)}
 .tag-feat{background:rgba(0,150,80,.15);color:#66ffaa;border:1px solid rgba(0,150,80,.3)}
+
+
+.nudge-overlay{position:fixed;inset:0;background:rgba(3,3,10,.85);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;z-index:99998;padding:16px;}
+.nudge-box{max-width:420px;width:100%;background:var(--s1);border:1px solid var(--accent);
+  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(0,212,255,.15);}
+.nudge-icon{font-size:28px;margin-bottom:12px;}
+.nudge-title{font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px;}
+.nudge-body{font-family:var(--font-ui);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;}
+.nudge-body strong{color:var(--accent)}
+.nudge-actions{display:flex;flex-direction:column;gap:8px;}
+.nudge-btn-login{background:var(--accent);color:#000;border:none;border-radius:8px;
+  font-family:var(--font-ui);font-size:13px;font-weight:700;padding:12px;cursor:pointer;}
+.nudge-btn-login:hover{background:#00EEFF;}
+.nudge-btn-continue{background:transparent;color:var(--muted);border:1px solid var(--border2);
+  border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
+.nudge-btn-continue:hover{color:var(--white);border-color:var(--muted);}
+
+
+.fetch-progress-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.fetch-progress-label{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--font-ui);font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:.04em;}
+.fetch-progress-label span.count{color:var(--accent);font-weight:700;}
+.fetch-progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.fetch-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
+  width:0%;transition:width .35s ease;border-radius:2px;}
+
+
+.warn-box{max-width:420px;width:100%;background:var(--s1);border:1px solid var(--amber);
+  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(255,209,102,.15);}
+.warn-icon{font-size:28px;margin-bottom:12px;}
+.warn-title{font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px;}
+.warn-body{font-family:var(--font-ui);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;}
+.warn-body strong{color:var(--amber)}
+.warn-actions{display:flex;flex-direction:column;gap:8px;}
+.warn-btn-continue{background:var(--amber);color:#000;border:none;border-radius:8px;
+  font-family:var(--font-ui);font-size:13px;font-weight:700;padding:12px;cursor:pointer;}
+.warn-btn-continue:hover{background:#FFE08A;}
+.warn-btn-cancel{background:transparent;color:var(--muted);border:1px solid var(--border2);
+  border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
+.warn-btn-cancel:hover{color:var(--white);border-color:var(--muted);}
+
+
+@keyframes texspin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.tex-loading-wrap{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px;
+  background:var(--s2);border-radius:8px;border:1px solid var(--border2);}
+.tex-spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);
+  border-radius:50%;animation:texspin 0.7s linear infinite;flex-shrink:0;}
+.tex-loading-text{font-family:var(--font-ui);font-size:12px;color:var(--white);}
+
+
+.topbar-lang-toggle{display:flex;gap:2px;margin-right:8px;}
+.topbar-lang-btn{padding:5px 9px;font-family:var(--font-ui);font-size:11px;font-weight:600;
+  background:transparent;border:1px solid var(--border2);color:var(--muted);cursor:pointer;
+  border-radius:6px;transition:all .15s;}
+.topbar-lang-btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
+
+
+.footer-contact{display:flex;gap:16px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+.footer-contact-item{display:flex;align-items:center;gap:6px;font-family:var(--font-ui);
+  font-size:11px;color:var(--muted);cursor:pointer;transition:color .15s;background:none;
+  border:none;padding:4px 8px;border-radius:6px;}
+.footer-contact-item:hover{color:var(--accent);background:rgba(0,212,255,.06);}
+
+
+.rgba-channel-row{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;}
+.rgba-channel{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border2);
+  border-radius:8px;padding:8px 10px;}
+.rgba-channel-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.rgba-channel select{flex:1;background:transparent;border:none;color:var(--white);
+  font-family:var(--font-ui);font-size:12px;padding:0;}
+
+
+body.maintenance-mode .tab:not(.maint-exempt),
+body.maintenance-mode .btn:not(.maint-exempt),
+body.maintenance-mode input:not(.maint-exempt),
+body.maintenance-mode select:not(.maint-exempt),
+body.maintenance-mode button:not(.maint-exempt){
+  pointer-events:none!important;opacity:.35!important;filter:grayscale(1);
+}
+body.maintenance-mode .maint-exempt,
+body.maintenance-mode #security-modal,
+body.maintenance-mode #security-modal *{
+  pointer-events:auto!important;opacity:1!important;filter:none!important;
+}
+body.maintenance-mode{
+  --accent:#FF3355!important;--accent2:#CC1133!important;
+}
+.maint-banner{display:none;background:linear-gradient(90deg,#FF3355,#CC1133);color:#fff;
+  text-align:center;padding:10px 16px;font-family:var(--font-ui);font-size:12px;font-weight:700;
+  letter-spacing:.04em;position:sticky;top:0;z-index:9999;}
+body.maintenance-mode .maint-banner{display:block;}
+.maint-pw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999999;
+  display:none;align-items:center;justify-content:center;padding:20px;}
+.maint-pw-box{background:var(--s1);border:1px solid var(--accent);border-radius:12px;
+  padding:24px;max-width:340px;width:100%;}
+.maint-pw-box input{width:100%;margin-top:10px;margin-bottom:12px;}
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -189,66 +333,429 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
   "license": "https://github.com/SharkyA7/Roblox-downloader-backend/blob/main/LICENSE"
 }
 </script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+window.__PRISMA_THREE__ = THREE;
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+window.__threeReady = true;
+window.THREE = THREE;
+window.__OBJLoader = OBJLoader;
+window.__GLTFExporter = GLTFExporter;
+
+window.convertZipToGLB = async function(zipBlob, baseName, statusCallback){
+  const zip = await JSZip.loadAsync(zipBlob);
+  let objText = null, mtlText = null;
+  const imageFiles = {}; // filename -> blob
+
+  for(const filename of Object.keys(zip.files)){
+    const entry = zip.files[filename];
+    if(entry.dir) continue;
+    const lower = filename.toLowerCase();
+    if(lower.endsWith(".obj")){
+      objText = await entry.async("text");
+    } else if(lower.endsWith(".mtl")){
+      mtlText = await entry.async("text");
+    } else if(lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")){
+      imageFiles[filename.split("/").pop()] = await entry.async("blob");
+    }
+  }
+
+  if(!objText) throw new Error("ZIP tidak berisi file .obj");
+
+  const blobUrlMap = {};
+  for(const [fname, fblob] of Object.entries(imageFiles)){
+    blobUrlMap[fname] = URL.createObjectURL(fblob);
+  }
+
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    const base = url.split("/").pop();
+    return blobUrlMap[base] || url;
+  });
+
+  let root;
+  if(mtlText){
+    if(statusCallback) statusCallback("⏳ Memuat material + texture...");
+    const hasTextureRefs = /map_[A-Za-z]+/.test(mtlText);
+
+    const loadPromise = hasTextureRefs ? new Promise((resolve) => {
+      let resolved = false;
+      manager.onLoad = () => { if(!resolved){ resolved = true; resolve(); } };
+      // safety timeout - jangan hang selamanya kalau onLoad tidak pernah trigger
+      setTimeout(() => { if(!resolved){ resolved = true; resolve(); } }, 15000);
+    }) : Promise.resolve();
+
+    const mtlLoader = new MTLLoader(manager);
+    const materials = mtlLoader.parse(mtlText, "");
+    materials.preload();
+
+    const objLoader = new OBJLoader(manager);
+    objLoader.setMaterials(materials);
+    root = objLoader.parse(objText);
+
+    await loadPromise;
+
+    // Pastikan setiap texture image benar2 sudah decode (naturalWidth>0) sebelum export
+    root.traverse((child) => {
+      if(child.isMesh && child.material && child.material.map){
+        const img = child.material.map.image;
+        if(!img || (img.complete === false) || (img.naturalWidth === 0 && img.width === 0)){
+          child.material.map = null; // drop texture yg gagal load, fallback ke warna solid
+        }
+      }
+    });
+  } else {
+    const objLoader = new OBJLoader(manager);
+    root = objLoader.parse(objText);
+  }
+
+  if(statusCallback) statusCallback("⏳ Export GLB...");
+  const exporter = new GLTFExporter();
+  const glbBuffer = await new Promise((resolve, reject) => {
+    exporter.parse(root, resolve, reject, { binary: true });
+  });
+
+  for(const url of Object.values(blobUrlMap)) URL.revokeObjectURL(url);
+
+  const blob = new Blob([glbBuffer], { type: "application/octet-stream" });
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob),
+    download: `${baseName}.glb`
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+window.buildModelGLB = async function(customStatusEl, customBtn){
+  const statusEl = customStatusEl || document.getElementById("model-status");
+  const btn = customBtn || document.getElementById("model-build-btn");
+  if(!window.currentModelData || !window.currentModelData.supported){
+    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
+    return;
+  }
+  const data = window.currentModelData;
+  btn.disabled = true;
+
+  try{
+    const meshParts = data.parts.filter(p => p.className === "MeshPart" && p.meshId);
+    const boxParts  = data.parts.filter(p => p.className === "Part");
+    const unionParts = data.parts.filter(p => p.className === "UnionOperation" && p.unionAssetId);
+    const uniqueMeshIds = [...new Set(meshParts.map(p => p.meshId))];
+    const uniqueUnionIds = [...new Set(unionParts.map(p => p.unionAssetId))];
+
+    const objLoader = new OBJLoader();
+    const meshGeomCache = {};
+    const unionGeomCache = {};
+    let failedMeshes = 0;
+
+    // Concurrency-limited fetch pool dengan exponential backoff retry
+    async function fetchPool(items, limit, taskFn){
+      let idx = 0, done = 0;
+      async function withRetry(item, maxRetries=3){
+        let delay = 1000;
+        for(let attempt=0; attempt<=maxRetries; attempt++){
+          try{
+            await taskFn(item);
+            return;
+          }catch(e){
+            if(attempt === maxRetries){
+              console.warn("fetch failed after retries:", item, e);
+              failedMeshes++;
+              return;
+            }
+            // Exponential backoff: 1s, 2s, 4s
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2;
+          }
+        }
+      }
+      async function worker(){
+        while(idx < items.length){
+          const i = idx++;
+          await withRetry(items[i]);
+          done++;
+          statusEl.textContent = `⏳ Mengunduh ${done}/${items.length}...`;
+        }
+      }
+      const workers = Array.from({length: Math.min(limit, items.length)}, () => worker());
+      await Promise.all(workers);
+    }
+
+    await fetchPool(uniqueMeshIds, 6, async (meshId) => {
+      const res = await fetch(`${BASE}/api/v2/model/mesh?meshId=${encodeURIComponent(meshId)}`);
+      const json = await res.json();
+      if(!json.obj) throw new Error(json.error || "unknown error");
+      const group = objLoader.parse(json.obj);
+      let geometry = null;
+      group.traverse(child => {
+        if(child.isMesh && !geometry) geometry = child.geometry;
+      });
+      if(geometry) meshGeomCache[meshId] = geometry;
+    });
+
+    // Fetch Union/CSG geometry
+    if(uniqueUnionIds.length > 0){
+      statusEl.textContent = `⏳ Mengunduh ${uniqueUnionIds.length} Union/CSG geometry...`;
+      await fetchPool(uniqueUnionIds, 4, async (unionAssetId) => {
+        const res = await fetch(`${BASE}/api/v2/model/mesh-union?assetId=${encodeURIComponent(unionAssetId)}`);
+        const json = await res.json();
+        if(!json.obj) throw new Error(json.error || "union fetch failed");
+        const group = objLoader.parse(json.obj);
+        let geometry = null;
+        group.traverse(child => {
+          if(child.isMesh && !geometry) geometry = child.geometry;
+        });
+        if(geometry) unionGeomCache[unionAssetId] = geometry;
+      });
+    }
+
+    // Fetch texture images untuk MeshPart yang punya TextureID
+    const uniqueTextureIds = [...new Set(meshParts.map(p => p.textureId).filter(Boolean))];
+    const textureCache = {};
+    if(uniqueTextureIds.length > 0){
+      statusEl.textContent = `⏳ Mengunduh ${uniqueTextureIds.length} texture...`;
+      await fetchPool(uniqueTextureIds, 6, async (texId) => {
+        const res = await fetch(`${BASE}/api/v2/model/texture?textureId=${encodeURIComponent(texId)}`);
+        if(!res.ok) throw new Error("texture fetch failed");
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        const texture = new THREE.Texture(bitmap);
+        texture.needsUpdate = true;
+        if(THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+        textureCache[texId] = texture;
+      });
+    }
+
+    statusEl.textContent = "⏳ Menyusun model...";
+    const root = new THREE.Group();
+    root.name = `model_${data.assetId}`;
+
+    function applyTransform(mesh, part){
+      const [r00,r01,r02,r10,r11,r12,r20,r21,r22] = part.rotation.value;
+      const [px,py,pz] = part.position.value;
+      const m4 = new THREE.Matrix4();
+      m4.set(
+        r00, r01, r02, px,
+        r10, r11, r12, py,
+        r20, r21, r22, pz,
+        0, 0, 0, 1
+      );
+      const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+      m4.decompose(pos, quat, scl);
+      mesh.position.copy(pos);
+      mesh.quaternion.copy(quat);
+    }
+
+    let skippedParts = 0;
+    for(const part of meshParts){
+      const geom = meshGeomCache[part.meshId];
+      if(!geom){ skippedParts++; continue; }
+      const [r,g,b] = part.color.value;
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      if(part.textureId && textureCache[part.textureId]){
+        matOpts.map = textureCache[part.textureId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mesh = new THREE.Mesh(geom.clone(), mat);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "MeshPart";
+      root.add(mesh);
+    }
+
+    for(const part of boxParts){
+      const [sx,sy,sz] = part.size.value;
+      const [r,g,b] = part.color.value;
+      const geom = new THREE.BoxGeometry(sx, sy, sz);
+      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r/255, g/255, b/255) });
+      const mesh = new THREE.Mesh(geom, mat);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "Part";
+      root.add(mesh);
+    }
+
+    for(const part of unionParts){
+      const geom = unionGeomCache[part.unionAssetId];
+      if(!geom){ skippedParts++; continue; }
+      const [r,g,b] = part.color.value;
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      if(part.textureId && textureCache[part.textureId]){
+        matOpts.map = textureCache[part.textureId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mesh = new THREE.Mesh(geom.clone(), mat);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "UnionOperation";
+      root.add(mesh);
+    }
+
+    statusEl.textContent = "⏳ Export GLB...";
+    const exporter = new GLTFExporter();
+    exporter.parse(root, (result) => {
+      const blob = new Blob([result], { type: "application/octet-stream" });
+      const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(blob),
+        download: `model_${data.assetId}.glb`
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+      const failNote = failedMeshes > 0 ? ` (${failedMeshes} gagal di-skip)` : "";
+      statusEl.textContent = `✓ GLB berhasil! ${meshParts.length} mesh + ${boxParts.length} box + ${unionParts.length} union${failNote}. Rotasi sudah didukung.`;
+      btn.disabled = false;
+    }, (err) => {
+      statusEl.textContent = "✗ Export GLB gagal: " + err.message;
+      btn.disabled = false;
+    }, { binary: true });
+
+  }catch(e){
+    statusEl.textContent = "✗ " + e.message;
+    btn.disabled = false;
+  }
+};
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/motion@12/dist/motion.js"></script>
 </head>
 <body>
+
+<div class="maint-pw-overlay" id="maint-pw-overlay">
+  <div class="maint-pw-box">
+    <div style="font-family:var(--font-ui);font-weight:700;font-size:14px;margin-bottom:6px">🔒 Admin Access</div>
+    <div style="font-size:11px;color:var(--gray)">Masukkan password admin untuk toggle maintenance mode</div>
+    <input type="password" id="maint-pw-input" class="maint-exempt" placeholder="Password">
+    <button class="btn maint-exempt" onclick="submitMaintenancePassword()" style="width:100%">Submit</button>
+    <button class="btn maint-exempt" onclick="closeMaintPwOverlay()" style="width:100%;margin-top:8px;background:var(--gray2);color:var(--gray)">Batal</button>
+    <div id="maint-pw-error" style="font-size:10px;color:#ff5555;margin-top:8px"></div>
+  </div>
+</div>
+
+
+<div class="nudge-overlay" id="texwarn-overlay" style="display:none">
+  <div class="warn-box" id="texwarn-box">
+    <div class="warn-icon">⚠️</div>
+    <div class="warn-title">Resolusi Texture Tinggi Terdeteksi</div>
+    <div class="warn-body" id="texwarn-body">
+      Texture ini <strong>berukuran besar</strong>. Generate 9 map sekaligus di resolusi ini bisa bikin device kamu <strong>lag</strong> dan preview <strong>loading lambat</strong>, terutama di HP dengan spesifikasi standar.
+      <br><br>
+      Rekomendasi: gunakan resolusi 1K-2K untuk performa terbaik. Tapi kamu tetap bisa lanjut kalau device kamu mumpuni.
+    </div>
+    <div class="warn-actions">
+      <button class="warn-btn-continue" id="texwarn-continue-btn">Lanjutkan Tetap</button>
+      <button class="warn-btn-cancel" onclick="cancelTexWarn()">Batalkan</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="nudge-overlay" id="nudge-overlay" style="display:none">
+  <div class="nudge-box" id="nudge-box">
+    <div class="nudge-icon">👋</div>
+    <div class="nudge-title">Hey, kamu aktif banget nih!</div>
+    <div class="nudge-body">
+      Kamu udah download beberapa kali. Kami rekomendasikan <strong>Login dengan Roblox</strong> supaya kamu dapat limit personal, gak keganggu limit shared dari pengguna lain.
+      <br><br>
+      Tapi tenang — akun kamu <strong>cuma tersimpan di sisi Roblox</strong>, situs ini gak pernah nyimpen password atau data pribadimu.
+      <br><br>
+      Kalau kamu udah nyaman dengan limit yang ada sekarang, klik <strong>Lanjutkan</strong> aja. Happy creating! 🎨
+    </div>
+    <div class="nudge-actions">
+      <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/login'">🔑 Login dengan Roblox</button>
+      <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- SECURITY MODAL -->
 <div class="modal-overlay" id="security-modal">
-  <div class="modal-box">
+  <div class="modal-box" id="modal-box-inner">
     <div class="modal-header">
       <div class="modal-title-wrap">
-        <div class="modal-badge" data-i18n="badge_verified">✓ TERVERIFIKASI AMAN</div>
-        <div class="modal-title" data-i18n="modal_title">ROBLOX 3D<br>DOWNLOADER</div>
+        <div class="modal-badge">✦ VERIFIED SAFE TOOL</div>
+        <div class="modal-title">ROBLOX 3D<br>DOWNLOADER</div>
       </div>
       <div class="lang-btns">
         <button class="lang-btn active" onclick="setLang('id')">🇮🇩 ID</button>
         <button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button>
       </div>
     </div>
-    <div class="false-alert">
-      <div class="false-alert-title">ℹ <span data-i18n="false_title">TOOL UNTUK 3D CREATORS</span></div>
-      <div class="false-alert-body" data-i18n="false_body">Dibuat untuk <strong>Nomad Sculpt</strong>, <strong>Prisma 3D</strong>, dan <strong>Blender</strong> users. Export avatar Roblox sebagai OBJ/GLTF dengan UV texture. <strong>100% open source</strong> &amp; dapat diverifikasi di GitHub.</div>
-    </div>
+    <p class="modal-desc" data-i18n="modal_desc">Open-source tool untuk <strong>3D creators</strong>. Download avatar &amp; aset Roblox sebagai OBJ/GLB untuk Nomad Sculpt, Prisma 3D, dan Blender.</p>
     <div class="modal-body">
       <div class="sec-grid">
-        <div class="sec-card"><div class="sec-card-icon">🔒</div><div class="sec-card-title" data-i18n="c1_title">NO PASSWORD</div><div class="sec-card-desc" data-i18n="c1_desc">Tidak pernah meminta password Roblox</div></div>
-        <div class="sec-card"><div class="sec-card-icon">📵</div><div class="sec-card-title" data-i18n="c2_title">NO TRACKING</div><div class="sec-card-desc" data-i18n="c2_desc">Tidak ada analytics atau tracker</div></div>
-        <div class="sec-card"><div class="sec-card-icon">🖥️</div><div class="sec-card-title" data-i18n="c3_title">LOCAL/CLOUD</div><div class="sec-card-desc" data-i18n="c3_desc">Server bisa lokal atau Railway cloud</div></div>
-        <div class="sec-card"><div class="sec-card-icon">⚡</div><div class="sec-card-title" data-i18n="c4_title">API ONLY</div><div class="sec-card-desc" data-i18n="c4_desc">Hanya akses API publik Roblox</div></div>
+        <div class="sec-card"><div class="sec-card-icon">🔒</div><div class="sec-card-title">NO PASSWORD</div><div class="sec-card-desc" data-i18n="c1_desc">Tidak pernah meminta password Roblox</div></div>
+        <div class="sec-card"><div class="sec-card-icon">🚫</div><div class="sec-card-title">NO TRACKING</div><div class="sec-card-desc" data-i18n="c2_desc">Tidak ada analytics atau tracker</div></div>
+        <div class="sec-card"><div class="sec-card-icon">☁️</div><div class="sec-card-title">VERCEL HOSTED</div><div class="sec-card-desc" data-i18n="c3_desc">Backend aman di Vercel serverless</div></div>
+        <div class="sec-card"><div class="sec-card-icon">⚡</div><div class="sec-card-title">API ONLY</div><div class="sec-card-desc" data-i18n="c4_desc">Hanya akses API publik Roblox</div></div>
       </div>
       <div class="proof-section">
-        <div class="proof-title">🔍 <span data-i18n="proof_title">BUKTI TRANSPARANSI</span></div>
-        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_1">Source code:</span>&nbsp;<a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank">GitHub @SharkyA7</a></div>
-        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_2">✓ Terverifikasi Google Search Console</span></div>
-        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_3">✓ Dilindungi Cloudflare SSL/TLS</span></div>
-        <div class="proof-item"><div class="proof-dot"></div><span data-i18n="proof_4">✓ Tidak ada form login / input password</span></div>
+        <div class="proof-title">✦ TRANSPARENCY</div>
+        <div class="proof-item"><div class="proof-dot"></div>Source code: <a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank">GitHub @SharkyA7</a></div>
+        <div class="proof-item"><div class="proof-dot"></div>Dilindungi Cloudflare SSL/TLS</div>
+        <div class="proof-item"><div class="proof-dot"></div>Tidak menyimpan data pribadi</div>
+        <div class="proof-item"><div class="proof-dot"></div>Privacy Policy &amp; Terms tersedia di site</div>
+      </div>
+      <div class="login-hint">
+        <div class="login-hint-icon">💡</div>
+        <div class="login-hint-text" data-i18n="login_hint">
+          <strong>Login dengan Roblox opsional</strong> — tanpa login, tool tetap berfungsi penuh. Login hanya memberikan pengalaman lebih baik: rate limit pribadi &amp; akses aset private kamu.
+        </div>
       </div>
     </div>
     <div class="modal-scan"></div>
     <div class="modal-footer">
-      <button class="modal-btn modal-btn-primary" onclick="document.getElementById('security-modal').style.display='none';localStorage.setItem('modal_seen','1')" data-i18n="btn_understand">✓ SAYA MENGERTI, LANJUTKAN</button>
-      <button class="modal-btn modal-btn-secondary" onclick="window.open('https://github.com/SharkyA7/Roblox-downloader-backend','_blank')" data-i18n="btn_github">↗ LIHAT SOURCE CODE DI GITHUB</button>
+      <button class="modal-btn modal-btn-primary" onclick="closeModal()" data-i18n="btn_understand">✓ MENGERTI, LANJUTKAN</button>
+      <button class="modal-btn modal-btn-login" onclick="closeModal();window.location.href='/auth/login'" data-i18n="btn_login">🔑 LOGIN DENGAN ROBLOX (OPSIONAL)</button>
+      <button class="modal-btn modal-btn-secondary" onclick="window.open('https://github.com/SharkyA7/Roblox-downloader-backend','_blank')" data-i18n="btn_github">↗ LIHAT SOURCE CODE</button>
     </div>
   </div>
 </div>
 <header>
-  <h1>ROBLOX 3D DOWNLOADER</h1>
-  <p class="sub">Avatar · Katalog · OBJ · GLTF · Backend API</p>
-  <div class="scan"></div>
+  <div id="oauth-bar" style="display:none;justify-content:flex-end;max-width:860px;margin:0 auto;padding:8px 16px 0;gap:10px;align-items:center">
+    <span id="oauth-username" style="font-size:10px;color:var(--accent)"></span>
+    <button onclick="oauthLogout()" style="background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;border-radius:20px;cursor:pointer">Logout</button>
+  </div>
+  <h1 id="admin-trigger-logo" onclick="handleLogoClick()" style="cursor:pointer">3DRBXMT</h1>
+  <p class="sub">3D ROBLOX MODEL MOBILE TOOLS</p>
+  <div style="display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+    <div class="topbar-lang-toggle">
+      <button class="topbar-lang-btn active" id="topbar-lang-id" onclick="setGlobalLang('id')">ID</button>
+      <button class="topbar-lang-btn" id="topbar-lang-en" onclick="setGlobalLang('en')">EN</button>
+    </div>
+    <a href="/auth/login" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(0,212,255,.15)'" onmouseout="this.style.background='rgba(0,212,255,.08)'">🔑 Login with Roblox</a>
+    <a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--gray)'">↗ GitHub</a>
+  </div>
+  <div class="scan" style="margin-top:16px"></div>
 </header>
+<div class="maint-banner">⚠ SITUS SEDANG DALAM PERBAIKAN / MAINTENANCE — MOHON TUNGGU SEBENTAR</div>
 
 <main>
   <!-- TABS -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('avatar')">👤 AVATAR</div>
-    <div class="tab" onclick="switchTab('catalog')">🛍️ KATALOG</div>
-    <div class="tab" onclick="switchTab('audio')">🎵 AUDIO</div>
+    <div class="tab active" onclick="switchTab('avatar')">👤 <span data-t-id="AVATAR" data-t-en="AVATAR">AVATAR</span></div>
+    <div class="tab" onclick="switchTab('catalog')">🛍️ <span data-t-id="KATALOG" data-t-en="CATALOG">KATALOG</span></div>
+    <div class="tab" onclick="switchTab('audio')">🎵 <span data-t-id="AUDIO" data-t-en="AUDIO">AUDIO</span></div>
+    <div class="tab" onclick="switchTab('model3d')">📦 <span data-t-id="3D MODEL" data-t-en="3D MODEL">3D MODEL</span></div>
     <div class="tab-dropdown">
-      <button class="tab" onclick="toggleDropdown(event)">⚙️ MORE ▼</button>
+      <div class="tab" onclick="toggleDropdown(event)">⚙️ <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
-        <div class="dropdown-item" onclick="switchTab('texture');toggleDropdown()">🎨 TEXTURE</div>
-        <div class="dropdown-item" onclick="switchTab('api');toggleDropdown()">📡 API DOCS</div>
+        <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
+        <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'">🔮 <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
+        <div class="dropdown-item" onclick="switchTab('prisma');document.getElementById('dropdown-menu').style.display='none'">🔷 <span data-t-id="CONVERT PRISMA" data-t-en="CONVERT PRISMA">CONVERT PRISMA</span></div>
+        <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+        <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
   </div>
@@ -256,17 +763,17 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
   <!-- ── AVATAR PANEL ── -->
   <div class="panel active" id="panel-avatar">
     <div class="card">
-      <div class="label">CARI AVATAR</div>
+      <div class="label"><span data-t-id="CARI AVATAR" data-t-en="SEARCH AVATAR">CARI AVATAR</span></div>
       <div class="row">
         <div style="flex:1;min-width:180px">
-          <input type="text" id="av-input" placeholder="Username atau User ID…">
-          <p class="hint">Contoh: "Roblox" · "builderman" · "156"</p>
+          <input type="text" id="av-input" data-t-ph-id="Username atau User ID…" data-t-ph-en="Username or User ID…" placeholder="Username atau User ID…">
+          <p class="hint"><span data-t-id='Contoh: "Roblox" · "builderman" · "156"' data-t-en='Example: "Roblox" · "builderman" · "156"'>Contoh: "Roblox" · "builderman" · "156"</span></p>
         </div>
         <select id="av-format" style="flex:0 0 120px;min-width:120px">
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ FETCH</button>
+        <button class="btn" id="av-btn" onclick="fetchAvatar()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span data-t-id="Menuju rekomendasi login" data-t-en="Towards login recommendation">Menuju rekomendasi login</span><span class="count" id="fp-count-avatar">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-avatar"></div></div></div>
       </div>
       <div class="status-box idle" id="av-status"><div class="dot"></div><span id="av-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="av-prog"></div></div>
@@ -275,15 +782,15 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
     <div id="av-result" style="display:none">
       <!-- Profile -->
       <div class="card" id="av-profile-card">
-        <div class="label">PROFIL</div>
+        <div class="label"><span data-t-id="PROFIL" data-t-en="PROFILE">PROFIL</span></div>
         <div class="result-grid">
           <div class="av-img" id="av-thumb">👤</div>
           <div class="info-list">
-            <div class="irow"><span class="ikey">USERNAME</span><span class="ival big" id="av-name">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="USERNAME" data-t-en="USERNAME">USERNAME</span></span><span class="ival big" id="av-name">—</span></div>
             <div class="irow"><span class="ikey">USER ID</span><span class="ival" id="av-id">—</span></div>
-            <div class="irow"><span class="ikey">RIG TYPE</span><span class="ival" id="av-rig">—</span></div>
-            <div class="irow"><span class="ikey">DIBUAT</span><span class="ival" id="av-created">—</span></div>
-            <a id="av-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA PROFIL ROBLOX</a>
+            <div class="irow"><span class="ikey"><span data-t-id="RIG TYPE" data-t-en="RIG TYPE">RIG TYPE</span></span><span class="ival" id="av-rig">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="DIBUAT" data-t-en="CREATED">DIBUAT</span></span><span class="ival" id="av-created">—</span></div>
+            <a id="av-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ <span data-t-id="BUKA PROFIL ROBLOX" data-t-en="OPEN ROBLOX PROFILE">BUKA PROFIL ROBLOX</span></a>
           </div>
         </div>
         <div class="chips" id="av-chips"></div>
@@ -291,25 +798,25 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 
       <!-- Download -->
       <div class="card">
-        <div class="label">DOWNLOAD 3D MODEL</div>
+        <div class="label"><span data-t-id="DOWNLOAD 3D MODEL" data-t-en="DOWNLOAD 3D MODEL">DOWNLOAD 3D MODEL</span></div>
         <div style="margin-bottom:12px;background:rgba(0,255,153,.06);border:1px solid rgba(0,255,153,.3);border-radius:4px;padding:14px">
           <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⭐ REAL MODEL + TEXTURE</div>
           <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:10px">
-            Download langsung dari Roblox CDN via browser.<br>
-            Berisi <strong style="color:#fff">mesh asli + UV texture PNG</strong> — cocok untuk Nomad Sculpt &amp; Prisma 3D.
+            <span data-t-id='Download langsung dari Roblox CDN via browser.' data-t-en='Download directly from Roblox CDN via browser.'>Download langsung dari Roblox CDN via browser.</span><br>
+            <span data-t-id='Berisi ' data-t-en='Contains '>Berisi </span><strong style="color:#fff" data-t-id="mesh asli + UV texture PNG" data-t-en="original mesh + UV texture PNG">mesh asli + UV texture PNG</strong><span data-t-id=" — cocok untuk Nomad Sculpt &amp; Prisma 3D." data-t-en=" — perfect for Nomad Sculpt &amp; Prisma 3D."> — cocok untuk Nomad Sculpt &amp; Prisma 3D.</span>
           </div>
-          <button class="btn btn-green" id="btn-real" onclick="downloadReal()" disabled>⬇ DOWNLOAD OBJ + TEXTURE (REAL)</button>
+          <button class="btn btn-green" id="btn-real" onclick="downloadReal()" disabled>⬇ <span data-t-id="DOWNLOAD OBJ + TEXTURE (REAL)" data-t-en="DOWNLOAD OBJ + TEXTURE (REAL)">DOWNLOAD OBJ + TEXTURE (REAL)</span></button>
           <div style="margin-top:8px;font-size:9px;color:var(--gray)" id="real-status"></div>
         </div>
         <div class="dl-grid">
           <div class="dl-card" id="dl-av-obj">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-w" id="bd-obj">LOADING…</span></div>
-            <div class="dl-desc">Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D.</div>
+            <div class="dl-desc"><span data-t-id="Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D." data-t-en="Wavefront OBJ + MTL. Open in Blender, Maya, Cinema 4D.">Wavefront OBJ + MTL. Buka di Blender, Maya, Cinema 4D.</span></div>
             <button class="btn btn-green" id="btn-av-obj" onclick="downloadAvatar('obj')" disabled>⬇ DOWNLOAD ZIP</button>
           </div>
           <div class="dl-card" id="dl-av-gltf">
             <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-w" id="bd-gltf">LOADING…</span></div>
-            <div class="dl-desc">GL Transmission Format. Untuk game engine &amp; AR/VR.</div>
+            <div class="dl-desc"><span data-t-id="GL Transmission Format. Untuk game engine &amp; AR/VR." data-t-en="GL Transmission Format. For game engines &amp; AR/VR.">GL Transmission Format. Untuk game engine &amp; AR/VR.</span></div>
             <button class="btn btn-amber" id="btn-av-gltf" onclick="downloadAvatar('gltf')" disabled>⬇ DOWNLOAD ZIP</button>
           </div>
         </div>
@@ -328,17 +835,17 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
   <!-- ── KATALOG PANEL ── -->
   <div class="panel" id="panel-catalog">
     <div class="card">
-      <div class="label">CARI ITEM KATALOG</div>
+      <div class="label"><span data-t-id="CARI ITEM KATALOG" data-t-en="SEARCH CATALOG ITEM">CARI ITEM KATALOG</span></div>
       <div class="row">
         <div style="flex:1;min-width:180px">
-          <input type="number" id="cat-input" placeholder="Asset ID (misal: 102611803)">
-          <p class="hint">Ambil ID dari URL: roblox.com/catalog/<strong>ID</strong>/nama-item</p>
+          <input type="number" id="cat-input" data-t-ph-id="Asset ID (misal: 102611803)" data-t-ph-en="Asset ID (e.g: 102611803)" placeholder="Asset ID (misal: 102611803)">
+          <p class="hint"><span data-t-id="Ambil ID dari URL: roblox.com/catalog/" data-t-en="Get ID from URL: roblox.com/catalog/">Ambil ID dari URL: roblox.com/catalog/</span><strong>ID</strong><span data-t-id="/nama-item" data-t-en="/item-name">/nama-item</span></p>
         </div>
         <select id="cat-format" style="flex:0 0 120px;min-width:120px">
           <option value="obj">OBJ + MTL</option>
           <option value="gltf">GLTF</option>
         </select>
-        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ FETCH</button>
+        <button class="btn" id="cat-btn" onclick="fetchCatalog()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-catalog">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-catalog"></div></div></div>
       </div>
       <div class="status-box idle" id="cat-status"><div class="dot"></div><span id="cat-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="cat-prog"></div></div>
@@ -346,25 +853,25 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
 
     <div id="cat-result" style="display:none">
       <div class="card">
-        <div class="label">DETAIL ITEM</div>
+        <div class="label"><span data-t-id="DETAIL ITEM" data-t-en="ITEM DETAILS">DETAIL ITEM</span></div>
         <div class="result-grid">
           <div class="av-img" id="cat-thumb">🧢</div>
           <div class="info-list">
-            <div class="irow"><span class="ikey">NAMA</span><span class="ival big" id="cat-name">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="NAMA" data-t-en="NAME">NAMA</span></span><span class="ival big" id="cat-name">—</span></div>
             <div class="irow"><span class="ikey">ASSET ID</span><span class="ival" id="cat-id">—</span></div>
-            <div class="irow"><span class="ikey">TIPE</span><span class="ival" id="cat-type">—</span></div>
-            <div class="irow"><span class="ikey">PEMBUAT</span><span class="ival" id="cat-creator">—</span></div>
-            <div class="irow"><span class="ikey">HARGA</span><span class="ival" id="cat-price">—</span></div>
-            <a id="cat-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ BUKA DI KATALOG</a>
+            <div class="irow"><span class="ikey"><span data-t-id="TIPE" data-t-en="TYPE">TIPE</span></span><span class="ival" id="cat-type">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="PEMBUAT" data-t-en="CREATOR">PEMBUAT</span></span><span class="ival" id="cat-creator">—</span></div>
+            <div class="irow"><span class="ikey"><span data-t-id="HARGA" data-t-en="PRICE">HARGA</span></span><span class="ival" id="cat-price">—</span></div>
+            <a id="cat-link" href="#" target="_blank" style="font-size:9px;color:var(--red);text-decoration:none;margin-top:4px">↗ <span data-t-id="BUKA DI KATALOG" data-t-en="OPEN IN CATALOG">BUKA DI KATALOG</span></a>
           </div>
         </div>
       </div>
       <div class="card">
-        <div class="label">DOWNLOAD</div>
+        <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
         <div class="dl-grid">
           <div class="dl-card ready">
-            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok">SIAP</span></div>
-            <div class="dl-desc">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</div>
+            <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
             <button class="btn btn-green" onclick="downloadCatalog('obj')">⬇ OBJ ZIP</button>
           </div>
           <div class="dl-card ready">
@@ -380,27 +887,100 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
   <!-- ── AUDIO PANEL ── -->
   <div class="panel" id="panel-audio">
     <div class="card">
-      <div class="label">CARI AUDIO</div>
-      <input class="inp" id="audio-input" type="number" placeholder="Audio ID (contoh: 139084379039051)">
-      <p style="font-size:9px;color:var(--gray);margin-top:4px">Ambil ID dari URL: roblox.com/library/ID/nama-audio</p>
-      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ FETCH</button>
+      <div class="label"><span data-t-id="CARI AUDIO" data-t-en="SEARCH AUDIO">CARI AUDIO</span></div>
+      <input class="inp" id="audio-input" type="number" data-t-ph-id="Audio ID (contoh: 139084379039051)" data-t-ph-en="Audio ID (e.g: 139084379039051)" placeholder="Audio ID (contoh: 139084379039051)">
+      <p style="font-size:9px;color:var(--gray);margin-top:4px"><span data-t-id="Ambil ID dari URL: roblox.com/library/ID/nama-audio" data-t-en="Get ID from URL: roblox.com/library/ID/audio-name">Ambil ID dari URL: roblox.com/library/ID/nama-audio</span></p>
+      <button class="btn" id="audio-btn" onclick="fetchAudio()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-audio">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-audio"></div></div></div>
       <div id="audio-status" style="margin-top:8px;font-size:9px"></div>
     </div>
     <div class="card" id="audio-result" style="display:none">
-      <div class="label">DETAIL AUDIO</div>
+      <div class="label"><span data-t-id="DETAIL AUDIO" data-t-en="AUDIO DETAILS">DETAIL AUDIO</span></div>
       <div id="audio-name" style="font-size:11px;color:var(--red);margin-bottom:8px"></div>
       <div style="font-size:9px;color:var(--gray);line-height:2">
-        <div>CREATOR: <span id="audio-creator" style="color:var(--white)"></span></div>
+        <div><span data-t-id="CREATOR" data-t-en="CREATOR">CREATOR</span>: <span id="audio-creator" style="color:var(--white)"></span></div>
         <div>ASSET ID: <span id="audio-id" style="color:var(--green)"></span></div>
-        <div>DIBUAT: <span id="audio-created" style="color:var(--white)"></span></div>
+        <div><span data-t-id="DIBUAT" data-t-en="CREATED">DIBUAT</span>: <span id="audio-created" style="color:var(--white)"></span></div>
       </div>
       <div style="margin-top:12px;padding:10px;background:rgba(232,0,11,.08);border:1px solid rgba(232,0,11,.3);border-radius:4px;font-size:9px;color:#ffaaaa">
-        ⚠ Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin.<br><br>
+        ⚠ <span data-t-id="Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin." data-t-en="This audio may be copyrighted. Only download audio you own or have permission to use.">Audio ini mungkin dilindungi hak cipta. Hanya download audio milik kamu atau yang kamu punya izin.</span><br><br>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--white)">
-          <input type="checkbox" id="audio-agree" onchange="toggleAudioDownload()"> Saya mengerti dan bertanggung jawab atas penggunaan audio ini
+          <input type="checkbox" id="audio-agree" onchange="toggleAudioDownload()"> <span data-t-id="Saya mengerti dan bertanggung jawab atas penggunaan audio ini" data-t-en="I understand and am responsible for the use of this audio">Saya mengerti dan bertanggung jawab atas penggunaan audio ini</span>
         </label>
       </div>
-      <button class="btn" id="audio-dl-btn" onclick="downloadAudio()" disabled style="margin-top:10px;opacity:0.5">⬇ DOWNLOAD AUDIO + INFO</button>
+      <button class="btn" id="audio-dl-btn" onclick="downloadAudio()" disabled style="margin-top:10px;opacity:0.5">⬇ <span data-t-id="DOWNLOAD AUDIO + INFO" data-t-en="DOWNLOAD AUDIO + INFO">DOWNLOAD AUDIO + INFO</span></button>
+    </div>
+  </div>
+
+  <!-- ── 3D MODEL PANEL ── -->
+  <div class="panel" id="panel-model3d">
+    <div class="card" style="border-color:var(--red);background:rgba(255,68,102,.05)">
+      <div style="text-align:center;padding:20px 10px">
+        <div style="font-size:32px;margin-bottom:12px">🚧</div>
+        <div style="font-family:var(--font-px);font-size:12px;color:var(--red);margin-bottom:14px;letter-spacing:1px">NOT AVAILABLE</div>
+        <p style="font-size:11px;color:var(--white);line-height:1.9;max-width:420px;margin:0 auto 10px">
+          <span data-t-id="Fitur 3D Model Assets Downloader sementara dinonaktifkan." data-t-en="The 3D Model Assets Downloader feature is temporarily disabled.">Fitur 3D Model Assets Downloader sementara dinonaktifkan.</span>
+        </p>
+        <p style="font-size:10px;color:var(--muted);line-height:1.8;max-width:420px;margin:0 auto">
+          <span data-t-id="Texture tidak berhasil di-download, hanya model/mesh yang berhasil. Masalah ini disebabkan cara Roblox menyimpan texture secara terpisah dari asset model, yang cukup kompleks untuk ditangani saat ini." data-t-en="Texture download is failing, only the model/mesh succeeds. This is caused by how Roblox stores textures separately from the model asset, which is complex to handle right now.">Texture tidak berhasil di-download, hanya model/mesh yang berhasil. Masalah ini disebabkan cara Roblox menyimpan texture secara terpisah dari asset model, yang cukup kompleks untuk ditangani saat ini.</span>
+        </p>
+        <p style="font-size:9px;color:var(--gray);margin-top:14px">
+          <span data-t-id="Terima kasih atas pengertiannya, happy modeling! 🎨" data-t-en="Thank you for your understanding, happy modeling! 🎨">Terima kasih atas pengertiannya, happy modeling! 🎨</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3D MODEL PANEL (DISABLED, KEPT FOR REFERENCE) ── -->
+  <div class="panel" id="panel-model3d-disabled" style="display:none">
+    <div class="card">
+      <div class="label"><span data-t-id="CARI 3D MODEL (create.roblox.com)" data-t-en="SEARCH 3D MODEL (create.roblox.com)">CARI 3D MODEL (create.roblox.com)</span></div>
+      <input class="inp" id="model-input" type="text" data-t-ph-id="Asset ID atau URL create.roblox.com" data-t-ph-en="Asset ID or create.roblox.com URL" placeholder="Asset ID atau URL create.roblox.com">
+      <p style="font-size:9px;color:var(--gray);margin-top:4px">
+        <span data-t-id='Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."' data-t-en='Example: "9797218535" or "https://create.roblox.com/store/asset/9797218535/..."'>Contoh: "9797218535" atau "https://create.roblox.com/store/asset/9797218535/..."</span>
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ <span data-t-id="FETCH &amp; ANALYZE" data-t-en="FETCH &amp; ANALYZE">FETCH &amp; ANALYZE</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-model">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-model"></div></div></div>
+        <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" style="flex:1;background:#5865f2">⬇ <span data-t-id="DOWNLOAD RBXM" data-t-en="DOWNLOAD RBXM">DOWNLOAD RBXM</span></button>
+      </div>
+      <p style="font-size:9px;color:var(--gray);margin-top:4px">
+        <span data-t-id="RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)" data-t-en="RBXM = original Roblox file, open in Roblox Studio. Convert to GLB: FETCH first then BUILD GLB (≤500 parts, Union/CSG supported)">RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)</span>
+      </p>
+      <div id="model-status" style="margin-top:8px;font-size:9px"></div>
+    </div>
+
+    <div class="card" id="model-result" style="display:none">
+      <div class="label"><span data-t-id="ANALISIS MODEL" data-t-en="MODEL ANALYSIS">ANALISIS MODEL</span></div>
+      <div id="model-support-badge" style="font-size:11px;margin-bottom:10px"></div>
+      <div style="font-size:10px;line-height:1.8;color:var(--gray)">
+        <div><span data-t-id="MESH PARTS" data-t-en="MESH PARTS">MESH PARTS</span>: <span id="model-meshpart-count" style="color:var(--white)"></span></div>
+        <div><span data-t-id="PARTS" data-t-en="PARTS">PARTS</span>: <span id="model-part-count" style="color:var(--white)"></span></div>
+        <div>UNION/CSG: <span id="model-union-count" style="color:var(--white)"></span></div>
+        <div><span data-t-id="TOTAL" data-t-en="TOTAL">TOTAL</span>: <span id="model-total-count" style="color:var(--white)"></span></div>
+      </div>
+      <div id="model-reasons" style="margin-top:10px;font-size:9px;color:#ff7777"></div>
+      <button class="btn btn-green" id="model-build-btn" onclick="buildModelGLB()" disabled style="margin-top:14px;opacity:0.5">⬇ <span data-t-id="BUILD GLB" data-t-en="BUILD GLB">BUILD GLB</span></button>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="label"><span data-t-id="CONVERT RBXM → GLB" data-t-en="CONVERT RBXM → GLB">CONVERT RBXM → GLB</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-top:4px;margin-bottom:8px">
+        <span data-t-id="Upload file .rbxm yang sudah kamu download → parse → export GLB. Tidak perlu ID, tidak perlu internet ke Roblox untuk parsing." data-t-en="Upload the .rbxm file you already downloaded → parse → export GLB. No ID needed, no internet to Roblox needed for parsing.">Upload file .rbxm yang sudah kamu download → parse → export GLB. Tidak perlu ID, tidak perlu internet ke Roblox untuk parsing.</span>
+      </p>
+      <input type="file" id="rbxm-file-input" accept=".rbxm,.rbxmx" style="display:none" onchange="handleRBXMUpload(event)">
+      <button class="btn" onclick="document.getElementById('rbxm-result').style.display='none'; document.getElementById('rbxm-upload-status').textContent=''; document.getElementById('rbxm-file-input').value=''; document.getElementById('rbxm-file-input').click()" style="width:100%">📁 <span data-t-id="PILIH FILE .RBXM" data-t-en="CHOOSE .RBXM FILE">PILIH FILE .RBXM</span></button>
+      <div id="rbxm-upload-status" style="margin-top:8px;font-size:9px"></div>
+      <div class="card" id="rbxm-result" style="display:none;margin-top:10px">
+        <div id="rbxm-support-badge" style="font-size:11px;margin-bottom:8px"></div>
+        <div style="font-size:10px;line-height:1.8;color:var(--gray)">
+          <div><span data-t-id="FILE" data-t-en="FILE">FILE</span>: <span id="rbxm-filename" style="color:var(--white)"></span></div>
+          <div><span data-t-id="MESH PARTS" data-t-en="MESH PARTS">MESH PARTS</span>: <span id="rbxm-meshpart-count" style="color:var(--white)"></span></div>
+          <div><span data-t-id="PARTS" data-t-en="PARTS">PARTS</span>: <span id="rbxm-part-count" style="color:var(--white)"></span></div>
+          <div>UNION/CSG: <span id="rbxm-union-count" style="color:var(--white)"></span></div>
+          <div><span data-t-id="TOTAL" data-t-en="TOTAL">TOTAL</span>: <span id="rbxm-total-count" style="color:var(--white)"></span></div>
+        </div>
+        <div id="rbxm-reasons" style="margin-top:8px;font-size:9px;color:#ff7777"></div>
+        <button class="btn btn-green" id="rbxm-build-btn" onclick="buildFromUpload()" disabled style="margin-top:12px;opacity:0.5;width:100%">⬇ <span data-t-id="BUILD GLB DARI FILE" data-t-en="BUILD GLB FROM FILE">BUILD GLB DARI FILE</span></button>
+      </div>
     </div>
   </div>
 
@@ -415,7 +995,7 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
       <div id="tex-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
     <div class="card" id="tex-result" style="display:none">
-      <div class="label">PREVIEW</div>
+      <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">ALBEDO</p><canvas id="canvas-albedo" style="width:100%;border-radius:4px"></canvas></div>
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">NORMAL</p><canvas id="canvas-normal" style="width:100%;border-radius:4px"></canvas></div>
@@ -427,59 +1007,400 @@ footer{text-align:center;padding:18px;font-size:9px;color:var(--gray);border-top
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">BUMP</p><canvas id="canvas-bump" style="width:100%;border-radius:4px"></canvas></div>
         <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">METALLIC</p><canvas id="canvas-metallic" style="width:100%;border-radius:4px"></canvas></div>
       </div>
-      <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</div>
-      <button class="btn btn-green" onclick="downloadTextures()">⬇ DOWNLOAD ALL MAPS (ZIP)</button>
-      <button class="btn" onclick="bakeForPrisma()" style="margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5)">🔥 BAKE FOR PRISMA 3D</button>
+      <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
+      <button class="btn btn-green" onclick="downloadTextures()" style="width:100%">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
+
+      <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
+        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
+        </div>
+      </div>
+      <button class="btn" onclick="previewBakePrisma()" style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#4f46e5);width:100%">🔥 <span data-t-id="PREVIEW BAKE PRISMA 3D" data-t-en="PREVIEW BAKE PRISMA 3D">PREVIEW BAKE PRISMA 3D</span></button>
+      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none;width:100%">⬇ <span data-t-id="DOWNLOAD BAKED ZIP" data-t-en="DOWNLOAD BAKED ZIP">DOWNLOAD BAKED ZIP</span></button>
       <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
+    </div>
+
+    <div class="card" id="tex-single-card">
+      <button class="btn" onclick="downloadSingleMap()" style="width:100%">⬇ <span data-t-id="DOWNLOAD 1 MAP" data-t-en="DOWNLOAD 1 MAP">DOWNLOAD 1 MAP</span></button>
+      <select id="single-map-select" style="width:100%;margin-top:8px">
+        <option value="albedo">Albedo</option>
+        <option value="normal">Normal</option>
+        <option value="roughness">Roughness</option>
+        <option value="ao">AO</option>
+        <option value="emissive">Emissive</option>
+        <option value="curvature">Curvature</option>
+        <option value="specular">Specular</option>
+        <option value="bump">Bump</option>
+        <option value="metallic">Metallic</option>
+      </select>
+    </div>
+
+    <div class="card" id="tex-rgba-card">
+      <div class="label"><span data-t-id="RGBA PACKED EXPORT" data-t-en="RGBA PACKED EXPORT">RGBA PACKED EXPORT</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:10px;line-height:1.8">
+        <span data-t-id="Gabungkan 4 map ke dalam channel warna R/G/B/A. Untuk workflow Unity/Unreal/game engine (ORM texture)." data-t-en="Combine 4 maps into R/G/B/A color channels. For Unity/Unreal/game engine workflow (ORM texture).">Gabungkan 4 map ke dalam channel warna R/G/B/A. Untuk workflow Unity/Unreal/game engine (ORM texture).</span>
+      </p>
+      <div class="rgba-channel-row">
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#ff4444"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">R</span>
+          <select id="rgba-r"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#44ff44"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">G</span>
+          <select id="rgba-g"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#4488ff"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">B</span>
+          <select id="rgba-b"></select>
+        </div>
+        <div class="rgba-channel">
+          <div class="rgba-channel-dot" style="background:#aaaaaa"></div>
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">A</span>
+          <select id="rgba-a"></select>
+        </div>
+      </div>
+      <canvas id="rgba-preview-canvas" style="width:100%;border-radius:8px;margin-top:12px;display:none"></canvas>
+      <button class="btn" onclick="generateRGBAPacked()" style="width:100%;margin-top:10px">▶ <span data-t-id="GENERATE PACKED TEXTURE" data-t-en="GENERATE PACKED TEXTURE">GENERATE PACKED TEXTURE</span></button>
+      <button class="btn btn-green" id="rgba-download-btn" onclick="downloadRGBAPacked()" style="width:100%;margin-top:8px;display:none">⬇ <span data-t-id="DOWNLOAD PACKED PNG" data-t-en="DOWNLOAD PACKED PNG">DOWNLOAD PACKED PNG</span></button>
+      <div id="rgba-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-viewer3d">
+    <div class="card">
+      <div class="label">🔮 <span data-t-id="3D MATERIAL PREVIEW" data-t-en="3D MATERIAL PREVIEW">3D MATERIAL PREVIEW</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:8px;line-height:1.8">
+        <span data-t-id="Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D." data-t-en="Upload texture maps to preview material on a 3D object. Check the result before using it in 3D software.">Upload texture map untuk preview material di objek 3D. Lihat hasil sebelum dipakai di software 3D.</span>
+      </p>
+      <p style="font-size:8px;color:#ffaa00;margin-bottom:12px;line-height:1.7;background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);border-radius:6px;padding:8px 10px">
+        ⚠ <span data-t-id="Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material." data-t-en="Curvature is not available here since it isn't part of the standard PBR workflow &mdash; it's typically only used as helper data to generate other maps (e.g. AO or wear/edge effects), not applied directly to a material.">Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material.</span>
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ALBEDO</label>
+          <input type="file" id="v3d-albedo-input" accept="image/*" onchange="loadV3DTexture(event,'albedo')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-albedo-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-albedo-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">NORMAL</label>
+          <input type="file" id="v3d-normal-input" accept="image/*" onchange="loadV3DTexture(event,'normal')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-normal-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-normal-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ROUGHNESS</label>
+          <input type="file" id="v3d-roughness-input" accept="image/*" onchange="loadV3DTexture(event,'roughness')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-roughness-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-roughness-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">AO</label>
+          <input type="file" id="v3d-ao-input" accept="image/*" onchange="loadV3DTexture(event,'ao')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-ao-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-ao-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">EMISSIVE</label>
+          <input type="file" id="v3d-emissive-input" accept="image/*" onchange="loadV3DTexture(event,'emissive')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-emissive-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-emissive-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">SPECULAR</label>
+          <input type="file" id="v3d-specular-input" accept="image/*" onchange="loadV3DTexture(event,'specular')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-specular-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-specular-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">BUMP</label>
+          <input type="file" id="v3d-bump-input" accept="image/*" onchange="loadV3DTexture(event,'bump')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-bump-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-bump-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">METALLIC</label>
+          <input type="file" id="v3d-metallic-input" accept="image/*" onchange="loadV3DTexture(event,'metallic')" style="display:none">
+          <button class="btn" onclick="document.getElementById('v3d-metallic-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
+          <div id="v3d-metallic-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn" id="v3d-shape-sphere" onclick="setV3DShape('sphere')" style="flex:1;background:var(--accent)">⚪ SPHERE</button>
+        <button class="btn" id="v3d-shape-cube" onclick="setV3DShape('cube')" style="flex:1;background:var(--gray2);color:var(--gray)">⬜ CUBE</button>
+      </div>
+
+      <div id="v3d-canvas-wrap" style="width:100%;aspect-ratio:1;background:#0a0a0a;border-radius:8px;overflow:hidden;position:relative">
+        <canvas id="v3d-canvas" style="width:100%;height:100%;display:block"></canvas>
+        <div id="v3d-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;padding:20px">
+          Upload minimal Albedo untuk mulai preview
+        </div>
+      </div>
+      <p style="font-size:8px;color:var(--gray);margin-top:8px;text-align:center">Drag untuk rotate • Scroll/pinch untuk zoom</p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-materials">
+    <div class="card">
+      <div class="label">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <span data-t-id="Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu." data-t-en="Official Roblox Studio PBR texture collection (Brick, Wood, Grass, Concrete, etc) to use as material reference in your 3D software.">Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu.</span>
+      </p>
+      <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">📦 Roblox-Materials Repository</div>
+        <p style="font-size:9px;color:var(--gray);line-height:1.8;margin-bottom:10px">
+          <span data-t-id="Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai." data-t-en="Each material includes ColorMap, NormalMap, MetalnessMap, RoughnessMap, and HeightMap in ready-to-use PNG format.">Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai.</span>
+        </p>
+        <a href="https://github.com/MaximumADHD/Roblox-Materials" target="_blank" class="btn" style="width:100%;display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+          ↗ <span data-t-id="BUKA REPOSITORY DI GITHUB" data-t-en="OPEN REPOSITORY ON GITHUB">BUKA REPOSITORY DI GITHUB</span>
+        </a>
+      </div>
+      <div style="font-size:8px;color:var(--gray);line-height:1.8;padding:10px;background:var(--s2);border-radius:6px">
+        <span data-t-id="Kredit: Koleksi material ini dikumpulkan oleh" data-t-en="Credit: This material collection was compiled by">Kredit: Koleksi material ini dikumpulkan oleh</span>
+        <a href="https://github.com/MaximumADHD" target="_blank" style="color:var(--accent);text-decoration:none">MaximumADHD</a>
+        <span data-t-id="dari asset resmi Roblox Studio. Semua hak milik Roblox Corporation." data-t-en="from official Roblox Studio assets. All rights belong to Roblox Corporation.">dari asset resmi Roblox Studio. Semua hak milik Roblox Corporation.</span>
+      </div>
+      <p style="font-size:8px;color:var(--gray);margin-top:10px;line-height:1.7">
+        💡 <span data-t-id="Tips: download file color.png + normal.png + roughness.png + metalness.png dari material yang kamu mau, lalu upload ke tab" data-t-en="Tip: download the color.png + normal.png + roughness.png + metalness.png files from the material you want, then upload them to the">Tips: download file color.png + normal.png + roughness.png + metalness.png dari material yang kamu mau, lalu upload ke tab</span>
+        <strong>3D Viewer</strong>
+        <span data-t-id="untuk preview langsung." data-t-en="tab for instant preview.">untuk preview langsung.</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-prisma">
+    <div class="card">
+      <div class="label">🔷 <span data-t-id="CONVERT PRISMA → OBJ" data-t-en="CONVERT PRISMA → OBJ">CONVERT PRISMA → OBJ</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <span data-t-id="Upload file .prisma dari Prisma 3D untuk dikonversi ke OBJ + MTL + texture. Kompatibel dengan Blender, Nomad Sculpt, dan software 3D lainnya." data-t-en="Upload a .prisma file from Prisma 3D to convert to OBJ + MTL + textures. Compatible with Blender, Nomad Sculpt, and other 3D software.">Upload file .prisma dari Prisma 3D untuk dikonversi ke OBJ + MTL + texture. Kompatibel dengan Blender, Nomad Sculpt, dan software 3D lainnya.</span>
+      </p>
+      <input type="file" id="prisma-file-input" accept=".prisma" style="display:none" onchange="handlePrismaUpload(event)">
+      <button class="btn" onclick="document.getElementById('prisma-file-input').click()" style="width:100%">📁 <span data-t-id="PILIH FILE .PRISMA" data-t-en="CHOOSE .PRISMA FILE">PILIH FILE .PRISMA</span></button>
+      <div id="prisma-download-options" style="display:none;margin-top:8px">
+        <button class="btn" id="prisma-obj-btn" onclick="downloadPrismaOBJ()" style="width:100%">⬇ <span data-t-id="DOWNLOAD SEBAGAI OBJ" data-t-en="DOWNLOAD AS OBJ">DOWNLOAD SEBAGAI OBJ</span></button>
+        <button class="btn btn-green" id="prisma-glb-btn" onclick="buildPrismaGLB()" style="width:100%;margin-top:8px">⬇ <span data-t-id="DOWNLOAD SEBAGAI GLB" data-t-en="DOWNLOAD AS GLB">DOWNLOAD SEBAGAI GLB</span></button>
+      </div>
+      <div id="prisma-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
   </div>
 
   <div class="panel" id="panel-api">
     <div class="card">
-      <div class="label">ENDPOINT API</div>
+      <div class="label"><span data-t-id="ENDPOINT API" data-t-en="API ENDPOINT">ENDPOINT API</span></div>
       <p style="font-size:10px;color:var(--gray);line-height:1.9;margin-bottom:16px">
         Base URL: <code>http://localhost:8000</code><br>
-        Semua endpoint mengembalikan JSON kecuali <code>/download</code> yang mengembalikan ZIP.
+        <span data-t-id="Semua endpoint mengembalikan JSON kecuali " data-t-en="All endpoints return JSON except ">Semua endpoint mengembalikan JSON kecuali </span><code>/download</code><span data-t-id=" yang mengembalikan ZIP." data-t-en=" which returns ZIP."> yang mengembalikan ZIP.</span>
       </p>
       <table style="width:100%;border-collapse:collapse;font-size:10px">
         <thead>
           <tr style="color:var(--red);font-family:'Press Start 2P',monospace;font-size:8px">
             <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">METHOD</th>
             <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">ENDPOINT</th>
-            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)">KETERANGAN</th>
+            <th style="text-align:left;padding:6px;border-bottom:1px solid var(--gray2)"><span data-t-id="KETERANGAN" data-t-en="DESCRIPTION">KETERANGAN</span></th>
           </tr>
         </thead>
         <tbody id="api-table"></tbody>
       </table>
     </div>
     <div class="api-note">
-      <strong>⚠ KEAMANAN</strong> — API key dan cookie Roblox disimpan di file <code>.env</code> di server.
-      Tidak pernah dikirim ke browser. Jangan share file <code>.env</code> atau commit ke Git.
+      <strong>⚠ <span data-t-id="KEAMANAN" data-t-en="SECURITY">KEAMANAN</span></strong> — <span data-t-id="API key dan cookie Roblox disimpan di file " data-t-en="API key and Roblox cookies are stored in the ">API key dan cookie Roblox disimpan di file </span><code>.env</code><span data-t-id=" di server." data-t-en=" file on the server."> di server.</span>
+      <span data-t-id="Tidak pernah dikirim ke browser. Jangan share file " data-t-en="Never sent to the browser. Do not share the ">Tidak pernah dikirim ke browser. Jangan share file </span><code>.env</code><span data-t-id=" atau commit ke Git." data-t-en=" file or commit it to Git."> atau commit ke Git.</span>
     </div>
   </div>
 </main>
 
-<footer>ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
+<section class="patch-section">
+  <div class="patch-header"><span data-t-id="PATCH NOTES" data-t-en="PATCH NOTES">PATCH NOTES</span></div>
+  <div class="timeline">
+
+    <div class="tl-item latest">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.7 <span class="tl-badge-new">LATEST</span></div>
+      <div class="tl-date"><span data-t-id="13 Juli 2026" data-t-en="July 13, 2026">13 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Fitur Studio Materials \u2014 koleksi texture PBR resmi Roblox Studio" data-t-en="Studio Materials feature \u2014 official Roblox Studio PBR texture collection">Fitur Studio Materials — koleksi texture PBR resmi Roblox Studio</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Peningkatan stabilitas dan penanganan error di beberapa bagian situs" data-t-en="Improved stability and error handling across several parts of the site">Peningkatan stabilitas dan penanganan error di beberapa bagian situs</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.6</div>
+      <div class="tl-date"><span data-t-id="13 Juli 2026" data-t-en="July 13, 2026">13 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Fitur 3D Material Preview — upload texture map, lihat hasil di objek Sphere/Cube sebelum dipakai di software 3D" data-t-en="3D Material Preview feature — upload texture maps, preview on a Sphere/Cube before using in 3D software">Fitur 3D Material Preview — upload texture map, lihat hasil di objek Sphere/Cube sebelum dipakai di software 3D</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="3D Viewer mendukung 8 slot texture map (Albedo, Normal, Roughness, AO, Emissive, Specular, Bump, Metallic)" data-t-en="3D Viewer supports 8 texture map slots (Albedo, Normal, Roughness, AO, Emissive, Specular, Bump, Metallic)">3D Viewer mendukung 8 slot texture map (Albedo, Normal, Roughness, AO, Emissive, Specular, Bump, Metallic)</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Download 1 Map sekarang validasi upload texture terlebih dahulu" data-t-en="Download 1 Map now validates texture upload first">Download 1 Map sekarang validasi upload texture terlebih dahulu</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Error handling WebGL context untuk mencegah halaman blank saat device tidak mendukung" data-t-en="WebGL context error handling to prevent blank page on unsupported devices">Error handling WebGL context untuk mencegah halaman blank saat device tidak mendukung</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Dropdown \"Lainnya\" sekarang tetap nempel di posisi tombol saat scroll" data-t-en="\"More\" dropdown now stays anchored to the button while scrolling">Dropdown "Lainnya" sekarang tetap nempel di posisi tombol saat scroll</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.5</div>
+      <div class="tl-date"><span data-t-id="12 Juli 2026" data-t-en="July 12, 2026">12 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Fitur RGBA Packed Export untuk workflow Unity/Unreal/game engine (ORM texture)" data-t-en="RGBA Packed Export feature for Unity/Unreal/game engine workflow (ORM texture)">Fitur RGBA Packed Export untuk workflow Unity/Unreal/game engine (ORM texture)</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Opsi Download 1 Map — pilih satu texture map spesifik tanpa perlu ZIP semua" data-t-en="Download 1 Map option — select one specific texture map without needing full ZIP">Opsi Download 1 Map — pilih satu texture map spesifik tanpa perlu ZIP semua</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Kontak Report Bug via Email & Discord di footer" data-t-en="Report Bug contact via Email & Discord in footer">Kontak Report Bug via Email & Discord di footer</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Dropdown \"Lainnya\" sekarang sejajar dengan tombol, tidak lagi terpisah jauh di layar lebar" data-t-en="\"More\" dropdown now aligns with the button, no longer offset on wide screens">Dropdown "Lainnya" sekarang sejajar dengan tombol, tidak lagi terpisah jauh di layar lebar</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Tab bar center-aligned di layar desktop/tablet" data-t-en="Tab bar center-aligned on desktop/tablet screens">Tab bar center-aligned di layar desktop/tablet</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Layout card Texture Generator dirapikan — dipisah sesuai fungsi" data-t-en="Texture Generator card layout reorganized — separated by function">Layout card Texture Generator dirapikan — dipisah sesuai fungsi</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.4</div>
+      <div class="tl-date"><span data-t-id="12 Juli 2026" data-t-en="July 12, 2026">12 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Toggle bahasa ID/EN global di seluruh halaman" data-t-en="Global ID/EN language toggle across the entire site">Toggle bahasa ID/EN global di seluruh halaman</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Emissive map sekarang mempertahankan warna asli, bukan grayscale" data-t-en="Emissive map now preserves original color instead of grayscale">Emissive map sekarang mempertahankan warna asli, bukan grayscale</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Nama file hasil download diberi prefix agar tidak saling menimpa" data-t-en="Downloaded filenames prefixed to prevent overwrite conflicts">Nama file hasil download diberi prefix agar tidak saling menimpa</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Preview hasil Bake Prisma 3D dipisah dari proses download" data-t-en="Bake Prisma 3D preview separated from the download process">Preview hasil Bake Prisma 3D dipisah dari proses download</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Peringatan otomatis untuk upload texture beresolusi 4K ke atas" data-t-en="Automatic warning for 4K+ resolution texture uploads">Peringatan otomatis untuk upload texture beresolusi 4K ke atas</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Indikator loading saat proses generate & bake texture berjalan" data-t-en="Loading indicator during texture generation & baking">Indikator loading saat proses generate & bake texture berjalan</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.3</div>
+      <div class="tl-date"><span data-t-id="10 Juli 2026" data-t-en="July 10, 2026">10 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Nudge popup rekomendasi login Roblox setelah 5x fetch/download" data-t-en="Nudge popup recommending Roblox login after 5x fetch/download">Nudge popup rekomendasi login Roblox setelah 5x fetch/download</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Progress bar limit di setiap panel (Avatar, Katalog, Audio, 3D Model)" data-t-en="Limit progress bar in every panel (Avatar, Catalog, Audio, 3D Model)">Progress bar limit di setiap panel (Avatar, Katalog, Audio, 3D Model)</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Patch Notes section ditambahkan ke halaman utama" data-t-en="Patch Notes section added to the main page">Patch Notes section ditambahkan ke halaman utama</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.2</div>
+      <div class="tl-date"><span data-t-id="10 Juli 2026" data-t-en="July 10, 2026">10 Juli 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Union/CSG parts sekarang di-render dengan benar di GLB (sebelumnya hilang dari model akhir)" data-t-en="Union/CSG parts now render correctly in GLB (previously missing from the final model)">Union/CSG parts sekarang di-render dengan benar di GLB (sebelumnya hilang dari model akhir)</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Texture mapping untuk MeshPart & Union diperbaiki" data-t-en="Texture mapping for MeshPart & Union fixed">Texture mapping untuk MeshPart & Union diperbaiki</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Favicon custom 3DRBXMT" data-t-en="Custom 3DRBXMT favicon">Favicon custom 3DRBXMT</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.1</div>
+      <div class="tl-date"><span data-t-id="26 Juni 2026" data-t-en="June 26, 2026">26 Juni 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Full UI redesign — tema cyan/blue premium menggantikan tema merah cyberpunk" data-t-en="Full UI redesign — premium cyan/blue theme replacing the red cyberpunk theme">Full UI redesign — tema cyan/blue premium menggantikan tema merah cyberpunk</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Animasi Motion.js — popup entry spring, stagger cards, button hover" data-t-en="Motion.js animations — popup entry spring, stagger cards, button hover">Animasi Motion.js — popup entry spring, stagger cards, button hover</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id='Dropdown "More" tidak muncul karena overflow clipping' data-t-en='"More" dropdown not appearing due to overflow clipping'>Dropdown "More" tidak muncul karena overflow clipping</span></li>
+          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Tab switch active indicator tidak berpindah" data-t-en="Tab switch active indicator not moving">Tab switch active indicator tidak berpindah</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v2.0</div>
+      <div class="tl-date"><span data-t-id="25 Juni 2026" data-t-en="June 25, 2026">25 Juni 2026</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Rebrand ke 3DRBXMT (3D Roblox Model Mobile Tools)" data-t-en="Rebranded to 3DRBXMT (3D Roblox Model Mobile Tools)">Rebrand ke 3DRBXMT (3D Roblox Model Mobile Tools)</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Security popup dengan penjelasan transparansi & bukti open source" data-t-en="Security popup with transparency explanation & open source proof">Security popup dengan penjelasan transparansi & bukti open source</span></li>
+          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Dukungan bilingual (ID/EN) di seluruh interface" data-t-en="Bilingual support (ID/EN) across the interface">Dukungan bilingual (ID/EN) di seluruh interface</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-version">v1.0</div>
+      <div class="tl-date"><span data-t-id="Rilis Awal" data-t-en="Initial Release">Rilis Awal</span></div>
+      <div class="tl-card">
+        <ul class="tl-changes">
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Download avatar Roblox sebagai OBJ/GLTF dengan UV texture" data-t-en="Download Roblox avatars as OBJ/GLTF with UV texture">Download avatar Roblox sebagai OBJ/GLTF dengan UV texture</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Dukungan katalog item & audio Roblox" data-t-en="Roblox catalog item & audio support">Dukungan katalog item & audio Roblox</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Convert RBXM → GLB dengan dukungan Union/CSG" data-t-en="Convert RBXM → GLB with Union/CSG support">Convert RBXM → GLB dengan dukungan Union/CSG</span></li>
+          <li><span class="tl-tag tag-feat">CORE</span><span data-t-id="Login Roblox OAuth opsional untuk limit lebih tinggi" data-t-en="Optional Roblox OAuth login for higher limits">Login Roblox OAuth opsional untuk limit lebih tinggi</span></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<footer>
+  <span data-t-id="ROBLOX 3D DOWNLOADER · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION" data-t-en="ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION">ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span>
+  <div class="footer-contact">
+    <button class="footer-contact-item" onclick="location.href='mailto:shafarois5@gmail.com?subject=Bug Report - 3DRBXMT'">
+      ✉️ <span data-t-id="Laporkan Bug via Email" data-t-en="Report Bug via Email">Laporkan Bug via Email</span>
+    </button>
+    <button class="footer-contact-item" onclick="navigator.clipboard.writeText('sh4shark').then(()=>this.querySelector('span').textContent=(document.documentElement.getAttribute('data-lang')==='en'?'Copied!':'Tersalin!'))">
+      💬 Discord: sh4shark <span style="font-size:9px;opacity:.6" data-t-id="(klik untuk copy)" data-t-en="(click to copy)">(klik untuk copy)</span>
+    </button>
+  </div>
+</footer>
 
 <script>
-const BASE = 'https://web-production-62c2e.up.railway.app';
+const BASE = '';
 
 // ── TABS ──────────────────────────────────────────────────────────
 function switchTab(name){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['avatar','catalog','audio'][i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('panel-'+name).classList.add('active');
+  const next=document.getElementById('panel-'+name);
+  if(next) next.classList.add('active');
+  document.querySelectorAll('.tab').forEach(t=>{
+    const oc=t.getAttribute('onclick')||'';
+    t.classList.toggle('active', oc.includes("'"+name+"'"));
+  });
+  if(typeof Motion!=='undefined'&&next) animatePanelCards(next);
 }
 
+let dropdownAnchorBtn = null;
 function toggleDropdown(e){
-  e.stopPropagation();
+  if(e) e.stopPropagation();
   const m=document.getElementById('dropdown-menu');
   if(m.style.display==='none' || m.style.display===''){
+    dropdownAnchorBtn = e ? e.currentTarget : null;
+    updateDropdownPosition();
     m.style.display='block';
   } else {
     m.style.display='none';
+    dropdownAnchorBtn = null;
   }
 }
+function updateDropdownPosition(){
+  const m=document.getElementById('dropdown-menu');
+  if(!dropdownAnchorBtn || m.style.display !== 'block') return;
+  const r = dropdownAnchorBtn.getBoundingClientRect();
+  m.style.top = (r.bottom + 4) + 'px';
+  m.style.left = r.left + 'px';
+  m.style.right = 'auto';
+}
+window.addEventListener('scroll', updateDropdownPosition, { passive:true });
+window.addEventListener('resize', updateDropdownPosition);
 
 document.addEventListener("click",function(e){
   if(!e.target.closest(".tab-dropdown")){
@@ -513,7 +1434,7 @@ async function fetchAvatar(){
     st('av-status','Mengambil info avatar…','loading'); prog('av-prog',20);
     const res=await fetch(`${BASE}/api/avatar/info?user=${encodeURIComponent(input)}`);
     const rawText=await res.text();
-    if(!res.ok){ let e={detail:rawText}; try{e=JSON.parse(rawText);}catch(_){} throw new Error(e.detail?.error||e.detail||res.statusText); }
+    if(!res.ok){ let e={error:rawText}; try{e=JSON.parse(rawText);}catch(_){} throw new Error(e.error||rawText||res.statusText||'Gagal mengambil info avatar'); }
     let data; try{ data=JSON.parse(rawText); }catch(pe){ throw new Error('INFO response bukan JSON: '+rawText.substring(0,150)); }
     currentUser=data;
     fillAvatarProfile(data);
@@ -580,26 +1501,32 @@ async function downloadAvatar(format){
   if(!currentUser) return;
   const user=document.getElementById('av-input').value.trim();
   const name=currentUser.username;
-  st('av-status',`⏳ Download ${format.toUpperCase()}... (30-60 detik)`,'loading');
+  st('av-status',`⏳ Download... (30-60 detik)`,'loading');
   const btn=document.getElementById(`btn-av-${format}`);
   if(btn) btn.disabled=true;
   try{
-    // Pakai /api/v2/avatar yang sudah pakai cloudscraper + cookie
     const res=await fetch(`${BASE}/api/v2/avatar?user=${encodeURIComponent(user)}`);
     if(!res.ok){
       const t=await res.text();
       let e={error:t}; try{e=JSON.parse(t);}catch(_){}
-      throw new Error(e.error||res.statusText);
+      throw e;
     }
     const blob=await res.blob();
-    const a=Object.assign(document.createElement('a'),{
-      href:URL.createObjectURL(blob),
-      download:`${name}_avatar.zip`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('av-status',`✓ Download selesai! Buka ZIP → import .obj di Nomad Sculpt / Prisma 3D`,'ok');
+
+    if(format === 'gltf'){
+      if(!window.convertZipToGLB){ throw new Error("Konverter GLB belum siap, coba lagi sebentar."); }
+      await window.convertZipToGLB(blob, `${name}_avatar`, (msg) => st('av-status', msg, 'loading'));
+      st('av-status',`✓ GLB berhasil! File siap import ke Nomad Sculpt / Prisma 3D / Blender.`,'ok');
+    } else {
+      const a=Object.assign(document.createElement('a'),{
+        href:URL.createObjectURL(blob),
+        download:`${name}_avatar.zip`
+      });
+      a.click(); URL.revokeObjectURL(a.href);
+      st('av-status',`✓ Download selesai! Buka ZIP → import .obj di Nomad Sculpt / Prisma 3D`,'ok');
+    }
   }catch(e){
-    st('av-status','✗ '+e.message,'err');
+    showApiError('av-status', e.error?e:{message:e.message});
   }finally{
     if(btn) btn.disabled=false;
   }
@@ -618,7 +1545,7 @@ async function fetchCatalog(){
   try{
     st('cat-status','Mengambil detail item…','loading'); prog('cat-prog',30);
     const res=await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||res.statusText||'Gagal mengambil data'); }
     const data=await res.json();
     currentAssetId=id;
     fillCatalogInfo(data);
@@ -644,19 +1571,27 @@ function fillCatalogInfo(d){
 
 async function downloadCatalog(format){
   if(!currentAssetId) return;
-  st('cat-status',`Mengunduh ${format.toUpperCase()} ZIP…`,'loading');
+  st('cat-status',`⏳ Mengunduh data...`,'loading');
   try{
-    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=${encodeURIComponent(format)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||res.statusText); }
+    // Selalu minta versi dengan texture (gltf di backend = obj+mtl+texture bundle) sbg sumber konversi
+    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf`);
+    if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
     const name=document.getElementById('cat-name').textContent||currentAssetId;
-    const a=Object.assign(document.createElement('a'),{
-      href:URL.createObjectURL(blob),
-      download:`${name}_${format}.zip`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('cat-status',`✓ Download selesai!`,'ok');
-  }catch(e){ st('cat-status','✗ '+e.message,'err'); }
+
+    if(format === 'gltf'){
+      if(!window.convertZipToGLB){ throw new Error("Konverter GLB belum siap, coba lagi sebentar."); }
+      await window.convertZipToGLB(blob, `${name}`, (msg) => st('cat-status', msg, 'loading'));
+      st('cat-status',`✓ GLB berhasil! File siap import ke Nomad Sculpt / Prisma 3D / Blender.`,'ok');
+    } else {
+      const a=Object.assign(document.createElement('a'),{
+        href:URL.createObjectURL(blob),
+        download:`${name}_${format}.zip`
+      });
+      a.click(); URL.revokeObjectURL(a.href);
+      st('cat-status',`✓ Download selesai!`,'ok');
+    }
+  }catch(e){ showApiError('cat-status', e.error?e:{message:e.message}); }
 }
 
 // ── API TABLE ─────────────────────────────────────────────────────
@@ -858,12 +1793,70 @@ function setLang(lang){
     b.classList.toggle('active',(i===0&&lang==='id')||(i===1&&lang==='en'));
   });
 }
-function closeModal(){
-  document.getElementById('security-modal').style.display='none';
-  localStorage.setItem('modal_seen','1');
+function initModalAnimation(){
+  const { animate } = Motion;
+  const box = document.querySelector('.modal-box');
+  const cards = Array.from(document.querySelectorAll('.sec-card'));
+  const proof = document.querySelector('.proof-section');
+  const footer = document.querySelector('.modal-footer');
+
+  if(!box) return;
+
+  // Set initial states
+  box.style.opacity = '0';
+  cards.forEach(c => { c.style.opacity='0'; c.style.transform='translateY(20px)'; });
+  if(proof) proof.style.opacity = '0';
+  if(footer) footer.style.opacity = '0';
+
+  // 1. Box entry
+  animate(box,
+    { opacity:[0,1], scale:[0.92,1] },
+    { duration:0.45, easing:[0.34,1.56,0.64,1] }
+  );
+
+  // 2. Cards stagger manually
+  cards.forEach((card, i) => {
+    setTimeout(() => {
+      animate(card,
+        { opacity:[0,1], y:[20,0] },
+        { duration:0.35, easing:[0.22,1,0.36,1] }
+      );
+    }, 280 + i * 80);
+  });
+
+  // 3. Proof + footer
+  if(proof) setTimeout(() => animate(proof, { opacity:[0,1], y:[12,0] }, { duration:0.32, easing:[0.22,1,0.36,1] }), 650);
+  if(footer) setTimeout(() => animate(footer, { opacity:[0,1], y:[12,0] }, { duration:0.32, easing:[0.22,1,0.36,1] }), 750);
+
+  // 4. Button spring hover
+  document.querySelectorAll('.modal-btn').forEach(btn => {
+    btn.addEventListener('mouseenter', () => animate(btn, { scale:1.04 }, { duration:0.2 }));
+    btn.addEventListener('mouseleave', () => animate(btn, { scale:1 }, { duration:0.2 }));
+    btn.addEventListener('mousedown', () => animate(btn, { scale:0.96 }, { duration:0.1 }));
+    btn.addEventListener('mouseup', () => animate(btn, { scale:1.04 }, { duration:0.15 }));
+  });
 }
+function closeModal(){
+  const { animate } = Motion;
+  const overlay = document.getElementById('security-modal');
+  animate(overlay, { opacity:[1,0] }, { duration:0.22, easing:'ease-in' })
+    .then(() => {
+      overlay.style.display = 'none';
+      localStorage.setItem('modal_seen','1');
+    });
+}
+window.onerror = function(msg,src,line,col,err){
+  alert('JS ERROR: '+msg+' line:'+line);
+};
 document.addEventListener('DOMContentLoaded',()=>{
-  if(localStorage.getItem('modal_seen')) document.getElementById('security-modal').style.display='none';
+  const modal = document.getElementById('security-modal');
+  modal.style.display='flex';
+  modal.style.opacity='1';
+  try {
+    initModalAnimation();
+  } catch(e) {
+    alert('initModalAnimation error: '+e.message);
+  }
   setLang(currentLang);
 });
 
@@ -920,34 +1913,245 @@ async function downloadAudio(){
     a.click(); URL.revokeObjectURL(a.href);
     document.getElementById("audio-status").textContent="✓ Download selesai!";
   }catch(e){
-    document.getElementById("audio-status").textContent="✗ "+e.message;
+    showApiError("audio-status", e);
   }finally{ btn.disabled=false; }
+}
+
+function showApiError(elId, err){
+  let msg = err.message || err.error || "Terjadi kesalahan";
+  if(err.code === "COOKIE_EXPIRED"){
+    msg = "⚠ Server cookie expired. Admin perlu update ROBLOX_COOKIE.";
+  } else if(err.code === "CLOUDFLARE_BLOCKED"){
+    msg = "⚠ Roblox CDN sedang membatasi akses. Coba lagi dalam 30 detik.";
+  } else if(err.code === "TIMEOUT"){
+    msg = "⚠ Roblox lambat merespons. Coba lagi.";
+  }
+  const el = document.getElementById(elId);
+  if(typeof st === 'function' && el.className.includes('status')){
+    st(elId, '✗ '+msg, 'err');
+  } else {
+    el.textContent = "✗ " + msg;
+  }
 }
 
 document.getElementById("audio-input").addEventListener("keydown",e=>{ if(e.key==="Enter") fetchAudio(); });
 
+// ── 3D MODEL (create.roblox.com) ──────────────────────────────────
+let currentModelData = null;
+
+function extractAssetId(input) {
+  input = input.trim();
+  const m = input.match(/(?:create\.roblox\.com\/.*?\/)?(\d{5,})/);
+  return m ? m[1] : input;
+}
+
+let currentUploadData = null;
+
+async function handleRBXMUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById("rbxm-upload-status");
+  statusEl.textContent = "⏳ Menganalisis " + file.name + "...";
+  document.getElementById("rbxm-result").style.display = "none";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try{
+    const res = await fetch(`${BASE}/api/v2/model/convert`, {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if(!res.ok && !("supported" in data)) throw new Error(data.error || res.statusText);
+
+    currentUploadData = data;
+    window.currentModelData = data;
+
+    const badge = document.getElementById("rbxm-support-badge");
+    const buildBtn = document.getElementById("rbxm-build-btn");
+    if(data.supported){
+      badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — siap dikonversi ke GLB';
+      buildBtn.disabled = false;
+      buildBtn.style.opacity = "1";
+    } else {
+      badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span>';
+      buildBtn.disabled = true;
+      buildBtn.style.opacity = "0.5";
+    }
+
+    document.getElementById("rbxm-filename").textContent = data.filename || file.name;
+    document.getElementById("rbxm-meshpart-count").textContent = data.meshPartCount ?? "—";
+    document.getElementById("rbxm-part-count").textContent = data.partCount ?? "—";
+    document.getElementById("rbxm-union-count").textContent = data.unionCount ?? "—";
+    document.getElementById("rbxm-total-count").textContent = data.totalParts ?? "—";
+
+    const reasonsEl = document.getElementById("rbxm-reasons");
+    if(data.reasons && data.reasons.length){
+      reasonsEl.innerHTML = data.reasons.map(r => "⚠ "+r).join("<br>");
+    } else {
+      reasonsEl.textContent = "";
+    }
+
+    document.getElementById("rbxm-result").style.display = "block";
+    statusEl.textContent = data.supported
+      ? "✓ File berhasil dianalisis."
+      : "⚠ File tidak memenuhi kriteria konversi.";
+  }catch(e){
+    statusEl.textContent = "✗ " + e.message;
+  }
+}
+
+async function buildFromUpload(){
+  // Reuse buildModelGLB - sudah set window.currentModelData di handleRBXMUpload
+  const btn = document.getElementById("rbxm-build-btn");
+  const statusEl = document.getElementById("rbxm-upload-status");
+  // Redirect status output ke rbxm-upload-status
+  const origStatus = document.getElementById("model-status");
+  const origBuildBtn = document.getElementById("model-build-btn");
+  // Sementara swap element reference supaya buildModelGLB update status yang benar
+  btn.disabled = true;
+  await window.buildModelGLB(statusEl, btn);
+}
+
+async function downloadRBXM(){
+  const raw = document.getElementById("model-input").value.trim();
+  if(!raw){ document.getElementById("model-status").textContent = "Masukkan Asset ID atau URL."; return; }
+  const id = extractAssetId(raw);
+  const btn = document.getElementById("model-dl-rbxm-btn");
+  btn.disabled = true;
+  document.getElementById("model-status").textContent = "⏳ Mengunduh file RBXM...";
+  try{
+    const res = await fetch(`${BASE}/api/v2/model/download?id=${encodeURIComponent(id)}`);
+    if(!res.ok){
+      const e = await res.json().catch(() => ({error: res.statusText}));
+      throw new Error(e.error || res.statusText);
+    }
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(blob),
+      download: `${id}.rbxm`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    document.getElementById("model-status").textContent = `✓ Download ${id}.rbxm selesai! Buka di Roblox Studio.`;
+  }catch(e){
+    document.getElementById("model-status").textContent = "✗ " + e.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function fetchModelInfo(){
+  const raw = document.getElementById("model-input").value.trim();
+  if(!raw){ document.getElementById("model-status").textContent = "Masukkan Asset ID atau URL."; return; }
+  const id = extractAssetId(raw);
+  const btn = document.getElementById("model-btn");
+  btn.disabled = true;
+  document.getElementById("model-status").textContent = "⏳ Menganalisis model...";
+  document.getElementById("model-result").style.display = "none";
+
+  try{
+    const res = await fetch(`${BASE}/api/v2/model/info?id=${encodeURIComponent(id)}`);
+    const txt = await res.text();
+    let data; try{ data = JSON.parse(txt); }catch(_){ throw new Error("Response bukan JSON: "+txt.substring(0,150)); }
+    if(!res.ok && !("supported" in data)){ throw new Error(data.error || res.statusText); }
+
+    currentModelData = data;
+    window.currentModelData = data;
+
+    const badge = document.getElementById("model-support-badge");
+    const buildBtn = document.getElementById("model-build-btn");
+    if(data.supported){
+      badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — model sederhana, siap dibangun';
+      buildBtn.disabled = false;
+      buildBtn.style.opacity = "1";
+    } else {
+      badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span> — di luar scope MVP saat ini';
+      buildBtn.disabled = true;
+      buildBtn.style.opacity = "0.5";
+    }
+
+    document.getElementById("model-meshpart-count").textContent = data.meshPartCount ?? "—";
+    document.getElementById("model-part-count").textContent = data.partCount ?? "—";
+    document.getElementById("model-union-count").textContent = data.unionCount ?? "—";
+    document.getElementById("model-total-count").textContent = data.totalParts ?? "—";
+
+    const reasonsEl = document.getElementById("model-reasons");
+    if(data.reasons && data.reasons.length){
+      reasonsEl.innerHTML = data.reasons.map(r => "⚠ "+r).join("<br>");
+    } else {
+      reasonsEl.textContent = "";
+    }
+
+    document.getElementById("model-result").style.display = "block";
+    document.getElementById("model-status").textContent = data.supported
+      ? "✓ Model dapat diproses."
+      : "⚠ Model tidak memenuhi kriteria MVP.";
+  }catch(e){
+    document.getElementById("model-status").textContent = "✗ " + e.message;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("model-input").addEventListener("keydown", e=>{ if(e.key==="Enter") fetchModelInfo(); });
+
 // ── TEXTURE GENERATOR ────────────────────────────────────────────
 let texCanvas = null;
 
+let texOriginalName = "texture";
+let pendingTexImg = null, pendingTexUrl = null;
 function loadTexture(event){
   const file = event.target.files[0];
   if(!file) return;
+  texOriginalName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_") || "texture";
   document.getElementById("tex-status").textContent = "Loading texture...";
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = function(){
-    texCanvas = document.createElement("canvas");
-    texCanvas.width = img.width;
-    texCanvas.height = img.height;
-    const ctx = texCanvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    generateMaps(texCanvas);
-    document.getElementById("tex-result").style.display = "block";
-    document.getElementById("tex-status").textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+    if(img.width >= 4096 || img.height >= 4096){
+      pendingTexImg = img; pendingTexUrl = url;
+      document.getElementById("texwarn-body").innerHTML =
+        'Texture ini berukuran <strong>'+img.width+'x'+img.height+'</strong> (4K+). Generate 9 map sekaligus di resolusi ini bisa bikin device kamu <strong>lag</strong> dan preview <strong>loading lambat</strong>, terutama di HP dengan spesifikasi standar.<br><br>Rekomendasi: gunakan resolusi 1K-2K untuk performa terbaik. Tapi kamu tetap bisa lanjut kalau device kamu mumpuni.';
+      document.getElementById("texwarn-overlay").style.display = "flex";
+      document.getElementById("tex-status").textContent = "⚠ Menunggu konfirmasi...";
+      return;
+    }
+    finishLoadTexture(img, url);
   };
   img.src = url;
 }
+function finishLoadTexture(img, url){
+  texCanvas = document.createElement("canvas");
+  texCanvas.width = img.width;
+  texCanvas.height = img.height;
+  const ctx = texCanvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  URL.revokeObjectURL(url);
+
+  const st = document.getElementById("tex-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating 9 texture maps ('+img.width+'x'+img.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+
+  setTimeout(() => {
+    generateMaps(texCanvas);
+    document.getElementById("tex-result").style.display = "block";
+    st.textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+  }, 50);
+}
+function cancelTexWarn(){
+  document.getElementById("texwarn-overlay").style.display = "none";
+  if(pendingTexUrl) URL.revokeObjectURL(pendingTexUrl);
+  pendingTexImg = null; pendingTexUrl = null;
+  document.getElementById("tex-status").textContent = "Dibatalkan.";
+  document.getElementById("tex-input").value = "";
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("texwarn-continue-btn").addEventListener("click", () => {
+    document.getElementById("texwarn-overlay").style.display = "none";
+    if(pendingTexImg) finishLoadTexture(pendingTexImg, pendingTexUrl);
+    pendingTexImg = null; pendingTexUrl = null;
+  });
+});
 
 function generateMaps(src){
   const w = src.width, h = src.height;
@@ -997,12 +2201,16 @@ function generateMaps(src){
   }
   putImageData("canvas-ao",ao,w,h);
 
-  // Emissive map (bright areas)
+  // Emissive map (bright areas - preserves original RGB color)
   const emi = new ImageData(w,h);
   for(let i=0;i<data.length;i+=4){
     const g=gray(i);
-    const v=g>200?g:0;
-    emi.data[i]=emi.data[i+1]=emi.data[i+2]=v; emi.data[i+3]=255;
+    if(g>200){
+      emi.data[i]=data[i]; emi.data[i+1]=data[i+1]; emi.data[i+2]=data[i+2];
+    } else {
+      emi.data[i]=emi.data[i+1]=emi.data[i+2]=0;
+    }
+    emi.data[i+3]=255;
   }
   putImageData("canvas-emissive",emi,w,h);
 
@@ -1060,6 +2268,22 @@ function putImageData(id,imgData,w,h){
   c.getContext("2d").putImageData(imgData,0,0);
 }
 
+function downloadSingleMap(){
+  if(!texCanvas){
+    alert("Upload texture terlebih dahulu sebelum download.");
+    return;
+  }
+  const id = document.getElementById("single-map-select").value;
+  const c = document.getElementById("canvas-"+id);
+  if(!c) return;
+  c.toBlob(blob => {
+    const a = Object.assign(document.createElement("a"),{
+      href: URL.createObjectURL(blob),
+      download: texOriginalName+"_"+id+".png"
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  }, "image/png");
+}
 async function downloadTextures(){
   if(!texCanvas){return;}
   document.getElementById("tex-status").textContent="Generating ZIP...";
@@ -1068,23 +2292,30 @@ async function downloadTextures(){
   for(const id of ids){
     const c = document.getElementById("canvas-"+id);
     const blob = await new Promise(r=>c.toBlob(r,"image/png"));
-    zip.file(id+".png", blob);
+    zip.file(texOriginalName+"_"+id+".png", blob);
   }
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
     href: URL.createObjectURL(content),
-    download: "texture_maps.zip"
+    download: texOriginalName+"_maps.zip"
   });
   a.click(); URL.revokeObjectURL(a.href);
   document.getElementById("tex-status").textContent="✓ Download selesai!";
 }
 
-async function bakeForPrisma(){
+function drawBakePreview(canvasId, sourceCanvas){
+  const target = document.getElementById(canvasId);
+  target.width = sourceCanvas.width;
+  target.height = sourceCanvas.height;
+  target.getContext("2d").drawImage(sourceCanvas, 0, 0);
+}
+let bakedCanvases = null;
+async function previewBakePrisma(){
   if(!texCanvas){ return; }
   const st = document.getElementById("bake-status");
-  st.textContent = "Baking all maps for Prisma 3D...";
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Baking 3 slot texture ('+texCanvas.width+'x'+texCanvas.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+  await new Promise(r => setTimeout(r, 50));
   const w = texCanvas.width, h = texCanvas.height;
-  const zip = new JSZip();
   function getD(id){ return document.getElementById("canvas-"+id).getContext("2d").getImageData(0,0,w,h).data; }
   function newC(){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
 
@@ -1098,7 +2329,7 @@ async function bakeForPrisma(){
     d1.data[i+3]=255;
   }
   x1.putImageData(d1,0,0);
-  zip.file("1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-1", c1);
 
   // SLOT 2: Normal + Bump blended
   const nrm=getD("normal"), bmp=getD("bump");
@@ -1110,7 +2341,7 @@ async function bakeForPrisma(){
     d2.data[i+3]=255;
   }
   x2.putImageData(d2,0,0);
-  zip.file("2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-2", c2);
 
   // SLOT 3: Roughness + Specular + Metallic + Curvature baked into Reflection
   const rgh=getD("roughness"), spec=getD("specular"), met=getD("metallic"), curv=getD("curvature");
@@ -1122,17 +2353,684 @@ async function bakeForPrisma(){
     d3.data[i+3]=255;
   }
   x3.putImageData(d3,0,0);
-  zip.file("3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
+  drawBakePreview("bake-preview-3", c3);
+  document.getElementById("bake-preview-wrap").style.display = "block";
 
-  zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: 1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: 2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: 3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
+  bakedCanvases = { c1, c2, c3 };
+  document.getElementById("bake-download-btn").style.display = "block";
+  st.innerHTML = "✓ Preview siap! Klik Download untuk simpan ZIP.";
+}
+
+async function downloadBakePrisma(){
+  if(!bakedCanvases){ return; }
+  const st = document.getElementById("bake-status");
+  st.textContent = "Generating ZIP...";
+  const zip = new JSZip();
+  const { c1, c2, c3 } = bakedCanvases;
+
+  zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
+  zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
+  zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nSlot 1 - Albedo: "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nSlot 2 - Normal: "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nSlot 3 - Reflection: "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Baking technique using Ibis Paint only works in Prisma 3D.\n");
 
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
     href: URL.createObjectURL(content),
-    download: "prisma3d_baked.zip"
+    download: texOriginalName+"_prisma3d_baked.zip"
   });
   a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ All maps baked and downloaded!";
+  st.textContent = "✓ Download selesai!";
+}
+</script>
+
+<script>
+function initModalAnimation_unused(){
+  const { animate, stagger, spring } = Motion;
+  const box = document.querySelector('.modal-box');
+  const cards = document.querySelectorAll('.sec-card');
+  const proof = document.querySelector('.proof-section');
+  const footer = document.querySelector('.modal-footer');
+
+  box.style.opacity = '0';
+  box.style.transform = 'scale(0.92) translateY(16px)';
+  cards.forEach(c => { c.style.opacity='0'; c.style.transform='translateY(20px)'; });
+  if(proof) proof.style.opacity = '0';
+  if(footer) footer.style.opacity = '0';
+
+  animate(box,
+    { opacity:[0,1], scale:[0.92,1], y:[16,0] },
+    { duration:0.45, easing: spring({ stiffness:280, damping:22 }) }
+  );
+  animate(cards,
+    { opacity:[0,1], y:[20,0] },
+    { delay: stagger(0.08, { start:0.28 }), duration:0.35, easing:[0.22,1,0.36,1] }
+  );
+  const delayed = [proof, footer].filter(Boolean);
+  if(delayed.length){
+    animate(delayed,
+      { opacity:[0,1], y:[12,0] },
+      { delay: stagger(0.1, { start:0.62 }), duration:0.32, easing:[0.22,1,0.36,1] }
+    );
+  }
+  document.querySelectorAll('.modal-btn').forEach(btn => {
+    btn.addEventListener('mouseenter', () =>
+      animate(btn, { scale:1.03 }, { easing: spring({ stiffness:400, damping:18 }), duration:0.25 })
+    );
+    btn.addEventListener('mouseleave', () =>
+      animate(btn, { scale:1 }, { easing: spring({ stiffness:400, damping:22 }), duration:0.3 })
+    );
+    btn.addEventListener('mousedown', () =>
+      animate(btn, { scale:0.96 }, { easing: spring({ stiffness:600, damping:20 }), duration:0.1 })
+    );
+    btn.addEventListener('mouseup', () =>
+      animate(btn, { scale:1.03 }, { easing: spring({ stiffness:400, damping:18 }), duration:0.2 })
+    );
+  });
+}
+</script>
+
+<script>
+function initMainAnimations(){
+  if(typeof Motion==='undefined') return;
+  const { animate } = Motion;
+  const header = document.querySelector('header');
+  const topbar = document.querySelector('.topbar');
+  if(topbar) animate(topbar,{opacity:[0,1]},{duration:0.4,easing:[0.22,1,0.36,1]});
+  if(header) animate(header,{opacity:[0,1],y:[-16,0]},{duration:0.5,delay:0.1,easing:[0.22,1,0.36,1]});
+  animatePanelCards(document.querySelector('.panel.active'));
+  initButtonSprings();
+}
+function animatePanelCards(panel){
+  if(!panel||typeof Motion==='undefined') return;
+  const { animate } = Motion;
+  requestAnimationFrame(()=>{
+    Array.from(panel.querySelectorAll('.card')).forEach((card,i)=>{
+      card.style.opacity='0';card.style.transform='translateY(14px)';
+      setTimeout(()=>animate(card,{opacity:[0,1],y:[14,0]},{duration:0.38,easing:[0.22,1,0.36,1]}),i*70);
+    });
+  });
+}
+function initButtonSprings(){
+  if(typeof Motion==='undefined') return;
+  const { animate } = Motion;
+  document.querySelectorAll('.btn,.topbar-link').forEach(btn=>{
+    btn.addEventListener('mouseenter',()=>animate(btn,{scale:1.04},{duration:0.18,easing:[0.34,1.56,0.64,1]}));
+    btn.addEventListener('mouseleave',()=>animate(btn,{scale:1},{duration:0.22,easing:[0.22,1,0.36,1]}));
+    btn.addEventListener('mousedown',()=>animate(btn,{scale:0.96},{duration:0.08}));
+    btn.addEventListener('mouseup',()=>animate(btn,{scale:1.04},{duration:0.14,easing:[0.34,1.56,0.64,1]}));
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  if(typeof Motion!=='undefined') initMainAnimations();
+});
+</script>
+
+<script>
+function trackFetchAction(){
+  let count = parseInt(localStorage.getItem('rbx3d_fetch_count') || '0', 10);
+  count += 1;
+  localStorage.setItem('rbx3d_fetch_count', count.toString());
+  updateProgressBars(count);
+  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1';
+  if(count % 5 === 0 && !alreadyDismissed){
+    showNudge();
+  }
+}
+function updateProgressBars(count){
+  const remainder = count % 5;
+  const display = remainder === 0 ? 5 : remainder;
+  const pct = (display / 5) * 100;
+  const ids = [
+    ['fp-count-avatar','fp-fill-avatar'],
+    ['fp-count-catalog','fp-fill-catalog'],
+    ['fp-count-audio','fp-fill-audio'],
+    ['fp-count-model','fp-fill-model']
+  ];
+  ids.forEach(([countId, fillId]) => {
+    const countEl = document.getElementById(countId);
+    const fillEl = document.getElementById(fillId);
+    if(countEl) countEl.textContent = display + '/5';
+    if(fillEl) fillEl.style.width = pct + '%';
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const initCount = parseInt(localStorage.getItem('rbx3d_fetch_count') || '0', 10);
+  updateProgressBars(initCount);
+});
+function showNudge(){
+  const overlay = document.getElementById('nudge-overlay');
+  overlay.style.display = 'flex';
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    const box = document.getElementById('nudge-box');
+    box.style.opacity = '0';
+    box.style.transform = 'scale(0.92)';
+    animate(box, { opacity:[0,1], scale:[0.92,1] }, { duration:0.35, easing:[0.22,1,0.36,1] });
+  }
+}
+function closeNudge(){
+  localStorage.setItem('rbx3d_nudge_dismissed', '1');
+  const overlay = document.getElementById('nudge-overlay');
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    animate(overlay, { opacity:[1,0] }, { duration:0.2 }).then(() => {
+      overlay.style.display = 'none';
+      overlay.style.opacity = '1';
+    });
+  } else {
+    overlay.style.display = 'none';
+  }
+}
+
+// Wrap existing fetch/download functions to track usage
+document.addEventListener('DOMContentLoaded', () => {
+  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar'];
+  fnNames.forEach(name => {
+    if(typeof window[name] === 'function'){
+      const original = window[name];
+      window[name] = function(...args){
+        trackFetchAction();
+        return original.apply(this, args);
+      };
+    }
+  });
+});
+</script>
+
+
+<script>
+let globalLang = localStorage.getItem('rbx3d_lang') || 'id';
+
+function setGlobalLang(lang){
+  globalLang = lang;
+  localStorage.setItem('rbx3d_lang', lang);
+  document.getElementById('topbar-lang-id').classList.toggle('active', lang === 'id');
+  document.getElementById('topbar-lang-en').classList.toggle('active', lang === 'en');
+  applyGlobalTranslations();
+}
+
+function applyGlobalTranslations(){
+  document.querySelectorAll('[data-t-id]').forEach(el => {
+    const idText = el.getAttribute('data-t-id');
+    const enText = el.getAttribute('data-t-en');
+    if(idText !== null && enText !== null){
+      el.textContent = globalLang === 'id' ? idText : enText;
+    }
+  });
+  document.querySelectorAll('[data-t-ph-id]').forEach(el => {
+    const idText = el.getAttribute('data-t-ph-id');
+    const enText = el.getAttribute('data-t-ph-en');
+    if(idText !== null && enText !== null){
+      el.placeholder = globalLang === 'id' ? idText : enText;
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('topbar-lang-id').classList.toggle('active', globalLang === 'id');
+  document.getElementById('topbar-lang-en').classList.toggle('active', globalLang === 'en');
+  applyGlobalTranslations();
+});
+</script>
+
+<script>
+const RGBA_MAP_OPTIONS = ["none","albedo","normal","roughness","ao","emissive","curvature","specular","bump","metallic"];
+function populateRGBASelects(){
+  const ids = ["rgba-r","rgba-g","rgba-b","rgba-a"];
+  const defaults = {"rgba-r":"ao","rgba-g":"roughness","rgba-b":"metallic","rgba-a":"none"};
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    if(!sel || sel.options.length > 0) return;
+    RGBA_MAP_OPTIONS.forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt === "none" ? "None" : opt.charAt(0).toUpperCase()+opt.slice(1);
+      if(opt === defaults[id]) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+let rgbaPackedCanvas = null;
+function generateRGBAPacked(){
+  if(!texCanvas) return;
+  const st = document.getElementById("rgba-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating packed texture...</div></div>';
+
+  setTimeout(() => {
+    const w = texCanvas.width, h = texCanvas.height;
+    function getData(id){
+      if(id === "none") return null;
+      const c = document.getElementById("canvas-"+id);
+      return c ? c.getContext("2d").getImageData(0,0,w,h).data : null;
+    }
+    const rData = getData(document.getElementById("rgba-r").value);
+    const gData = getData(document.getElementById("rgba-g").value);
+    const bData = getData(document.getElementById("rgba-b").value);
+    const aData = getData(document.getElementById("rgba-a").value);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(w, h);
+
+    for(let i=0;i<imgData.data.length;i+=4){
+      imgData.data[i]   = rData ? rData[i] : 0;
+      imgData.data[i+1] = gData ? gData[i] : 0;
+      imgData.data[i+2] = bData ? bData[i] : 0;
+      imgData.data[i+3] = aData ? aData[i] : 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    rgbaPackedCanvas = canvas;
+
+    const preview = document.getElementById("rgba-preview-canvas");
+    preview.width = w; preview.height = h;
+    preview.getContext("2d").drawImage(canvas, 0, 0);
+    preview.style.display = "block";
+
+    document.getElementById("rgba-download-btn").style.display = "block";
+    st.textContent = "✓ Packed texture siap! Klik Download untuk simpan.";
+  }, 50);
+}
+function downloadRGBAPacked(){
+  if(!rgbaPackedCanvas) return;
+  rgbaPackedCanvas.toBlob(blob => {
+    const a = Object.assign(document.createElement("a"),{
+      href: URL.createObjectURL(blob),
+      download: texOriginalName+"_packed_rgba.png"
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    document.getElementById("rgba-status").textContent = "✓ Download selesai!";
+  }, "image/png");
+}
+document.addEventListener("DOMContentLoaded", populateRGBASelects);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let v3dScene, v3dCamera, v3dRenderer, v3dControls, v3dMesh, v3dMaterial;
+let v3dTextures = { albedo:null, normal:null, roughness:null, ao:null, emissive:null, specular:null, bump:null, metallic:null };
+let v3dShape = 'sphere';
+let v3dInitialized = false;
+
+function initV3DScene(){
+  if(v3dInitialized) return;
+  const canvas = document.getElementById('v3d-canvas');
+  const wrap = document.getElementById('v3d-canvas-wrap');
+
+  v3dScene = new THREE.Scene();
+  v3dScene.background = new THREE.Color(0x0a0a0a);
+
+  v3dCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  v3dCamera.position.set(0, 0, 3);
+
+  try {
+    v3dRenderer = new THREE.WebGLRenderer({ canvas, antialias:true, failIfMajorPerformanceCaveat:false });
+  } catch(err) {
+    document.getElementById('v3d-placeholder').textContent = '⚠ WebGL tidak didukung di browser/device ini. Coba browser lain atau update driver GPU.';
+    document.getElementById('v3d-placeholder').style.display = 'flex';
+    return;
+  }
+  const size = wrap.clientWidth;
+  v3dRenderer.setSize(size, size);
+  v3dRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  v3dScene.add(ambient);
+  const dir1 = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir1.position.set(2, 3, 4);
+  v3dScene.add(dir1);
+  const dir2 = new THREE.DirectionalLight(0x6699ff, 0.4);
+  dir2.position.set(-2, -1, -3);
+  v3dScene.add(dir2);
+
+  v3dControls = new OrbitControls(v3dCamera, v3dRenderer.domElement);
+  v3dControls.enableDamping = true;
+  v3dControls.dampingFactor = 0.08;
+
+  v3dMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.1 });
+  createV3DMesh();
+
+  function animate(){
+    requestAnimationFrame(animate);
+    v3dControls.update();
+    v3dRenderer.render(v3dScene, v3dCamera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    const s = wrap.clientWidth;
+    v3dRenderer.setSize(s, s);
+    v3dCamera.aspect = 1;
+    v3dCamera.updateProjectionMatrix();
+  });
+
+  v3dInitialized = true;
+}
+
+function createV3DMesh(){
+  if(v3dMesh) v3dScene.remove(v3dMesh);
+  const geom = v3dShape === 'sphere'
+    ? new THREE.SphereGeometry(1, 64, 64)
+    : new THREE.BoxGeometry(1.4, 1.4, 1.4);
+  v3dMesh = new THREE.Mesh(geom, v3dMaterial);
+  v3dScene.add(v3dMesh);
+}
+
+window.setV3DShape = function(shape){
+  v3dShape = shape;
+  document.getElementById('v3d-shape-sphere').style.background = shape === 'sphere' ? 'var(--accent)' : 'var(--gray2)';
+  document.getElementById('v3d-shape-sphere').style.color = shape === 'sphere' ? '#000' : 'var(--gray)';
+  document.getElementById('v3d-shape-cube').style.background = shape === 'cube' ? 'var(--accent)' : 'var(--gray2)';
+  document.getElementById('v3d-shape-cube').style.color = shape === 'cube' ? '#000' : 'var(--gray)';
+  if(v3dInitialized) createV3DMesh();
+};
+
+window.loadV3DTexture = function(event, slot){
+  const file = event.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('v3d-'+slot+'-status');
+  statusEl.textContent = 'Loading...';
+
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = function(){
+    try {
+      if(!v3dInitialized) initV3DScene();
+    } catch(err) {
+      statusEl.textContent = '✗ Error: ' + err.message;
+      URL.revokeObjectURL(url);
+      return;
+    }
+    const tex = new THREE.Texture(img);
+    tex.needsUpdate = true;
+    if(THREE.SRGBColorSpace && slot === 'albedo') tex.colorSpace = THREE.SRGBColorSpace;
+    v3dTextures[slot] = tex;
+
+    if(slot === 'albedo') v3dMaterial.map = tex;
+    if(slot === 'normal') v3dMaterial.normalMap = tex;
+    if(slot === 'roughness') v3dMaterial.roughnessMap = tex;
+    if(slot === 'ao') v3dMaterial.aoMap = tex;
+    if(slot === 'emissive'){ v3dMaterial.emissiveMap = tex; v3dMaterial.emissive = new THREE.Color(0xffffff); }
+    if(slot === 'specular') v3dMaterial.roughnessMap = v3dMaterial.roughnessMap || tex;
+    if(slot === 'bump') v3dMaterial.bumpMap = tex;
+    if(slot === 'metallic') v3dMaterial.metalnessMap = tex;
+    v3dMaterial.needsUpdate = true;
+
+    document.getElementById('v3d-placeholder').style.display = 'none';
+    statusEl.textContent = '✓ Loaded';
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+};
+</script>
+
+<script>
+let logoClickCount = 0;
+let logoClickTimer = null;
+
+function handleLogoClick(){
+  logoClickCount++;
+  clearTimeout(logoClickTimer);
+  logoClickTimer = setTimeout(() => { logoClickCount = 0; }, 3000);
+
+  if(logoClickCount >= 7){
+    logoClickCount = 0;
+    document.getElementById('maint-pw-overlay').style.display = 'flex';
+    document.getElementById('maint-pw-input').value = '';
+    document.getElementById('maint-pw-error').textContent = '';
+    document.getElementById('maint-pw-input').focus();
+  }
+}
+
+function closeMaintPwOverlay(){
+  document.getElementById('maint-pw-overlay').style.display = 'none';
+}
+
+async function submitMaintenancePassword(){
+  const pw = document.getElementById('maint-pw-input').value;
+  const errEl = document.getElementById('maint-pw-error');
+  errEl.textContent = 'Memproses...';
+  try{
+    const res = await fetch(`${BASE}/api/maintenance/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = '✗ Password salah.';
+      return;
+    }
+    applyMaintenanceState(data.active);
+    closeMaintPwOverlay();
+  }catch(e){
+    errEl.textContent = '✗ Error: ' + e.message;
+  }
+}
+
+function applyMaintenanceState(active){
+  document.body.classList.toggle('maintenance-mode', active);
+}
+
+async function checkMaintenanceStatus(){
+  try{
+    const res = await fetch(`${BASE}/api/maintenance/status`);
+    const data = await res.json();
+    applyMaintenanceState(data.active);
+  }catch(e){
+    // silent fail - assume not in maintenance
+  }
+}
+
+document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
+</script>
+<script>
+let prismaParsedData = null;
+let prismaFileName = "model";
+
+async function handlePrismaUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  prismaFileName = file.name.replace(".prisma", "");
+  const st = document.getElementById("prisma-status");
+  document.getElementById("prisma-download-options").style.display = "none";
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file... Mohon tunggu.</div></div>';
+
+  try{
+    const parseFormData = new FormData();
+    parseFormData.append("file", file);
+    const parseRes = await fetch(`${BASE}/api/prisma/parse`, {
+      method: "POST",
+      body: parseFormData
+    });
+
+    if(!parseRes.ok){
+      const errData = await parseRes.json();
+      st.textContent = "✗ " + (errData.error || "Processing failed");
+      return;
+    }
+
+    prismaParsedData = await parseRes.json();
+    document.getElementById("prisma-download-options").style.display = "block";
+    st.textContent = "✓ File berhasil diproses! Pilih format download di bawah.";
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
+
+  document.getElementById("prisma-file-input").value = "";
+}
+
+async function downloadPrismaOBJ(){
+  if(!prismaParsedData){
+    alert("Upload file .prisma terlebih dahulu.");
+    return;
+  }
+
+  const st = document.getElementById("prisma-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating OBJ + textures ZIP...</div></div>';
+
+  try{
+    const fileInput = document.getElementById("prisma-file-input");
+    // Re-fetch the original file isn't possible after input reset, so we regenerate from cached parsed data instead
+    const obj_lines = ["# Converted from .prisma by 3DRBXMT", `mtllib ${prismaFileName}.mtl`, ""];
+    const mtl_lines = [];
+    let vertexOffset = 0;
+
+    const albedoTex = prismaParsedData.albedoTexture;
+    const normalTex = prismaParsedData.normalTexture;
+
+    prismaParsedData.meshes.forEach((mesh, idx) => {
+      const matName = `mat_${idx}`;
+      obj_lines.push(`g mesh_${idx}`);
+      obj_lines.push(`o ${mesh.id.substring(0,8)}`);
+      obj_lines.push(`usemtl ${matName}`);
+
+      mesh.positions.forEach(p => obj_lines.push(`v ${p[0].toFixed(6)} ${p[1].toFixed(6)} ${p[2].toFixed(6)}`));
+      mesh.uvs.forEach(uv => obj_lines.push(`vt ${uv[0].toFixed(6)} ${uv[1].toFixed(6)}`));
+
+      const numTriangles = Math.floor(mesh.indices.length / 3);
+      for(let t = 0; t < numTriangles; t++){
+        const norm = mesh.normals[t];
+        obj_lines.push(`vn ${norm[0].toFixed(6)} ${norm[1].toFixed(6)} ${norm[2].toFixed(6)}`);
+      }
+
+      for(let t = 0; t < numTriangles; t++){
+        const i0 = mesh.indices[t*3], i1 = mesh.indices[t*3+1], i2 = mesh.indices[t*3+2];
+        const v0 = i0+1+vertexOffset, v1 = i1+1+vertexOffset, v2 = i2+1+vertexOffset;
+        const vtBase = t*3;
+        const vnIdx = t+1;
+        obj_lines.push(`f ${v0}/${vtBase+1+vertexOffset}/${vnIdx} ${v1}/${vtBase+2+vertexOffset}/${vnIdx} ${v2}/${vtBase+3+vertexOffset}/${vnIdx}`);
+      }
+
+      mtl_lines.push(`newmtl ${matName}`);
+      mtl_lines.push("Ka 1.000000 1.000000 1.000000");
+      mtl_lines.push("Kd 1.000000 1.000000 1.000000");
+      mtl_lines.push("Ks 0.000000 0.000000 0.000000");
+      mtl_lines.push("d 1.0");
+      mtl_lines.push("illum 2");
+      if(albedoTex) mtl_lines.push(`map_Kd ${albedoTex}`);
+      if(normalTex) mtl_lines.push(`map_Bump ${normalTex}`);
+      mtl_lines.push("");
+
+      vertexOffset += mesh.positions.length;
+    });
+
+    // Build zip using JSZip (already loaded elsewhere in the app)
+    const zip = new JSZip();
+    zip.file(`${prismaFileName}.obj`, obj_lines.join("\n"));
+    zip.file(`${prismaFileName}.mtl`, mtl_lines.join("\n"));
+
+    for(const [fname, base64] of Object.entries(prismaParsedData.textures)){
+      zip.file(fname, base64, { base64: true });
+    }
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(content),
+      download: `${prismaFileName}_converted.zip`
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    st.textContent = "✓ ZIP (OBJ+MTL+texture) berhasil didownload!";
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
+}
+
+async function buildPrismaGLB(){
+  if(!prismaParsedData){
+    alert("Upload file .prisma terlebih dahulu.");
+    return;
+  }
+
+  const st = document.getElementById("prisma-status");
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Building GLB...</div></div>';
+
+  try{
+    const THREE = window.__PRISMA_THREE__;
+    const GLTFExporter = window.__GLTFExporter;
+
+    if(!THREE || !GLTFExporter){
+      st.textContent = "✗ Three.js belum siap, coba reload halaman.";
+      return;
+    }
+
+    const root = new THREE.Group();
+
+    // Load albedo texture if available
+    let albedoTexture = null;
+    if(prismaParsedData.albedoTexture && prismaParsedData.textures[prismaParsedData.albedoTexture]){
+      const base64 = prismaParsedData.textures[prismaParsedData.albedoTexture];
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for(let i = 0; i < binaryStr.length; i++){
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "image/png" });
+      const bitmap = await createImageBitmap(blob);
+      albedoTexture = new THREE.Texture(bitmap);
+      albedoTexture.needsUpdate = true;
+      if(THREE.SRGBColorSpace) albedoTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+
+    for(const mesh of prismaParsedData.meshes){
+      const geometry = new THREE.BufferGeometry();
+
+      const indices = mesh.indices;
+      const numTriangles = Math.floor(indices.length / 3);
+
+      const expandedPositions = [];
+      const expandedNormals = [];
+      const expandedUVs = [];
+
+      for(let t = 0; t < numTriangles; t++){
+        const norm = mesh.normals[t];
+
+        for(let corner = 0; corner < 3; corner++){
+          const i = t * 3 + corner;
+          const vIdx = indices[i];
+          const pos = mesh.positions[vIdx];
+          expandedPositions.push(pos[0], pos[1], pos[2]);
+          expandedNormals.push(norm[0], norm[1], norm[2]);
+          const uv = mesh.uvs[i];
+          expandedUVs.push(uv[0], uv[1]);
+        }
+      }
+
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(expandedPositions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(expandedNormals, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(expandedUVs, 2));
+
+      const matOpts = { color: 0xffffff };
+      if(albedoTexture) matOpts.map = albedoTexture;
+
+      const material = new THREE.MeshStandardMaterial(matOpts);
+      const threeMesh = new THREE.Mesh(geometry, material);
+      threeMesh.name = mesh.id.substring(0, 8);
+      root.add(threeMesh);
+    }
+
+    const exporter = new GLTFExporter();
+    exporter.parse(root, (result) => {
+      const blob = new Blob([result], { type: "application/octet-stream" });
+      const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(blob),
+        download: "prisma_model.glb"
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+      st.textContent = "✓ GLB berhasil didownload!";
+    }, (error) => {
+      st.textContent = "✗ Gagal export GLB: " + error.message;
+    }, { binary: true });
+
+  }catch(e){
+    st.textContent = "✗ Error: " + e.message;
+  }
 }
 </script>
 </body>
