@@ -2267,6 +2267,21 @@ def maintenance_toggle():
     set_maintenance_state(new_state)
     return jsonify({"active": new_state})
 
+def _repair_zip_signature(data: bytes) -> bytes:
+    """
+    Some upload/transfer paths (chat apps, some AV scanners, flaky device->PC
+    transfers) have been observed to corrupt only the FIRST byte of an
+    otherwise-intact ZIP file, turning the signature 50 4B 03 04 ("PK\\x03\\x04")
+    into something like 60 4B 03 04. File size and every other byte stay
+    correct in that case. If we see that exact pattern, patch byte 0 back to
+    0x50 before handing the bytes to zipfile so users don't have to manually
+    hex-edit their .prisma files.
+    """
+    if len(data) >= 4 and data[1:4] == b'\x4b\x03\x04' and data[0] != 0x50:
+        return b'\x50' + data[1:]
+    return data
+
+
 @app.post("/api/prisma/parse")
 def prisma_parse():
     import msgpack, zipfile as zf_module, io, base64
@@ -2279,7 +2294,7 @@ def prisma_parse():
         return jsonify({"error": "File must have .prisma extension"}), 400
 
     try:
-        prisma_bytes = upload.read()
+        prisma_bytes = _repair_zip_signature(upload.read())
         prisma_buffer = io.BytesIO(prisma_bytes)
 
         meshes = []
@@ -2363,7 +2378,7 @@ def prisma_convert():
         return jsonify({"error": "File must have .prisma extension"}), 400
 
     try:
-        prisma_bytes = upload.read()
+        prisma_bytes = _repair_zip_signature(upload.read())
         prisma_buffer = io.BytesIO(prisma_bytes)
 
         obj_lines = ["# Converted from .prisma by 3DRBXMT"]

@@ -2766,6 +2766,7 @@ window.loadV3DTexture = function(event, slot){
 };
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.3/dist.umd/msgpack.min.js"></script>
 <script>
 let logoClickCount = 0;
 let logoClickTimer = null;
@@ -2830,6 +2831,16 @@ document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
 let prismaParsedData = null;
 let prismaFileName = "model";
 
+function arrayBufferToBase64(buffer){
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  for(let i = 0; i < bytes.length; i += chunkSize){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 async function handlePrismaUpload(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -2837,25 +2848,98 @@ async function handlePrismaUpload(event){
   prismaFileName = file.name.replace(".prisma", "");
   const st = document.getElementById("prisma-status");
   document.getElementById("prisma-download-options").style.display = "none";
-  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file... Mohon tunggu.</div></div>';
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file locally... Mohon tunggu.</div></div>';
 
   try{
-    const parseFormData = new FormData();
-    parseFormData.append("file", file);
-    const parseRes = await fetch(`${BASE}/api/prisma/parse`, {
-      method: "POST",
-      body: parseFormData
+    const arrayBuffer = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
     });
+    const debugBytes = new Uint8Array(arrayBuffer.slice(0, 16));
+    const debugHex = Array.from(debugBytes).map(b => b.toString(16).padStart(2,"0")).join(" ");
+    alert("File size: " + arrayBuffer.byteLength + "\nFirst 16 bytes: " + debugHex);
+    const zip = await JSZip.loadAsync(arrayBuffer);
 
-    if(!parseRes.ok){
-      const errData = await parseRes.json();
-      st.textContent = "✗ " + (errData.error || "Processing failed");
+    const pobjectFiles = [];
+    const textureFiles = {};
+
+    for(const [name, zipEntry] of Object.entries(zip.files)){
+      if(zipEntry.dir) continue;
+      if(name.endsWith(".pobject")){
+        pobjectFiles.push(name);
+      } else if(name.endsWith(".png")){
+        const fname = name.split("/").pop();
+        const data = await zipEntry.async("arraybuffer");
+        textureFiles[fname] = arrayBufferToBase64(data);
+      }
+    }
+
+    if(pobjectFiles.length === 0){
+      st.textContent = "✗ Tidak ada data mesh (.pobject) ditemukan di file .prisma ini.";
       return;
     }
 
-    prismaParsedData = await parseRes.json();
+    const meshes = [];
+
+    for(const pobjName of pobjectFiles){
+      const zipEntry = zip.files[pobjName];
+      const data = await zipEntry.async("uint8array");
+
+      // Decode multiple sequential MessagePack values from the buffer
+      const objs = [];
+      let offset = 0;
+      while(offset < data.length){
+        try{
+          const result = MessagePack.decodeMulti ? null : null;
+          break;
+        }catch(e){ break; }
+      }
+
+      // Use decodeMulti to iterate all top-level MessagePack values in the stream
+      const decoded = [];
+      for(const value of MessagePack.decodeMulti(data)){
+        decoded.push(value);
+      }
+
+      let geoContainer = null;
+      for(const o of decoded){
+        if(Array.isArray(o) && o.length === 1 && Array.isArray(o[0]) && o[0].length === 11){
+          geoContainer = o[0];
+          break;
+        }
+      }
+      if(!geoContainer) continue;
+
+      const meshId = geoContainer[0];
+      const positions = geoContainer[8];
+      const normals = geoContainer[3];
+      const uvs = geoContainer[5];
+      const indices = geoContainer[4];
+
+      meshes.push({ id: meshId, positions, normals, uvs, indices });
+    }
+
+    if(meshes.length === 0){
+      st.textContent = "✗ Tidak dapat mengekstrak geometri mesh yang valid dari file ini.";
+      return;
+    }
+
+    const albedoCandidates = Object.keys(textureFiles).filter(f => f.includes("BaseColor") && !f.includes("baked") && !f.includes("packed"));
+    const albedoTexture = albedoCandidates[0] || Object.keys(textureFiles)[0] || null;
+    const normalCandidates = Object.keys(textureFiles).filter(f => f.toLowerCase().includes("normal"));
+    const normalTexture = normalCandidates[0] || null;
+
+    prismaParsedData = {
+      meshes,
+      textures: textureFiles,
+      albedoTexture,
+      normalTexture
+    };
+
     document.getElementById("prisma-download-options").style.display = "block";
-    st.textContent = "✓ File berhasil diproses! Pilih format download di bawah.";
+    st.textContent = `✓ File berhasil diproses (${meshes.length} mesh)! Pilih format download di bawah.`;
   }catch(e){
     st.textContent = "✗ Error: " + e.message;
   }
