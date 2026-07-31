@@ -2857,9 +2857,17 @@ async function handlePrismaUpload(event){
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
-    const debugBytes = new Uint8Array(arrayBuffer.slice(0, 16));
-    const debugHex = Array.from(debugBytes).map(b => b.toString(16).padStart(2,"0")).join(" ");
-    alert("File size: " + arrayBuffer.byteLength + "\nFirst 16 bytes: " + debugHex);
+    // Some upload/transfer paths (chat apps, some AV scanners, flaky device->PC
+    // transfers) corrupt only the FIRST byte of an otherwise-intact ZIP file,
+    // turning the signature 50 4B 03 04 ("PK\x03\x04") into something like
+    // 60 4B 03 04. File size and every other byte stay correct in that case.
+    // Patch byte 0 back to 0x50 before handing the bytes to JSZip so users
+    // don't have to manually hex-edit their .prisma files (mirrors the
+    // backend's _repair_zip_signature, which the client-side path skipped).
+    const headerView = new Uint8Array(arrayBuffer, 0, Math.min(4, arrayBuffer.byteLength));
+    if(headerView.length === 4 && headerView[1] === 0x4b && headerView[2] === 0x03 && headerView[3] === 0x04 && headerView[0] !== 0x50){
+      new Uint8Array(arrayBuffer)[0] = 0x50;
+    }
     const zip = await JSZip.loadAsync(arrayBuffer);
 
     const pobjectFiles = [];
