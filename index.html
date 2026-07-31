@@ -2890,22 +2890,13 @@ async function handlePrismaUpload(event){
     }
 
     const meshes = [];
+    const skippedInfo = [];
 
     for(const pobjName of pobjectFiles){
       const zipEntry = zip.files[pobjName];
       const data = await zipEntry.async("uint8array");
 
-      // Decode multiple sequential MessagePack values from the buffer
-      const objs = [];
-      let offset = 0;
-      while(offset < data.length){
-        try{
-          const result = MessagePack.decodeMulti ? null : null;
-          break;
-        }catch(e){ break; }
-      }
-
-      // Use decodeMulti to iterate all top-level MessagePack values in the stream
+      // Decode all top-level MessagePack values in the stream
       const decoded = [];
       for(const value of MessagePack.decodeMulti(data)){
         decoded.push(value);
@@ -2918,7 +2909,19 @@ async function handlePrismaUpload(event){
           break;
         }
       }
-      if(!geoContainer) continue;
+
+      if(!geoContainer){
+        const shapes = decoded.map(o => {
+          if(!Array.isArray(o)) return typeof o;
+          if(o.length === 0) return "array[0]";
+          const inner = o[0];
+          const innerDesc = Array.isArray(inner) ? ("array[" + inner.length + "]") : typeof inner;
+          return "array[" + o.length + "] -> " + innerDesc;
+        });
+        const safeName = pobjName.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+        skippedInfo.push(safeName + ": " + decoded.length + " value(s) [" + shapes.join(", ") + "]");
+        continue;
+      }
 
       const meshId = geoContainer[0];
       const positions = geoContainer[8];
@@ -2930,7 +2933,8 @@ async function handlePrismaUpload(event){
     }
 
     if(meshes.length === 0){
-      st.textContent = "✗ Tidak dapat mengekstrak geometri mesh yang valid dari file ini.";
+      const debugMsg = skippedInfo.length ? ("<br><small style=\"opacity:.7;word-break:break-all\">Debug: " + skippedInfo.join(" | ") + "</small>") : "";
+      st.innerHTML = "✗ Tidak dapat mengekstrak geometri mesh yang valid dari file ini." + debugMsg;
       return;
     }
 
