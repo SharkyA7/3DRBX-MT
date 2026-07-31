@@ -2904,7 +2904,7 @@ async function handlePrismaUpload(event){
 
       let geoContainer = null;
       for(const o of decoded){
-        if(Array.isArray(o) && o.length === 1 && Array.isArray(o[0]) && o[0].length === 11){
+        if(Array.isArray(o) && o.length === 1 && Array.isArray(o[0]) && o[0].length >= 9){
           geoContainer = o[0];
           break;
         }
