@@ -8,12 +8,20 @@
     {
       "src": "index.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "beta.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "backend/main.py"
+    },
+    {
+      "src": "/(BETA|beta)",
+      "dest":"beta.html"
     },
     {
       "src": "/health",
