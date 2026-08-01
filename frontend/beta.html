@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3DRBXMT — BETA / Fitur Eksperimental</title>
-<meta name="description" content="Fitur eksperimental/unstable dari 3DRBXMT. Belum siap masuk ke situs utama — gunakan dengan risiko sendiri.">
+<title>3DRBXMT — BETA / Experimental Features</title>
+<meta name="description" content="Experimental/unstable features from 3DRBXMT. Not yet ready for the main site — use at your own risk.">
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -85,14 +85,14 @@ window.__GLTFExporter = GLTFExporter;
   </div>
 </div>
 
-<div class="beta-banner">⚠ BETA — FITUR EKSPERIMENTAL / UNSTABLE, BISA ERROR ATAU BERUBAH SEWAKTU-WAKTU</div>
+<div class="beta-banner">⚠ BETA — EXPERIMENTAL / UNSTABLE FEATURES, MAY BREAK OR CHANGE AT ANY TIME</div>
 
 <header>
   <div style="max-width:860px;margin:0 auto;padding:10px 16px 0;text-align:left">
-    <a class="beta-back" href="/">← Kembali ke Situs Utama</a>
+    <a class="beta-back" href="/">← Back to Main Site</a>
   </div>
   <h1 style="margin-top:20px">3DRBXMT <span style="color:#a78bfa">BETA</span></h1>
-  <p class="sub">FITUR EKSPERIMENTAL</p>
+  <p class="sub">EXPERIMENTAL FEATURES</p>
   <div style="display:flex;justify-content:center;margin-top:16px">
     <div class="beta-tag">🧪 UNSTABLE ZONE</div>
   </div>
@@ -101,9 +101,9 @@ window.__GLTFExporter = GLTFExporter;
 
 <main>
   <div class="card" style="margin-bottom:24px;background:rgba(124,58,237,.05);border-color:rgba(124,58,237,.25)">
-    <div class="label">🧪 <span>TENTANG HALAMAN INI</span></div>
+    <div class="label">🧪 <span>ABOUT THIS PAGE</span></div>
     <p style="font-size:10px;color:var(--gray);line-height:1.8">
-      Halaman ini berisi fitur-fitur yang belum stabil atau masih dalam pengembangan — belum layak masuk ke situs utama. Fitur di sini bisa error, berubah, atau dihapus sewaktu-waktu tanpa pemberitahuan. Gunakan dengan pengertian bahwa ini adalah versi eksperimental.
+      This page contains features that aren't stable yet or are still in development — not ready for the main site. Features here may break, change, or be removed at any time without notice. Please understand this is an experimental version.
     </p>
   </div>
 
@@ -111,13 +111,13 @@ window.__GLTFExporter = GLTFExporter;
     <div class="card">
       <div class="label">🔷 <span data-t-id="CONVERT PRISMA → OBJ" data-t-en="CONVERT PRISMA → OBJ">CONVERT PRISMA → OBJ</span></div>
       <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
-        Upload file .prisma dari Prisma 3D untuk dikonversi ke OBJ + MTL + texture. Kompatibel dengan Blender, Nomad Sculpt, dan software 3D lainnya.
+        Upload a .prisma file from Prisma 3D to convert it to OBJ + MTL + textures. Compatible with Blender, Nomad Sculpt, and other 3D software.
       </p>
       <input type="file" id="prisma-file-input" accept=".prisma" style="display:none" onchange="handlePrismaUpload(event)">
-      <button class="btn" onclick="document.getElementById('prisma-file-input').click()" style="width:100%">📁 PILIH FILE .PRISMA</button>
+      <button class="btn" onclick="document.getElementById('prisma-file-input').click()" style="width:100%">📁 CHOOSE .PRISMA FILE</button>
       <div id="prisma-download-options" style="display:none;margin-top:8px">
-        <button class="btn" id="prisma-obj-btn" onclick="downloadPrismaOBJ()" style="width:100%">⬇ DOWNLOAD SEBAGAI OBJ</button>
-        <button class="btn btn-green" id="prisma-glb-btn" onclick="buildPrismaGLB()" style="width:100%;margin-top:8px">⬇ DOWNLOAD SEBAGAI GLB</button>
+        <button class="btn" id="prisma-obj-btn" onclick="downloadPrismaOBJ()" style="width:100%">⬇ DOWNLOAD AS OBJ</button>
+        <button class="btn btn-green" id="prisma-glb-btn" onclick="buildPrismaGLB()" style="width:100%;margin-top:8px">⬇ DOWNLOAD AS GLB</button>
       </div>
       <div id="prisma-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
@@ -125,13 +125,13 @@ window.__GLTFExporter = GLTFExporter;
 </main>
 
 <footer>
-  <span>3DRBXMT BETA · FITUR EKSPERIMENTAL · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION</span>
+  <span>3DRBXMT BETA · EXPERIMENTAL FEATURES · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span>
   <div class="footer-contact">
     <button class="footer-contact-item" onclick="location.href='mailto:shafarois5@gmail.com?subject=Bug Report - 3DRBXMT BETA'">
-      ✉️ Laporkan Bug via Email
+      ✉️ Report Bug via Email
     </button>
-    <button class="footer-contact-item" onclick="navigator.clipboard.writeText('sh4shark').then(()=>this.querySelector('span').textContent='Tersalin!')">
-      💬 Discord: sh4shark <span style="font-size:9px;opacity:.6">(klik untuk copy)</span>
+    <button class="footer-contact-item" onclick="navigator.clipboard.writeText('sh4shark').then(()=>this.querySelector('span').textContent='Copied!')">
+      💬 Discord: sh4shark <span style="font-size:9px;opacity:.6">(click to copy)</span>
     </button>
   </div>
 </footer>
@@ -162,7 +162,7 @@ async function handlePrismaUpload(event){
   prismaFileName = file.name.replace(".prisma", "");
   const st = document.getElementById("prisma-status");
   document.getElementById("prisma-download-options").style.display = "none";
-  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file locally... Mohon tunggu.</div></div>';
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Processing .prisma file locally... Please wait.</div></div>';
 
   try{
     const arrayBuffer = await new Promise((resolve, reject) => {
@@ -192,7 +192,7 @@ async function handlePrismaUpload(event){
     }
 
     if(pobjectFiles.length === 0){
-      st.textContent = "✗ Tidak ada data mesh (.pobject) ditemukan di file .prisma ini.";
+      st.textContent = "✗ No mesh data (.pobject) found in this .prisma file.";
       return;
     }
 
@@ -240,7 +240,7 @@ async function handlePrismaUpload(event){
 
     if(meshes.length === 0){
       const debugMsg = skippedInfo.length ? ("<br><small style=\"opacity:.7;word-break:break-all\">Debug: " + skippedInfo.join(" | ") + "</small>") : "";
-      st.innerHTML = "✗ Tidak dapat mengekstrak geometri mesh yang valid dari file ini." + debugMsg;
+      st.innerHTML = "✗ Could not extract any valid mesh geometry from this file." + debugMsg;
       return;
     }
 
@@ -257,7 +257,7 @@ async function handlePrismaUpload(event){
     };
 
     document.getElementById("prisma-download-options").style.display = "block";
-    st.textContent = `✓ File berhasil diproses (${meshes.length} mesh)! Pilih format download di bawah.`;
+    st.textContent = `✓ File processed successfully (${meshes.length} mesh)! Choose a download format below.`;
   }catch(e){
     st.textContent = "✗ Error: " + e.message;
   }
@@ -267,7 +267,7 @@ async function handlePrismaUpload(event){
 
 async function downloadPrismaOBJ(){
   if(!prismaParsedData){
-    alert("Upload file .prisma terlebih dahulu.");
+    alert("Please upload a .prisma file first.");
     return;
   }
 
@@ -334,7 +334,7 @@ async function downloadPrismaOBJ(){
     a.click();
     URL.revokeObjectURL(a.href);
 
-    st.textContent = "✓ ZIP (OBJ+MTL+texture) berhasil didownload!";
+    st.textContent = "✓ ZIP (OBJ+MTL+textures) downloaded successfully!";
   }catch(e){
     st.textContent = "✗ Error: " + e.message;
   }
@@ -342,7 +342,7 @@ async function downloadPrismaOBJ(){
 
 async function buildPrismaGLB(){
   if(!prismaParsedData){
-    alert("Upload file .prisma terlebih dahulu.");
+    alert("Please upload a .prisma file first.");
     return;
   }
 
@@ -354,7 +354,7 @@ async function buildPrismaGLB(){
     const GLTFExporter = window.__GLTFExporter;
 
     if(!THREE || !GLTFExporter){
-      st.textContent = "✗ Three.js belum siap, coba reload halaman.";
+      st.textContent = "✗ Three.js not ready yet, try reloading the page.";
       return;
     }
 
@@ -421,9 +421,9 @@ async function buildPrismaGLB(){
       });
       a.click();
       URL.revokeObjectURL(a.href);
-      st.textContent = "✓ GLB berhasil didownload!";
+      st.textContent = "✓ GLB downloaded successfully!";
     }, (error) => {
-      st.textContent = "✗ Gagal export GLB: " + error.message;
+      st.textContent = "✗ Failed to export GLB: " + error.message;
     }, { binary: true });
 
   }catch(e){
