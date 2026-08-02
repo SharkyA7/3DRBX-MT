@@ -12,9 +12,20 @@
     {
       "src": "beta.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "icons/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/icons/(.*)",
+      "dest": "/icons/$1",
+      "headers": {
+        "cache-control": "public, max-age=3600"
+      }
+    },
     {
       "src": "/api/(.*)",
       "dest": "backend/main.py"
