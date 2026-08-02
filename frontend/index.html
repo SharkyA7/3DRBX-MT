@@ -13,62 +13,90 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#03030A;--s1:#07071A;--s2:#0B0B20;--s3:#101028;--s4:#181838;--s5:#202048;
-  --accent:#00D4FF;--accent2:#0EA5E9;--accent3:#38BDF8;
-  --ag:rgba(0,212,255,.1);--ab:rgba(0,212,255,.06);
+  --bg:#001619;--s1:#03181C;--s2:#052228;--s3:#082C33;--s4:#0C3A42;--s5:#114852;
+  --accent:#50E8F4;--accent2:#2FD1DE;--accent3:#8FF2F9;
+  --ag:rgba(80,232,244,.1);--ab:rgba(80,232,244,.06);
   --green:#00FFB3;--green-g:rgba(0,255,179,.1);
-  --amber:#FFD166;--red:#FF4466;--white:#F4F4FF;--muted:#8888AA;
-  --border:#1A1A3A;--border2:#242448;
+  --amber:#FFD166;--red:#FF4466;--white:#C7F8FE;--muted:#6FA0A6;
+  --border:#0C2A2E;--border2:#153B40;
   --font-px:'Press Start 2P',monospace;
   --font-mono:'Share Tech Mono',monospace;
   --font-ui:'Space Grotesk',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-height:100vh;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:56px 56px;}
+body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-height:100vh;background-image:linear-gradient(rgba(80,232,244,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(80,232,244,.025) 1px,transparent 1px);background-size:56px 56px;}
 .topbar{position:sticky;top:0;z-index:500;display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;background:rgba(3,3,10,.9);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);}
-.topbar-brand{display:flex;align-items:center;gap:10px;font-family:var(--font-px);font-size:9px;color:var(--accent);text-shadow:0 0 16px rgba(0,212,255,.5);letter-spacing:2px;}
+.topbar-brand{display:flex;align-items:center;gap:10px;font-family:var(--font-px);font-size:9px;color:var(--accent);text-shadow:0 0 16px rgba(80,232,244,.5);letter-spacing:2px;}
 .topbar-brand .brand-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulsedot 2s infinite;}
 @keyframes pulsedot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .topbar-links{display:flex;align-items:center;gap:4px;}
 .topbar-link{padding:6px 12px;font-family:var(--font-ui);font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;border:1px solid transparent;border-radius:6px;transition:all .15s;cursor:pointer;background:transparent;}
 .topbar-link:hover{color:var(--white);border-color:var(--border2);}
 .topbar-link.primary{background:var(--accent);color:#000;font-weight:700;border-color:var(--accent);}
-.topbar-link.primary:hover{background:#00EEFF;box-shadow:0 0 16px rgba(0,212,255,.4);}
+.topbar-link.primary:hover{background:#00EEFF;box-shadow:0 0 16px rgba(80,232,244,.4);}
 header{text-align:center;padding:56px 20px 40px;position:relative;}
 header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:500px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;}
-.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-ui);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(0,212,255,.25);padding:4px 12px;border-radius:20px;background:rgba(0,212,255,.06);margin-bottom:20px;}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-ui);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(80,232,244,.25);padding:4px 12px;border-radius:20px;background:rgba(80,232,244,.06);margin-bottom:20px;}
 .hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulsedot 2s infinite;}
 h1{font-family:var(--font-px);font-size:clamp(14px,3vw,24px);color:var(--white);letter-spacing:4px;line-height:1.5;margin-bottom:10px;}
-h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(0,212,255,.6);}
+h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .sub{font-family:var(--font-ui);font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;}
 .scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);margin-top:32px;opacity:.2;}
 main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
-.tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border);overflow-x:auto;overflow-y:visible;scrollbar-width:none;}
+.tabs{display:flex;gap:4px;margin-bottom:24px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:6px;overflow-x:auto;overflow-y:visible;scrollbar-width:none;}
 @media (min-width:768px){
   .tabs{justify-content:center;}
 }
 .tabs::-webkit-scrollbar{display:none}
-.tab{display:flex;align-items:center;gap:6px;padding:12px 16px;font-family:var(--font-ui);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:color .2s;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;background:transparent;border-top:none;border-left:none;border-right:none;letter-spacing:.04em;}
-.tab:hover{color:var(--white)}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;font-family:var(--font-ui);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:background .2s,color .2s,padding .2s;border-radius:999px;white-space:nowrap;background:transparent;border:none;letter-spacing:.04em;}
+.tab:hover{color:var(--white);background:rgba(80,232,244,.06);}
+.tab.active{color:#001619;background:var(--accent);box-shadow:0 0 14px rgba(80,232,244,.35);}
+.tab.active:hover{background:var(--accent);}
+.tab-primary span{display:none;}
+.nav-icon{width:18px;height:18px;object-fit:contain;vertical-align:middle;flex-shrink:0;}
+.dropdown-item .nav-icon,.dropdown-item.nav-icon{width:16px;height:16px;}
+.tab-primary.active{padding:10px 18px;}
+.tab-primary.active span{display:inline;}
 .tab-dropdown{position:relative;flex-shrink:0}
-.dropdown-menu{position:fixed;top:auto;right:16px;background:var(--s2);border:1px solid var(--border2);box-shadow:0 16px 48px rgba(0,0,0,.7),0 0 0 1px rgba(0,212,255,.06);z-index:99999;min-width:160px;border-radius:8px;overflow:hidden;}
+.dropdown-menu{position:fixed;top:auto;right:16px;background:var(--s2);border:1px solid var(--border2);box-shadow:0 16px 48px rgba(0,0,0,.7),0 0 0 1px rgba(80,232,244,.06);z-index:99999;min-width:160px;border-radius:8px;overflow:hidden;}
 .dropdown-item{display:flex;align-items:center;gap:8px;padding:11px 16px;font-family:var(--font-ui);font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;}
 .dropdown-item:hover{background:var(--ab);color:var(--accent);}
 .panel{display:none}.panel.active{display:block}
 .card{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:16px;position:relative;overflow:hidden;transition:border-color .25s,box-shadow .25s;}
-.card:hover{border-color:rgba(0,212,255,.2);box-shadow:0 0 32px rgba(0,0,0,.4),0 0 0 1px rgba(0,212,255,.06);}
-.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.3),transparent);}
+.tex-hero-box{position:relative;width:100%;aspect-ratio:1/1;background:var(--s2);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px;}
+.tex-hero-placeholder{color:var(--muted);font-size:11px;text-align:center;padding:20px;font-family:var(--font-ui);letter-spacing:.04em;}
+#canvas-hero-preview{width:100%;height:100%;object-fit:contain;display:none;}
+.tex-hero-label{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:var(--accent);font-size:9px;padding:4px 10px;border-radius:20px;letter-spacing:1px;font-family:var(--font-ui);font-weight:700;display:none;}
+.tex-thumb-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scrollbar-width:none;}
+.tex-thumb-row::-webkit-scrollbar{display:none}
+.tex-thumb{flex-shrink:0;width:84px;cursor:pointer;text-align:center;background:transparent;border:none;padding:0;}
+.tex-thumb canvas{width:84px;height:84px;object-fit:cover;border-radius:10px;border:2px solid var(--border);display:block;background:var(--s2);}
+.tex-thumb.active canvas{border-color:var(--accent);box-shadow:0 0 10px rgba(80,232,244,.4);}
+.tex-thumb span{display:block;font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.4px;font-family:var(--font-ui);}
+.tex-thumb.active span{color:var(--accent);}
+.v3d-thumb-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;scrollbar-width:none;}
+.v3d-thumb-row::-webkit-scrollbar{display:none}
+.v3d-thumb{flex-shrink:0;width:84px;cursor:pointer;text-align:center;background:transparent;border:none;padding:0;}
+.v3d-thumb-box{position:relative;width:84px;height:84px;border-radius:10px;border:2px solid var(--border);background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.v3d-thumb-icon{font-size:22px;opacity:.45;position:absolute;}
+.v3d-thumb-box canvas{width:100%;height:100%;object-fit:cover;display:none;}
+.v3d-thumb.loaded .v3d-thumb-box{border-color:var(--accent);box-shadow:0 0 10px rgba(80,232,244,.4);}
+.v3d-thumb.loaded .v3d-thumb-icon{display:none;}
+.v3d-thumb.loaded .v3d-thumb-box canvas{display:block;}
+.v3d-thumb span{display:block;font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.4px;font-family:var(--font-ui);}
+.v3d-thumb.loaded span{color:var(--accent);}
+.card:hover{border-color:rgba(80,232,244,.2);box-shadow:0 0 32px rgba(0,0,0,.4),0 0 0 1px rgba(80,232,244,.06);}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(80,232,244,.3),transparent);}
 .label{display:flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px;}
 .label::before{content:'▶';font-size:8px;opacity:.6;}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 input[type=text],input[type=number],select{flex:1;min-width:180px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-family:var(--font-ui);font-size:13px;padding:11px 14px;outline:none;transition:border-color .2s,box-shadow .2s;}
 input[type=text]::placeholder{color:var(--muted)}
-input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1);}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(80,232,244,.1);}
 select option{background:var(--s2)}
 .hint{font-family:var(--font-ui);font-size:11px;color:var(--muted);margin-top:6px;}
 .btn{background:var(--accent);color:#000;border:none;border-radius:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;padding:11px 20px;cursor:pointer;letter-spacing:.04em;transition:background .15s,box-shadow .15s,transform .1s;white-space:nowrap;}
-.btn:hover{background:#00EEFF;box-shadow:0 0 20px rgba(0,212,255,.4);}
+.btn:hover{background:#00EEFF;box-shadow:0 0 20px rgba(80,232,244,.4);}
 .btn:active{transform:scale(.97)}
 .btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;box-shadow:none;}
 .btn-green{background:var(--green);color:#000;}
@@ -98,7 +126,7 @@ select option{background:var(--s2)}
 .dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 @media(max-width:460px){.dl-grid{grid-template-columns:1fr}}
 .dl-card{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;transition:border-color .2s}
-.dl-card.ready{border-color:var(--accent);box-shadow:0 0 16px rgba(0,212,255,.1)}
+.dl-card.ready{border-color:var(--accent);box-shadow:0 0 16px rgba(80,232,244,.1)}
 .dl-title{font-family:var(--font-ui);font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .dl-desc{font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
@@ -112,21 +140,21 @@ code{background:var(--s3);border:1px solid var(--border2);border-radius:4px;padd
 .patch-header{font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:2px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
 .patch-header::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--accent),transparent)}
 .timeline{position:relative;padding-left:24px}
-.timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:linear-gradient(180deg,var(--accent),rgba(0,212,255,.1))}
+.timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:linear-gradient(180deg,var(--accent),rgba(80,232,244,.1))}
 .tl-item{position:relative;margin-bottom:28px}
 .tl-dot{position:absolute;left:-28px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--accent);background:var(--bg)}
-.tl-item.latest .tl-dot{background:var(--accent);box-shadow:0 0 10px rgba(0,212,255,.6)}
+.tl-item.latest .tl-dot{background:var(--accent);box-shadow:0 0 10px rgba(80,232,244,.6)}
 .tl-version{font-family:var(--font-px);font-size:9px;color:var(--white);margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .tl-badge-new{background:var(--accent);color:#000;font-size:7px;padding:2px 7px;border-radius:4px;font-weight:700}
 .tl-date{font-family:var(--font-ui);font-size:11px;color:var(--muted);letter-spacing:.06em}
 .tl-card{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:8px}
-.tl-item.latest .tl-card{border-color:rgba(0,212,255,.2)}
+.tl-item.latest .tl-card{border-color:rgba(80,232,244,.2)}
 .tl-changes{list-style:none;padding:0;margin:0}
 .tl-changes li{font-family:var(--font-ui);font-size:12px;color:#9999BB;line-height:1.8;padding-left:16px;position:relative}
 .tl-changes li::before{content:'→';position:absolute;left:0;color:var(--accent);font-size:11px}
 .tl-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:4px;margin-right:4px;vertical-align:middle;font-weight:600}
 .tag-new{background:rgba(255,68,102,.12);color:#FF7799;border:1px solid rgba(255,68,102,.25)}
-.tag-fix{background:rgba(14,165,233,.12);color:#38BDF8;border:1px solid rgba(14,165,233,.25)}
+.tag-fix{background:rgba(47,209,222,.12);color:#8FF2F9;border:1px solid rgba(47,209,222,.25)}
 .tag-feat{background:rgba(0,255,179,.1);color:var(--green);border:1px solid rgba(0,255,179,.2)}
 footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;color:var(--muted);border-top:1px solid var(--border);background:var(--s1);letter-spacing:.08em;}
 @keyframes scan{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
@@ -134,21 +162,21 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 
 /* ── REDESIGNED SECURITY POPUP ─────────────────────────── */
 .modal-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px)}
-.modal-box{background:rgba(13,13,26,.97);border:1px solid rgba(0,212,255,.2);border-radius:16px;max-width:460px;width:100%;position:relative;overflow:hidden;box-shadow:0 0 60px rgba(0,212,255,.1),0 24px 48px rgba(0,0,0,.6)}
+.modal-box{background:rgba(13,13,26,.97);border:1px solid rgba(80,232,244,.2);border-radius:16px;max-width:460px;width:100%;position:relative;overflow:hidden;box-shadow:0 0 60px rgba(80,232,244,.1),0 24px 48px rgba(0,0,0,.6)}
 .modal-box::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent)}
 .modal-header{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
 .modal-title-wrap{flex:1}
-.modal-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:4px 10px;border-radius:20px;letter-spacing:1px;margin-bottom:8px}
-.modal-title{font-family:'Press Start 2P',monospace;font-size:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;line-height:1.6;filter:drop-shadow(0 0 12px rgba(0,212,255,.3))}
+.modal-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(80,232,244,.1);border:1px solid rgba(80,232,244,.3);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:4px 10px;border-radius:20px;letter-spacing:1px;margin-bottom:8px}
+.modal-title{font-family:'Press Start 2P',monospace;font-size:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;line-height:1.6;filter:drop-shadow(0 0 12px rgba(80,232,244,.3))}
 .lang-btns{display:flex;gap:5px;flex-shrink:0;margin-left:8px}
 .lang-btn{background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .2s}
-.lang-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08)}
+.lang-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(80,232,244,.08)}
 .modal-desc{margin:12px 20px 0;font-size:11px;color:var(--gray);line-height:1.8}
 .modal-desc strong{color:var(--white)}
 .modal-body{padding:16px 20px}
 .sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-.sec-card{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:10px;padding:12px;transition:all .2s}
-.sec-card:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.08);transform:translateY(-1px)}
+.sec-card{background:rgba(80,232,244,.04);border:1px solid rgba(80,232,244,.1);border-radius:10px;padding:12px;transition:all .2s}
+.sec-card:hover{border-color:rgba(80,232,244,.3);background:rgba(80,232,244,.08);transform:translateY(-1px)}
 .sec-card-icon{font-size:18px;margin-bottom:6px}
 .sec-card-title{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:1px}
 .sec-card-desc{font-size:8px;color:var(--gray);line-height:1.6}
@@ -157,19 +185,19 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .proof-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:9px;color:var(--gray)}
 .proof-item a{color:var(--accent);text-decoration:none}
 .proof-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0}
-.login-hint{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.2);border-radius:10px;padding:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
+.login-hint{background:rgba(47,209,222,.06);border:1px solid rgba(47,209,222,.2);border-radius:10px;padding:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
 .login-hint-icon{font-size:20px;flex-shrink:0}
 .login-hint-text{font-size:9px;color:var(--gray);line-height:1.8}
 .login-hint-text strong{color:var(--accent2)}
 .modal-footer{padding:0 20px 20px;display:flex;flex-direction:column;gap:8px}
 .modal-btn{width:100%;padding:13px;border:none;border-radius:10px;cursor:pointer;font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:1px;transition:all .2s}
 .modal-btn-primary{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#09090f;font-weight:700}
-.modal-btn-primary:hover{filter:brightness(1.1);box-shadow:0 0 20px rgba(0,212,255,.3)}
-.modal-btn-login{background:rgba(14,165,233,.1);color:var(--accent2);border:1px solid rgba(14,165,233,.3);font-size:8px}
-.modal-btn-login:hover{background:rgba(14,165,233,.2)}
+.modal-btn-primary:hover{filter:brightness(1.1);box-shadow:0 0 20px rgba(80,232,244,.3)}
+.modal-btn-login{background:rgba(47,209,222,.1);color:var(--accent2);border:1px solid rgba(47,209,222,.3);font-size:8px}
+.modal-btn-login:hover{background:rgba(47,209,222,.2)}
 .modal-btn-secondary{background:transparent;color:var(--gray);border:1px solid var(--gray2);font-size:7px}
 .modal-btn-secondary:hover{color:var(--white);border-color:var(--gray)}
-.modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.3),transparent);margin:0 20px 12px}
+.modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(80,232,244,.3),transparent);margin:0 20px 12px}
 
 
 /* ── PATCH NOTES ─────────────────────────────────────────── */
@@ -198,7 +226,7 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .nudge-overlay{position:fixed;inset:0;background:rgba(3,3,10,.85);backdrop-filter:blur(8px);
   display:flex;align-items:center;justify-content:center;z-index:99998;padding:16px;}
 .nudge-box{max-width:420px;width:100%;background:var(--s1);border:1px solid var(--accent);
-  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(0,212,255,.15);}
+  border-radius:12px;padding:24px;box-shadow:0 0 40px rgba(80,232,244,.15);}
 .nudge-icon{font-size:28px;margin-bottom:12px;}
 .nudge-title{font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px;}
 .nudge-body{font-family:var(--font-ui);font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px;}
@@ -255,7 +283,7 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .footer-contact-item{display:flex;align-items:center;gap:6px;font-family:var(--font-ui);
   font-size:11px;color:var(--muted);cursor:pointer;transition:color .15s;background:none;
   border:none;padding:4px 8px;border-radius:6px;}
-.footer-contact-item:hover{color:var(--accent);background:rgba(0,212,255,.06);}
+.footer-contact-item:hover{color:var(--accent);background:rgba(80,232,244,.06);}
 
 
 .rgba-channel-row{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;}
@@ -734,7 +762,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <button class="topbar-lang-btn active" id="topbar-lang-id" onclick="setGlobalLang('id')">ID</button>
       <button class="topbar-lang-btn" id="topbar-lang-en" onclick="setGlobalLang('en')">EN</button>
     </div>
-    <a href="/auth/login" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(0,212,255,.15)'" onmouseout="this.style.background='rgba(0,212,255,.08)'">🔑 Login with Roblox</a>
+    <a href="/auth/login" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(80,232,244,.08);border:1px solid rgba(80,232,244,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(80,232,244,.15)'" onmouseout="this.style.background='rgba(80,232,244,.08)'">🔑 Login with Roblox</a>
     <a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--gray)'">↗ GitHub</a>
   </div>
   <div class="scan" style="margin-top:16px"></div>
@@ -744,17 +772,17 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 <main>
   <!-- TABS -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('avatar')">👤 <span data-t-id="AVATAR" data-t-en="AVATAR">AVATAR</span></div>
-    <div class="tab" onclick="switchTab('catalog')">🛍️ <span data-t-id="KATALOG" data-t-en="CATALOG">KATALOG</span></div>
-    <div class="tab" onclick="switchTab('audio')">🎵 <span data-t-id="AUDIO" data-t-en="AUDIO">AUDIO</span></div>
-    <div class="tab" onclick="switchTab('model3d')">📦 <span data-t-id="3D MODEL" data-t-en="3D MODEL">3D MODEL</span></div>
+    <div class="tab tab-primary active" onclick="switchTab('avatar')"><img class="nav-icon" src="/icons/avatar.svg" alt=""> <span data-t-id="AVATAR" data-t-en="AVATAR">AVATAR</span></div>
+    <div class="tab tab-primary" onclick="switchTab('catalog')"><img class="nav-icon" src="/icons/catalog.svg" alt=""> <span data-t-id="KATALOG" data-t-en="CATALOG">KATALOG</span></div>
+    <div class="tab tab-primary" onclick="switchTab('audio')"><img class="nav-icon" src="/icons/audio.svg" alt=""> <span data-t-id="AUDIO" data-t-en="AUDIO">AUDIO</span></div>
+    <div class="tab tab-primary" onclick="switchTab('model3d')"><img class="nav-icon" src="/icons/3d-model.svg" alt=""> <span data-t-id="3D MODEL" data-t-en="3D MODEL">3D MODEL</span></div>
     <div class="tab-dropdown">
-      <div class="tab" onclick="toggleDropdown(event)">⚙️ <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
+      <div class="tab" onclick="toggleDropdown(event)"><img class="nav-icon" src="/icons/more.svg" alt=""> <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
-        <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'">🎨 <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
-        <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'">🔮 <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
+        <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/texture.svg" alt=""> <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
+        <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/viewer3d.svg" alt=""> <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
-        <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'">🧱 <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+        <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/materials.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
@@ -996,16 +1024,21 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     </div>
     <div class="card" id="tex-result" style="display:none">
       <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">ALBEDO</p><canvas id="canvas-albedo" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">NORMAL</p><canvas id="canvas-normal" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">ROUGHNESS</p><canvas id="canvas-roughness" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">AO</p><canvas id="canvas-ao" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">EMISSIVE</p><canvas id="canvas-emissive" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">CURVATURE</p><canvas id="canvas-curvature" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">SPECULAR</p><canvas id="canvas-specular" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">BUMP</p><canvas id="canvas-bump" style="width:100%;border-radius:4px"></canvas></div>
-        <div><p style="font-size:8px;color:var(--gray);margin-bottom:4px">METALLIC</p><canvas id="canvas-metallic" style="width:100%;border-radius:4px"></canvas></div>
+      <div class="tex-hero-box" id="tex-hero-box">
+        <div class="tex-hero-placeholder" id="tex-hero-placeholder"><span data-t-id="Ketuk salah satu map di bawah untuk preview" data-t-en="Tap a map below to preview">Tap a map below to preview</span></div>
+        <canvas id="canvas-hero-preview"></canvas>
+        <div class="tex-hero-label" id="tex-hero-label"></div>
+      </div>
+      <div class="tex-thumb-row">
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-albedo','ALBEDO')"><canvas id="canvas-albedo"></canvas><span>ALBEDO</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-normal','NORMAL')"><canvas id="canvas-normal"></canvas><span>NORMAL</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-roughness','ROUGHNESS')"><canvas id="canvas-roughness"></canvas><span>ROUGHNESS</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-ao','AO')"><canvas id="canvas-ao"></canvas><span>AO</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-emissive','EMISSIVE')"><canvas id="canvas-emissive"></canvas><span>EMISSIVE</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-curvature','CURVATURE')"><canvas id="canvas-curvature"></canvas><span>CURVATURE</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-specular','SPECULAR')"><canvas id="canvas-specular"></canvas><span>SPECULAR</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-bump','BUMP')"><canvas id="canvas-bump"></canvas><span>BUMP</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-metallic','METALLIC')"><canvas id="canvas-metallic"></canvas><span>METALLIC</span></button>
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()" style="width:100%">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
@@ -1082,55 +1115,57 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         ⚠ <span data-t-id="Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material." data-t-en="Curvature is not available here since it isn't part of the standard PBR workflow &mdash; it's typically only used as helper data to generate other maps (e.g. AO or wear/edge effects), not applied directly to a material.">Curvature tidak tersedia di sini karena bukan bagian dari workflow PBR standar &mdash; biasanya hanya dipakai sebagai data bantu untuk generate map lain (misal AO atau wear/edge effect), bukan diterapkan langsung ke material.</span>
       </p>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ALBEDO</label>
-          <input type="file" id="v3d-albedo-input" accept="image/*" onchange="loadV3DTexture(event,'albedo')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-albedo-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-albedo-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">NORMAL</label>
-          <input type="file" id="v3d-normal-input" accept="image/*" onchange="loadV3DTexture(event,'normal')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-normal-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-normal-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">ROUGHNESS</label>
-          <input type="file" id="v3d-roughness-input" accept="image/*" onchange="loadV3DTexture(event,'roughness')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-roughness-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-roughness-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">AO</label>
-          <input type="file" id="v3d-ao-input" accept="image/*" onchange="loadV3DTexture(event,'ao')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-ao-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-ao-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">EMISSIVE</label>
-          <input type="file" id="v3d-emissive-input" accept="image/*" onchange="loadV3DTexture(event,'emissive')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-emissive-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-emissive-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">SPECULAR</label>
-          <input type="file" id="v3d-specular-input" accept="image/*" onchange="loadV3DTexture(event,'specular')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-specular-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-specular-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">BUMP</label>
-          <input type="file" id="v3d-bump-input" accept="image/*" onchange="loadV3DTexture(event,'bump')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-bump-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-bump-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--gray);display:block;margin-bottom:4px">METALLIC</label>
-          <input type="file" id="v3d-metallic-input" accept="image/*" onchange="loadV3DTexture(event,'metallic')" style="display:none">
-          <button class="btn" onclick="document.getElementById('v3d-metallic-input').click()" style="width:100%;font-size:10px">📁 UPLOAD</button>
-          <div id="v3d-metallic-status" style="font-size:8px;color:var(--gray);margin-top:4px"></div>
-        </div>
+      <div class="v3d-thumb-row">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-albedo-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-albedo-thumb"></canvas></div>
+          <span>ALBEDO</span>
+        </button>
+        <input type="file" id="v3d-albedo-input" accept="image/*" onchange="loadV3DTexture(event,'albedo')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-normal-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-normal-thumb"></canvas></div>
+          <span>NORMAL</span>
+        </button>
+        <input type="file" id="v3d-normal-input" accept="image/*" onchange="loadV3DTexture(event,'normal')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-roughness-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-roughness-thumb"></canvas></div>
+          <span>ROUGHNESS</span>
+        </button>
+        <input type="file" id="v3d-roughness-input" accept="image/*" onchange="loadV3DTexture(event,'roughness')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-ao-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-ao-thumb"></canvas></div>
+          <span>AO</span>
+        </button>
+        <input type="file" id="v3d-ao-input" accept="image/*" onchange="loadV3DTexture(event,'ao')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-emissive-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-emissive-thumb"></canvas></div>
+          <span>EMISSIVE</span>
+        </button>
+        <input type="file" id="v3d-emissive-input" accept="image/*" onchange="loadV3DTexture(event,'emissive')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-specular-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-specular-thumb"></canvas></div>
+          <span>SPECULAR</span>
+        </button>
+        <input type="file" id="v3d-specular-input" accept="image/*" onchange="loadV3DTexture(event,'specular')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-bump-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-bump-thumb"></canvas></div>
+          <span>BUMP</span>
+        </button>
+        <input type="file" id="v3d-bump-input" accept="image/*" onchange="loadV3DTexture(event,'bump')" style="display:none">
+        <button class="v3d-thumb" onclick="document.getElementById('v3d-metallic-input').click()">
+          <div class="v3d-thumb-box"><span class="v3d-thumb-icon">📁</span><canvas id="v3d-metallic-thumb"></canvas></div>
+          <span>METALLIC</span>
+        </button>
+        <input type="file" id="v3d-metallic-input" accept="image/*" onchange="loadV3DTexture(event,'metallic')" style="display:none">
+      </div>
+      <div style="display:none">
+        <div id="v3d-albedo-status"></div>
+        <div id="v3d-normal-status"></div>
+        <div id="v3d-roughness-status"></div>
+        <div id="v3d-ao-status"></div>
+        <div id="v3d-emissive-status"></div>
+        <div id="v3d-specular-status"></div>
+        <div id="v3d-bump-status"></div>
+        <div id="v3d-metallic-status"></div>
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -1154,7 +1189,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
         <span data-t-id="Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu." data-t-en="Official Roblox Studio PBR texture collection (Brick, Wood, Grass, Concrete, etc) to use as material reference in your 3D software.">Koleksi texture PBR resmi Roblox Studio (Brick, Wood, Grass, Concrete, dll) untuk dipakai sebagai referensi material di software 3D-mu.</span>
       </p>
-      <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="background:rgba(80,232,244,.05);border:1px solid rgba(80,232,244,.2);border-radius:8px;padding:14px;margin-bottom:12px">
         <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">📦 Roblox-Materials Repository</div>
         <p style="font-size:9px;color:var(--gray);line-height:1.8;margin-bottom:10px">
           <span data-t-id="Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai." data-t-en="Each material includes ColorMap, NormalMap, MetalnessMap, RoughnessMap, and HeightMap in ready-to-use PNG format.">Setiap material menyertakan ColorMap, NormalMap, MetalnessMap, RoughnessMap, dan HeightMap dalam format PNG siap pakai.</span>
@@ -2249,6 +2284,27 @@ function generateMaps(src){
     metal.data[i]=metal.data[i+1]=metal.data[i+2]=v; metal.data[i+3]=255;
   }
   putImageData("canvas-metallic",metal,w,h);
+
+  selectTexPreview(null,'canvas-albedo','ALBEDO');
+}
+
+function selectTexPreview(e, id, label){
+  const src = document.getElementById(id);
+  const hero = document.getElementById('canvas-hero-preview');
+  hero.width = src.width; hero.height = src.height;
+  hero.getContext('2d').drawImage(src,0,0);
+  hero.style.display = 'block';
+  document.getElementById('tex-hero-placeholder').style.display = 'none';
+  const heroLabel = document.getElementById('tex-hero-label');
+  heroLabel.textContent = label;
+  heroLabel.style.display = 'block';
+  document.querySelectorAll('.tex-thumb').forEach(t => t.classList.remove('active'));
+  if(e && e.currentTarget){
+    e.currentTarget.classList.add('active');
+  } else {
+    const match = document.querySelector(`.tex-thumb[onclick*="'${id}'"]`);
+    if(match) match.classList.add('active');
+  }
 }
 
 function drawToCanvas(id, src){
@@ -2752,6 +2808,17 @@ window.loadV3DTexture = function(event, slot){
     if(slot === 'bump') v3dMaterial.bumpMap = tex;
     if(slot === 'metallic') v3dMaterial.metalnessMap = tex;
     v3dMaterial.needsUpdate = true;
+
+    const thumbCanvas = document.getElementById('v3d-'+slot+'-thumb');
+    if(thumbCanvas){
+      thumbCanvas.width = 84; thumbCanvas.height = 84;
+      const tctx = thumbCanvas.getContext('2d');
+      const scale = Math.max(84/img.width, 84/img.height);
+      const sw = img.width*scale, sh = img.height*scale;
+      tctx.drawImage(img, (84-sw)/2, (84-sh)/2, sw, sh);
+      const thumbBtn = thumbCanvas.closest('.v3d-thumb');
+      if(thumbBtn) thumbBtn.classList.add('loaded');
+    }
 
     document.getElementById('v3d-placeholder').style.display = 'none';
     statusEl.textContent = '✓ Loaded';
