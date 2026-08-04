@@ -74,9 +74,10 @@ main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
 .tex-thumb.active canvas{border-color:var(--accent);box-shadow:0 0 10px rgba(80,232,244,.4);}
 .tex-thumb span{display:block;font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.4px;font-family:var(--font-ui);}
 .tex-thumb.active span{color:var(--accent);}
-.tex-gear-btn{background:var(--s2);border:1px solid var(--border);border-radius:9px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,border-color .15s;}
-.tex-gear-btn:hover,.tex-gear-btn.active{border-color:var(--accent);background:rgba(80,232,244,.08);}
-.tex-gear-btn img{width:22px;height:22px;}
+.tex-gear-btn{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;margin-bottom:12px;transition:background .15s,border-color .15s;font-family:var(--font-ui);font-size:11px;font-weight:700;color:var(--white);letter-spacing:.06em;}
+.tex-gear-btn:hover{border-color:var(--accent);background:rgba(80,232,244,.08);}
+.tex-gear-btn.active{border-color:var(--accent);background:rgba(80,232,244,.12);color:var(--accent);box-shadow:0 0 12px rgba(80,232,244,.2);}
+.tex-gear-btn img{width:18px;height:18px;}
 .tex-settings-panel{display:none;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;}
 .tex-settings-panel.open{display:block;}
 .tex-set-row{margin-bottom:12px;}
@@ -1046,15 +1047,13 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div id="tex-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
     <div class="card" id="tex-result" style="display:none">
-      <div class="label" style="display:flex;align-items:center;justify-content:space-between">
-        <span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span>
-        <button class="tex-gear-btn" id="tex-gear-btn" onclick="toggleTexSettings()"><img class="nav-icon" src="/icons/GEAR.svg" alt="Settings"></button>
-      </div>
+      <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
       <div class="tex-hero-box" id="tex-hero-box">
         <div class="tex-hero-placeholder" id="tex-hero-placeholder"><span data-t-id="Ketuk salah satu map di bawah untuk preview" data-t-en="Tap a map below to preview">Tap a map below to preview</span></div>
         <canvas id="canvas-hero-preview"></canvas>
         <div class="tex-hero-label" id="tex-hero-label"></div>
       </div>
+      <button class="tex-gear-btn" id="tex-gear-btn" onclick="toggleTexSettings()"><img class="nav-icon" src="/icons/GEAR.svg" alt=""> <span data-t-id="PENGATURAN MAP" data-t-en="MAP SETTINGS">MAP SETTINGS</span></button>
       <div class="tex-settings-panel" id="tex-settings-panel"></div>
       <div class="tex-thumb-row">
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-albedo','ALBEDO')"><canvas id="canvas-albedo"></canvas><span>ALBEDO</span></button>
