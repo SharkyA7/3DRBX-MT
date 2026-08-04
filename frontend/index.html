@@ -74,6 +74,29 @@ main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
 .tex-thumb.active canvas{border-color:var(--accent);box-shadow:0 0 10px rgba(80,232,244,.4);}
 .tex-thumb span{display:block;font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.4px;font-family:var(--font-ui);}
 .tex-thumb.active span{color:var(--accent);}
+.tex-gear-btn{background:var(--s2);border:1px solid var(--border);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,border-color .15s;}
+.tex-gear-btn:hover,.tex-gear-btn.active{border-color:var(--accent);background:rgba(80,232,244,.08);}
+.tex-gear-btn img{width:15px;height:15px;}
+.tex-settings-panel{display:none;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;}
+.tex-settings-panel.open{display:block;}
+.tex-set-row{margin-bottom:12px;}
+.tex-set-row:last-child{margin-bottom:0;}
+.tex-set-label{display:flex;justify-content:space-between;font-family:var(--font-ui);font-size:10px;color:var(--muted);margin-bottom:5px;letter-spacing:.03em;}
+.tex-set-label b{color:var(--white);font-weight:600;}
+.tex-set-label span.tex-set-val{color:var(--accent);font-weight:700;}
+.tex-set-row input[type="range"]{width:100%;accent-color:var(--accent);height:4px;}
+.tex-set-toggle{display:flex;align-items:center;justify-content:space-between;padding:8px 0;}
+.tex-set-toggle b{font-family:var(--font-ui);font-size:10px;color:var(--white);font-weight:600;letter-spacing:.03em;}
+.tex-switch{position:relative;width:34px;height:19px;flex-shrink:0;}
+.tex-switch input{opacity:0;width:0;height:0;}
+.tex-switch-slider{position:absolute;inset:0;background:var(--border2);border-radius:999px;cursor:pointer;transition:background .15s;}
+.tex-switch-slider::before{content:'';position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--muted);border-radius:50%;transition:transform .15s,background .15s;}
+.tex-switch input:checked + .tex-switch-slider{background:rgba(80,232,244,.25);}
+.tex-switch input:checked + .tex-switch-slider::before{transform:translateX(15px);background:var(--accent);}
+.tex-set-color-row{display:flex;align-items:center;gap:10px;padding:8px 0;}
+.tex-set-color-row input[type="color"]{width:34px;height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;padding:0;}
+.tex-set-reset{width:100%;margin-top:4px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px;font-family:var(--font-ui);font-size:9px;font-weight:700;letter-spacing:.06em;cursor:pointer;}
+.tex-set-reset:hover{color:var(--white);border-color:var(--accent);}
 .v3d-thumb-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;scrollbar-width:none;}
 .v3d-thumb-row::-webkit-scrollbar{display:none}
 .v3d-thumb{flex-shrink:0;width:84px;cursor:pointer;text-align:center;background:transparent;border:none;padding:0;}
@@ -1023,12 +1046,16 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div id="tex-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
     <div class="card" id="tex-result" style="display:none">
-      <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
+      <div class="label" style="display:flex;align-items:center;justify-content:space-between">
+        <span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span>
+        <button class="tex-gear-btn" id="tex-gear-btn" onclick="toggleTexSettings()"><img class="nav-icon" src="/icons/GEAR.svg" alt="Settings"></button>
+      </div>
       <div class="tex-hero-box" id="tex-hero-box">
         <div class="tex-hero-placeholder" id="tex-hero-placeholder"><span data-t-id="Ketuk salah satu map di bawah untuk preview" data-t-en="Tap a map below to preview">Tap a map below to preview</span></div>
         <canvas id="canvas-hero-preview"></canvas>
         <div class="tex-hero-label" id="tex-hero-label"></div>
       </div>
+      <div class="tex-settings-panel" id="tex-settings-panel"></div>
       <div class="tex-thumb-row">
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-albedo','ALBEDO')"><canvas id="canvas-albedo"></canvas><span>ALBEDO</span></button>
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-normal','NORMAL')"><canvas id="canvas-normal"></canvas><span>NORMAL</span></button>
@@ -1039,6 +1066,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-specular','SPECULAR')"><canvas id="canvas-specular"></canvas><span>SPECULAR</span></button>
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-bump','BUMP')"><canvas id="canvas-bump"></canvas><span>BUMP</span></button>
         <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-metallic','METALLIC')"><canvas id="canvas-metallic"></canvas><span>METALLIC</span></button>
+        <button class="tex-thumb" onclick="selectTexPreview(event,'canvas-alpha','ALPHA')"><canvas id="canvas-alpha"></canvas><span>ALPHA</span></button>
       </div>
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()" style="width:100%">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
@@ -1068,6 +1096,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <option value="specular">Specular</option>
         <option value="bump">Bump</option>
         <option value="metallic">Metallic</option>
+        <option value="alpha">Alpha</option>
       </select>
     </div>
 
@@ -2285,7 +2314,405 @@ function generateMaps(src){
   }
   putImageData("canvas-metallic",metal,w,h);
 
+  // Alpha map (new — luminance-threshold mask, adjustable via settings)
+  const alp = new ImageData(w,h);
+  for(let i=0;i<data.length;i+=4){
+    const g=gray(i);
+    const v=g>128?255:0;
+    alp.data[i]=alp.data[i+1]=alp.data[i+2]=v; alp.data[i+3]=255;
+  }
+  putImageData("canvas-alpha",alp,w,h);
+
+  // Capture pristine base data + reset settings for every map so sliders are non-destructive
+  Object.keys(TEX_MAP_KEYS).forEach(function(key){
+    const cv = document.getElementById(TEX_MAP_KEYS[key]);
+    texBaseData[key] = cv.getContext("2d").getImageData(0,0,cv.width,cv.height);
+    initTexSettings(key);
+  });
+
   selectTexPreview(null,'canvas-albedo','ALBEDO');
+}
+
+// ===== Texture map settings (gear panel) =====
+
+const TEX_MAP_KEYS = {
+  albedo:"canvas-albedo", normal:"canvas-normal", roughness:"canvas-roughness", ao:"canvas-ao",
+  emissive:"canvas-emissive", curvature:"canvas-curvature", specular:"canvas-specular",
+  bump:"canvas-bump", metallic:"canvas-metallic", alpha:"canvas-alpha"
+};
+
+const TEX_SETTINGS_CONFIG = {
+  albedo:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"brightness",label:"Brightness",min:-100,max:100,def:0,unit:""},
+      {key:"hue",label:"Hue Shift",min:-180,max:180,def:0,unit:"°"},
+      {key:"saturation",label:"Saturation",min:-100,max:100,def:0,unit:""},
+      {key:"colorBrightness",label:"Color Brightness",min:-100,max:100,def:0,unit:""}
+    ], toggles:[{key:"seamless",label:"Make Seamless",def:false}] },
+  normal:{ sliders:[
+      {key:"strength",label:"Intensity",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"sharpen",label:"Sharpen",min:0,max:100,def:0,unit:"%"},
+      {key:"detailScale",label:"Detail Scale",min:0,max:200,def:100,unit:"%"}
+    ], toggles:[{key:"invertX",label:"Invert X (Red)",def:false},{key:"invertY",label:"Invert Y (Green)",def:false},{key:"seamless",label:"Make Seamless",def:false}] },
+  roughness:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"brightness",label:"Brightness",min:-100,max:100,def:0,unit:""}
+    ], toggles:[{key:"invert",label:"Invert Roughness",def:false},{key:"seamless",label:"Make Seamless",def:false}] },
+  metallic:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"roughness",label:"Roughness",min:-100,max:100,def:0,unit:""},
+      {key:"reflectance",label:"Metallic Reflectance",min:0,max:100,def:50,unit:"%"}
+    ], toggles:[{key:"invert",label:"Invert Metallic",def:false},{key:"seamless",label:"Make Seamless",def:false}] },
+  ao:{ sliders:[
+      {key:"strength",label:"AO Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"brightness",label:"Brightness",min:-100,max:100,def:0,unit:""}
+    ], toggles:[{key:"seamless",label:"Make Seamless",def:false}] },
+  emissive:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"brightness",label:"Brightness",min:-100,max:100,def:0,unit:""},
+      {key:"grayMin",label:"Gray Range Min",min:0,max:100,def:0,unit:"%"},
+      {key:"grayMax",label:"Gray Range Max",min:0,max:100,def:100,unit:"%"}
+    ], toggles:[{key:"seamless",label:"Make Seamless",def:false}],
+    color:{key:"emissiveColor",label:"Emission Color",def:"#ffffff",toggleKey:"useCustomColor",toggleLabel:"Use Custom Color"} },
+  curvature:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""}
+    ], toggles:[{key:"invert",label:"Invert Curvature",def:false},{key:"seamless",label:"Make Seamless",def:false}] },
+  specular:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"contrast",label:"Contrast",min:-100,max:100,def:0,unit:""},
+      {key:"brightness",label:"Brightness",min:-100,max:100,def:0,unit:""}
+    ], toggles:[{key:"seamless",label:"Make Seamless",def:false}] },
+  bump:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"}
+    ], toggles:[{key:"seamless",label:"Make Seamless",def:false}] },
+  alpha:{ sliders:[
+      {key:"strength",label:"Strength",min:0,max:200,def:100,unit:"%"},
+      {key:"blur",label:"Blur",min:0,max:8,def:0,unit:"px"},
+      {key:"threshold",label:"Threshold",min:0,max:100,def:50,unit:"%"},
+      {key:"feather",label:"Feather",min:0,max:100,def:20,unit:"%"}
+    ], toggles:[{key:"invert",label:"Invert Alpha",def:false},{key:"seamless",label:"Make Seamless",def:false}] }
+};
+
+let texBaseData = {};
+let texCurrentSettings = {};
+let texActiveMap = "albedo";
+let texSettingsOpen = false;
+let texApplyTimer = null;
+
+function initTexSettings(key){
+  const cfg = TEX_SETTINGS_CONFIG[key];
+  const s = {};
+  cfg.sliders.forEach(function(sl){ s[sl.key]=sl.def; });
+  cfg.toggles.forEach(function(tg){ s[tg.key]=tg.def; });
+  if(cfg.color){ s[cfg.color.key]=cfg.color.def; s[cfg.color.toggleKey]=false; }
+  texCurrentSettings[key]=s;
+}
+
+function toggleTexSettings(){
+  texSettingsOpen = !texSettingsOpen;
+  const panel = document.getElementById("tex-settings-panel");
+  const btn = document.getElementById("tex-gear-btn");
+  panel.classList.toggle("open", texSettingsOpen);
+  btn.classList.toggle("active", texSettingsOpen);
+  if(texSettingsOpen) renderTexSettingsPanel(texActiveMap);
+}
+
+function renderTexSettingsPanel(key){
+  const cfg = TEX_SETTINGS_CONFIG[key];
+  if(!cfg || !texCurrentSettings[key]) return;
+  const s = texCurrentSettings[key];
+  const panel = document.getElementById("tex-settings-panel");
+  let html = "";
+  cfg.sliders.forEach(function(sl){
+    html += '<div class="tex-set-row">'
+      + '<div class="tex-set-label"><b>'+sl.label+'</b><span class="tex-set-val" id="tex-val-'+key+'-'+sl.key+'">'+s[sl.key]+sl.unit+'</span></div>'
+      + '<input type="range" min="'+sl.min+'" max="'+sl.max+'" value="'+s[sl.key]+'" oninput="updateTexSetting(\''+key+'\',\''+sl.key+'\',this.value,\''+sl.unit+'\')">'
+      + '</div>';
+  });
+  if(cfg.color){
+    html += '<div class="tex-set-toggle"><b>'+cfg.color.toggleLabel+'</b>'
+      + '<label class="tex-switch"><input type="checkbox" '+(s[cfg.color.toggleKey]?'checked':'')+' onchange="updateTexToggle(\''+key+'\',\''+cfg.color.toggleKey+'\',this.checked)"><span class="tex-switch-slider"></span></label></div>'
+      + '<div class="tex-set-color-row"><input type="color" value="'+s[cfg.color.key]+'" onchange="updateTexColor(\''+key+'\',\''+cfg.color.key+'\',this.value)">'
+      + '<span style="font-family:var(--font-ui);font-size:10px;color:var(--muted)">'+cfg.color.label+'</span></div>';
+  }
+  cfg.toggles.forEach(function(tg){
+    html += '<div class="tex-set-toggle"><b>'+tg.label+'</b>'
+      + '<label class="tex-switch"><input type="checkbox" '+(s[tg.key]?'checked':'')+' onchange="updateTexToggle(\''+key+'\',\''+tg.key+'\',this.checked)"><span class="tex-switch-slider"></span></label></div>';
+  });
+  html += '<button class="tex-set-reset" onclick="resetTexSettings(\''+key+'\')">↺ RESET TO DEFAULT</button>';
+  panel.innerHTML = html;
+}
+
+function updateTexSetting(key, slKey, val, unit){
+  texCurrentSettings[key][slKey] = Number(val);
+  const el = document.getElementById("tex-val-"+key+"-"+slKey);
+  if(el) el.textContent = val+unit;
+  scheduleTexApply(key);
+}
+function updateTexToggle(key, tgKey, val){
+  texCurrentSettings[key][tgKey] = val;
+  scheduleTexApply(key);
+}
+function updateTexColor(key, colorKey, val){
+  texCurrentSettings[key][colorKey] = val;
+  scheduleTexApply(key);
+}
+function scheduleTexApply(key){
+  clearTimeout(texApplyTimer);
+  texApplyTimer = setTimeout(function(){ applyTexAdjustments(key); }, 60);
+}
+function resetTexSettings(key){
+  initTexSettings(key);
+  renderTexSettingsPanel(key);
+  applyTexAdjustments(key);
+}
+
+function clampByte(v){ return Math.max(0,Math.min(255,v)); }
+function clamp01(v){ return Math.max(0,Math.min(1,v)); }
+
+function hexToRgb(hex){
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1],16),parseInt(m[2],16),parseInt(m[3],16)] : [255,255,255];
+}
+
+function rgbToHsl(r,g,b){
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h,s,l=(max+min)/2;
+  if(max===min){ h=s=0; }
+  else{
+    const d=max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    if(max===r) h=(g-b)/d+(g<b?6:0);
+    else if(max===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hslToRgb(h,s,l){
+  let r,g,b;
+  if(s===0){ r=g=b=l; }
+  else{
+    const hue2rgb=function(p,q,t){
+      if(t<0)t+=1; if(t>1)t-=1;
+      if(t<1/6) return p+(q-p)*6*t;
+      if(t<1/2) return q;
+      if(t<2/3) return p+(q-p)*(2/3-t)*6;
+      return p;
+    };
+    const q = l<0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    r=hue2rgb(p,q,h+1/3); g=hue2rgb(p,q,h); b=hue2rgb(p,q,h-1/3);
+  }
+  return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+}
+
+function boxBlurImageData(imgData, radius){
+  radius = Math.min(Math.round(radius), 8);
+  if(radius<=0) return imgData;
+  const w=imgData.width,h=imgData.height;
+  const data=imgData.data;
+  const tmp = new Float32Array(data.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let r=0,g=0,b=0,a=0,c=0;
+      for(let k=-radius;k<=radius;k++){
+        const sx=Math.min(w-1,Math.max(0,x+k));
+        const si=(y*w+sx)*4;
+        r+=data[si];g+=data[si+1];b+=data[si+2];a+=data[si+3];c++;
+      }
+      const di=(y*w+x)*4;
+      tmp[di]=r/c; tmp[di+1]=g/c; tmp[di+2]=b/c; tmp[di+3]=a/c;
+    }
+  }
+  const out = new Uint8ClampedArray(data.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let r=0,g=0,b=0,a=0,c=0;
+      for(let k=-radius;k<=radius;k++){
+        const sy=Math.min(h-1,Math.max(0,y+k));
+        const si=(sy*w+x)*4;
+        r+=tmp[si];g+=tmp[si+1];b+=tmp[si+2];a+=tmp[si+3];c++;
+      }
+      const di=(y*w+x)*4;
+      out[di]=r/c; out[di+1]=g/c; out[di+2]=b/c; out[di+3]=a/c;
+    }
+  }
+  return new ImageData(out,w,h);
+}
+
+function sharpenImageData(imgData, amount){
+  const w=imgData.width,h=imgData.height;
+  const src=imgData.data;
+  const out=new Uint8ClampedArray(src.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      for(let ch=0;ch<3;ch++){
+        const c = src[i+ch];
+        const l = src[(y*w+Math.max(0,x-1))*4+ch];
+        const r = src[(y*w+Math.min(w-1,x+1))*4+ch];
+        const u = src[(Math.max(0,y-1)*w+x)*4+ch];
+        const dn = src[(Math.min(h-1,y+1)*w+x)*4+ch];
+        const edge = c*4-l-r-u-dn;
+        out[i+ch]=clampByte(c + edge*amount*0.5);
+      }
+      out[i+3]=src[i+3];
+    }
+  }
+  return new ImageData(out,w,h);
+}
+
+function makeSeamlessImageData(imgData){
+  const w=imgData.width,h=imgData.height;
+  const src=imgData.data;
+  const halfW=Math.floor(w/2), halfH=Math.floor(h/2);
+  const shifted=new Uint8ClampedArray(src.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const sx=(x+halfW)%w, sy=(y+halfH)%h;
+      const si=(sy*w+sx)*4, di=(y*w+x)*4;
+      shifted[di]=src[si];shifted[di+1]=src[si+1];shifted[di+2]=src[si+2];shifted[di+3]=src[si+3];
+    }
+  }
+  const out=new Uint8ClampedArray(src.length);
+  const blendW=Math.max(6,Math.floor(w*0.12));
+  const blendH=Math.max(6,Math.floor(h*0.12));
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      const dx=Math.min(Math.abs(x-halfW), w-Math.abs(x-halfW));
+      const dy=Math.min(Math.abs(y-halfH), h-Math.abs(y-halfH));
+      let mask=0;
+      if(dx<blendW) mask=Math.max(mask, 1-dx/blendW);
+      if(dy<blendH) mask=Math.max(mask, 1-dy/blendH);
+      for(let ch=0;ch<4;ch++){
+        out[i+ch] = src[i+ch]*(1-mask) + shifted[i+ch]*mask;
+      }
+    }
+  }
+  return new ImageData(out,w,h);
+}
+
+function applyTexAdjustments(key){
+  const base = texBaseData[key];
+  if(!base) return;
+  const w = base.width, h = base.height;
+  let out = new ImageData(new Uint8ClampedArray(base.data), w, h);
+  const s = texCurrentSettings[key];
+
+  if(s.blur > 0) out = boxBlurImageData(out, s.blur);
+
+  if(s.strength !== undefined){
+    const t = s.strength/100;
+    const d = out.data;
+    for(let i=0;i<d.length;i+=4){
+      d[i]=128+(d[i]-128)*t; d[i+1]=128+(d[i+1]-128)*t; d[i+2]=128+(d[i+2]-128)*t;
+    }
+  }
+
+  if(s.contrast || s.brightness){
+    const c=(s.contrast||0);
+    const factor=(259*(c+255))/(255*(259-c));
+    const b=(s.brightness||0)*2.55;
+    const d=out.data;
+    for(let i=0;i<d.length;i+=4){
+      d[i]=factor*(d[i]-128)+128+b;
+      d[i+1]=factor*(d[i+1]-128)+128+b;
+      d[i+2]=factor*(d[i+2]-128)+128+b;
+    }
+  }
+
+  if(key==="albedo"){
+    const d=out.data;
+    for(let i=0;i<d.length;i+=4){
+      const hsl = rgbToHsl(d[i],d[i+1],d[i+2]);
+      let hh=(hsl[0] + (s.hue||0)/360 + 1) % 1;
+      let ss=clamp01(hsl[1] + (s.saturation||0)/100);
+      let ll=clamp01(hsl[2] + (s.colorBrightness||0)/200);
+      const rgb = hslToRgb(hh,ss,ll);
+      d[i]=rgb[0]; d[i+1]=rgb[1]; d[i+2]=rgb[2];
+    }
+  }
+
+  if(key==="normal"){
+    const d=out.data;
+    const ds=(s.detailScale||100)/100;
+    for(let i=0;i<d.length;i+=4){
+      let nx=d[i]-128, ny=d[i+1]-128;
+      nx*=ds; ny*=ds;
+      if(s.invertX) nx=-nx;
+      if(s.invertY) ny=-ny;
+      d[i]=clampByte(128+nx); d[i+1]=clampByte(128+ny);
+    }
+    if(s.sharpen>0) out = sharpenImageData(out, s.sharpen/100);
+  }
+
+  if((key==="roughness"||key==="curvature"||key==="metallic"||key==="alpha") && s.invert){
+    const d=out.data;
+    for(let i=0;i<d.length;i+=4){ d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; }
+  }
+
+  if(key==="metallic" && s.reflectance!==undefined){
+    const d=out.data;
+    const add=(s.reflectance-50)*2.55;
+    for(let i=0;i<d.length;i+=4){ d[i]=clampByte(d[i]+add); d[i+1]=clampByte(d[i+1]+add); d[i+2]=clampByte(d[i+2]+add); }
+  }
+
+  if(key==="emissive"){
+    const d=out.data;
+    const gMin=(s.grayMin||0)*2.55, gMax=(s.grayMax!==undefined?s.grayMax:100)*2.55;
+    const range=Math.max(1,gMax-gMin);
+    for(let i=0;i<d.length;i+=4){
+      const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      const remapped=clamp01((g-gMin)/range);
+      if(s.useCustomColor && s.emissiveColor){
+        const rgb = hexToRgb(s.emissiveColor);
+        d[i]=rgb[0]*remapped; d[i+1]=rgb[1]*remapped; d[i+2]=rgb[2]*remapped;
+      } else {
+        d[i]=clampByte(d[i]*remapped); d[i+1]=clampByte(d[i+1]*remapped); d[i+2]=clampByte(d[i+2]*remapped);
+      }
+    }
+  }
+
+  if(key==="alpha"){
+    const d=out.data;
+    const th=(s.threshold!==undefined?s.threshold:50)*2.55;
+    const fe=(s.feather||0)/100*255;
+    for(let i=0;i<d.length;i+=4){
+      const g=d[i];
+      let v;
+      if(fe<=0){ v = g>th?255:0; }
+      else { v = clampByte(((g-th)/fe)*127+128); }
+      d[i]=d[i+1]=d[i+2]=v;
+    }
+  }
+
+  if(s.seamless) out = makeSeamlessImageData(out);
+
+  putImageData(TEX_MAP_KEYS[key], out, w, h);
+
+  if(texActiveMap===key){
+    const cv=document.getElementById(TEX_MAP_KEYS[key]);
+    const hero=document.getElementById("canvas-hero-preview");
+    hero.width=cv.width; hero.height=cv.height;
+    hero.getContext("2d").drawImage(cv,0,0);
+  }
 }
 
 function selectTexPreview(e, id, label){
@@ -2305,7 +2732,10 @@ function selectTexPreview(e, id, label){
     const match = document.querySelector(`.tex-thumb[onclick*="'${id}'"]`);
     if(match) match.classList.add('active');
   }
+  for(const k in TEX_MAP_KEYS){ if(TEX_MAP_KEYS[k]===id){ texActiveMap = k; break; } }
+  if(texSettingsOpen) renderTexSettingsPanel(texActiveMap);
 }
+
 
 function drawToCanvas(id, src){
   const c = document.getElementById(id);
@@ -2339,7 +2769,7 @@ async function downloadTextures(){
   if(!texCanvas){return;}
   document.getElementById("tex-status").textContent="Generating ZIP...";
   const zip = new JSZip();
-  const ids = ["albedo","normal","roughness","ao","emissive","curvature","specular","bump","metallic"];
+  const ids = ["albedo","normal","roughness","ao","emissive","curvature","specular","bump","metallic","alpha"];
   for(const id of ids){
     const c = document.getElementById("canvas-"+id);
     const blob = await new Promise(r=>c.toBlob(r,"image/png"));
