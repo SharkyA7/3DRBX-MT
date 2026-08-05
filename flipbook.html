@@ -210,7 +210,10 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
 
 <footer>3DRBXMT · FLIPBOOK TOOL · 100% BROWSER-BASED · UNOFFICIAL, NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
 
-<script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js"></script>
+<script type="module">
+  import { GifReader } from "https://cdn.jsdelivr.net/npm/omggif@1.0.10/+esm";
+  window.GifReader = GifReader;
+</script>
 <script>
 // ============ shared state ============
 let fbSourceType = 'video';
@@ -299,30 +302,27 @@ async function fbExtractVideoFrames(vid, count){
 function fbLoadGif(file){
   const status = document.getElementById('fb-source-status');
   status.textContent = 'Decoding GIF...';
-  const reader = new FileReader();
-  reader.onload = async function(e){
+  const fr = new FileReader();
+  fr.onload = function(e){
     try{
       const gifData = new Uint8Array(e.target.result);
-      const parseGIFFn = (window.gifuct && window.gifuct.parseGIF) || window.parseGIF;
-      const decompressFramesFn = (window.gifuct && window.gifuct.decompressFrames) || window.decompressFrames;
-      if(!parseGIFFn || !decompressFramesFn) throw new Error("GIF decoder library did not load correctly.");
-      const parsed = parseGIFFn(gifData.buffer);
-      const frames = decompressFramesFn(parsed, true);
-      const w = frames[0].dims.width, h = frames[0].dims.height;
+      if(typeof window.GifReader !== "function") throw new Error("GIF decoder library did not load correctly.");
+      const reader = new window.GifReader(gifData);
+      const w = reader.width, h = reader.height;
+      const n = reader.numFrames();
       const frameCanvases = [];
       const compose = document.createElement('canvas');
       compose.width = w; compose.height = h;
       const cctx = compose.getContext('2d');
-      frames.forEach(function(f){
-        const fc = document.createElement('canvas');
-        fc.width = f.dims.width; fc.height = f.dims.height;
-        fc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(f.patch), f.dims.width, f.dims.height), 0, 0);
-        cctx.drawImage(fc, f.dims.left, f.dims.top);
+      const buf = new Uint8ClampedArray(w*h*4);
+      for(let i=0;i<n;i++){
+        reader.decodeAndBlitFrameRGBA(i, buf);
+        cctx.putImageData(new ImageData(new Uint8ClampedArray(buf), w, h), 0, 0);
         const snap = document.createElement('canvas');
         snap.width = w; snap.height = h;
         snap.getContext('2d').drawImage(compose,0,0);
         frameCanvases.push(snap);
-      });
+      }
       fbFrames = { type:'ready', frames: frameCanvases, w, h };
       status.textContent = `✓ GIF decoded (${frameCanvases.length} frames, ${w}x${h})`;
       document.getElementById('fb-frame-count').value = frameCanvases.length;
@@ -332,7 +332,7 @@ function fbLoadGif(file){
       status.textContent = '✗ Could not decode this GIF: ' + err.message;
     }
   };
-  reader.readAsArrayBuffer(file);
+  fr.readAsArrayBuffer(file);
 }
 
 // ---------- IMAGE SEQUENCE ----------
