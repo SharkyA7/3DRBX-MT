@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3DRBXMT — Flipbook Texture Tool</title>
+<meta name="description" content="Turn videos, GIFs, or image sequences into power-of-two flipbook texture sheets, or scrub through frames in the viewer. 100% browser-based.">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#001619;--s1:#03181C;--s2:#052228;--s3:#082C33;
+  --accent:#50E8F4;--white:#C7F8FE;--muted:#6FA0A6;
+  --border:#0C2A2E;--border2:#153B40;
+  --font-px:'Press Start 2P',monospace;
+  --font-ui:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-height:100vh;background-image:linear-gradient(rgba(80,232,244,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(80,232,244,.025) 1px,transparent 1px);background-size:56px 56px;}
+header{text-align:center;padding:44px 20px 28px;}
+.fb-back{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none;padding:6px 0;}
+.fb-back:hover{color:var(--white)}
+h1{font-family:var(--font-px);font-size:clamp(13px,3vw,20px);letter-spacing:3px;line-height:1.5;margin-top:16px;margin-bottom:8px;}
+.sub{font-size:12px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;}
+main{max-width:880px;margin:0 auto;padding:0 16px 80px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;}
+.label{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:6px;}
+.fb-modes{display:flex;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:5px;margin-bottom:18px;}
+.fb-mode-btn{flex:1;text-align:center;padding:10px;border-radius:999px;border:none;background:transparent;color:var(--muted);font-family:var(--font-ui);font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:background .2s,color .2s;}
+.fb-mode-btn.active{background:var(--accent);color:#001619;box-shadow:0 0 14px rgba(80,232,244,.35);}
+.fb-panel{display:none;}
+.fb-panel.active{display:block;}
+.fb-src-tabs{display:flex;gap:6px;margin-bottom:14px;}
+.fb-src-tab{flex:1;text-align:center;padding:9px 6px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
+.fb-src-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(80,232,244,.08);}
+.fb-drop{border:2px dashed var(--border2);border-radius:10px;padding:26px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:14px;}
+.fb-drop:hover,.fb-drop.dragover{border-color:var(--accent);background:rgba(80,232,244,.05);}
+.fb-drop-icon{font-size:26px;margin-bottom:8px;opacity:.6;}
+.fb-drop-text{font-size:11px;color:var(--muted);}
+.fb-status{font-size:10px;color:var(--muted);margin-top:8px;min-height:14px;}
+.fb-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.fb-field label{display:block;font-size:9px;color:var(--muted);margin-bottom:5px;letter-spacing:.04em;text-transform:uppercase;}
+.fb-field input[type="number"],.fb-field select{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--white);font-family:var(--font-ui);font-size:12px;}
+.fb-field input[type="range"]{width:100%;accent-color:var(--accent);}
+.btn{background:var(--accent);color:#001619;border:none;border-radius:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;padding:11px 20px;cursor:pointer;letter-spacing:.04em;width:100%;transition:box-shadow .15s;}
+.btn:hover{box-shadow:0 0 20px rgba(80,232,244,.4);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--white);}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent);box-shadow:none;}
+.fb-preview-box{width:100%;aspect-ratio:1/1;background:var(--s2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:14px;position:relative;}
+.fb-preview-box canvas{max-width:100%;max-height:100%;object-fit:contain;image-rendering:pixelated;}
+.fb-preview-placeholder{font-size:11px;color:var(--muted);text-align:center;padding:20px;}
+.fb-btn-row{display:flex;gap:8px;}
+.fb-btn-row .btn{flex:1;}
+.fb-playbar{display:flex;align-items:center;gap:10px;margin-top:12px;}
+.fb-play-btn{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#001619;border:none;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.fb-frame-count{font-size:10px;color:var(--muted);text-align:center;margin-top:6px;}
+.fb-switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;}
+.fb-switch-row b{font-size:10px;color:var(--white);font-weight:600;}
+.fb-switch{position:relative;width:34px;height:19px;flex-shrink:0;}
+.fb-switch input{opacity:0;width:0;height:0;}
+.fb-switch-slider{position:absolute;inset:0;background:var(--border2);border-radius:999px;cursor:pointer;transition:background .15s;}
+.fb-switch-slider::before{content:'';position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--muted);border-radius:50%;transition:transform .15s,background .15s;}
+.fb-switch input:checked + .fb-switch-slider{background:rgba(80,232,244,.25);}
+.fb-switch input:checked + .fb-switch-slider::before{transform:translateX(15px);background:var(--accent);}
+footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);background:var(--s1);}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="max-width:860px;margin:0 auto;padding:0 16px;text-align:left">
+    <a class="fb-back" href="/">← Back to Main Site</a>
+  </div>
+  <h1>FLIPBOOK</h1>
+  <p class="sub">Texture Flipbook Tool</p>
+</header>
+
+<main>
+  <div class="fb-modes">
+    <button class="fb-mode-btn active" id="fb-mode-gen-btn" onclick="fbSwitchMode('generator')">🎬 GENERATOR</button>
+    <button class="fb-mode-btn" id="fb-mode-view-btn" onclick="fbSwitchMode('viewer')">▶ VIEWER</button>
+  </div>
+
+  <!-- ===================== GENERATOR ===================== -->
+  <div class="fb-panel active" id="fb-panel-generator">
+    <div class="card">
+      <div class="label">📥 SOURCE</div>
+      <div class="fb-src-tabs">
+        <div class="fb-src-tab active" id="fb-src-video-tab" onclick="fbSetSource('video')">VIDEO</div>
+        <div class="fb-src-tab" id="fb-src-gif-tab" onclick="fbSetSource('gif')">GIF</div>
+        <div class="fb-src-tab" id="fb-src-seq-tab" onclick="fbSetSource('sequence')">IMAGE SEQUENCE</div>
+      </div>
+
+      <div class="fb-drop" id="fb-drop-zone" onclick="fbTriggerFileInput()">
+        <div class="fb-drop-icon">📁</div>
+        <div class="fb-drop-text" id="fb-drop-text">Tap to choose a video file (mp4, webm)</div>
+      </div>
+      <input type="file" id="fb-file-input" accept="video/*" style="display:none" onchange="fbHandleFiles(this.files)">
+      <div class="fb-status" id="fb-source-status"></div>
+    </div>
+
+    <div class="card" id="fb-gen-options" style="display:none">
+      <div class="label">⚙ SHEET OPTIONS</div>
+      <div class="fb-row">
+        <div class="fb-field">
+          <label>Columns</label>
+          <input type="number" id="fb-cols" min="1" max="16" value="4" oninput="fbUpdateGridInfo()">
+        </div>
+        <div class="fb-field">
+          <label>Rows</label>
+          <input type="number" id="fb-rows" min="1" max="16" value="4" oninput="fbUpdateGridInfo()">
+        </div>
+      </div>
+      <div class="fb-row">
+        <div class="fb-field">
+          <label>Frame Count</label>
+          <input type="number" id="fb-frame-count" min="1" max="256" value="16" oninput="fbAutoGrid()">
+        </div>
+        <div class="fb-field">
+          <label>Sheet Size (power-of-2)</label>
+          <select id="fb-sheet-size">
+            <option value="256">256 x 256</option>
+            <option value="512" selected>512 x 512</option>
+            <option value="1024">1024 x 1024</option>
+            <option value="2048">2048 x 2048</option>
+            <option value="4096">4096 x 4096</option>
+          </select>
+        </div>
+      </div>
+      <div class="fb-status" id="fb-grid-info"></div>
+      <button class="btn" style="margin-top:10px" onclick="fbGenerateSheet()">⚡ GENERATE FLIPBOOK SHEET</button>
+    </div>
+
+    <div class="card" id="fb-gen-result" style="display:none">
+      <div class="label">🖼 RESULT</div>
+      <div class="fb-preview-box" id="fb-result-box">
+        <canvas id="fb-result-canvas"></canvas>
+      </div>
+      <div class="fb-btn-row">
+        <button class="btn" onclick="fbDownloadSheet()">⬇ DOWNLOAD PNG</button>
+        <button class="btn btn-outline" onclick="fbDownloadMeta()">⬇ JSON DATA</button>
+      </div>
+      <button class="btn btn-outline" style="margin-top:8px" onclick="fbSendResultToViewer()">▶ OPEN IN VIEWER</button>
+    </div>
+  </div>
+
+  <!-- ===================== VIEWER ===================== -->
+  <div class="fb-panel" id="fb-panel-viewer">
+    <div class="card">
+      <div class="label">📥 LOAD FRAMES</div>
+      <div class="fb-src-tabs">
+        <div class="fb-src-tab active" id="fb-view-sheet-tab" onclick="fbSetViewerSource('sheet')">SPRITE SHEET</div>
+        <div class="fb-src-tab" id="fb-view-seq-tab" onclick="fbSetViewerSource('frames')">SEPARATE FRAMES</div>
+      </div>
+
+      <div id="fb-view-sheet-inputs">
+        <div class="fb-drop" onclick="document.getElementById('fb-view-sheet-input').click()">
+          <div class="fb-drop-icon">🖼</div>
+          <div class="fb-drop-text">Tap to choose a sprite sheet image</div>
+        </div>
+        <input type="file" id="fb-view-sheet-input" accept="image/*" style="display:none" onchange="fbLoadSheetForViewer(this.files[0])">
+        <div class="fb-row" style="margin-top:12px">
+          <div class="fb-field">
+            <label>Columns</label>
+            <input type="number" id="fb-view-cols" min="1" max="16" value="4">
+          </div>
+          <div class="fb-field">
+            <label>Rows</label>
+            <input type="number" id="fb-view-rows" min="1" max="16" value="4">
+          </div>
+        </div>
+        <button class="btn btn-outline" onclick="fbSliceSheetForViewer()">✂ SLICE INTO FRAMES</button>
+      </div>
+
+      <div id="fb-view-frames-inputs" style="display:none">
+        <div class="fb-drop" onclick="document.getElementById('fb-view-frames-input').click()">
+          <div class="fb-drop-icon">📁</div>
+          <div class="fb-drop-text">Tap to choose multiple frame images</div>
+        </div>
+        <input type="file" id="fb-view-frames-input" accept="image/*" multiple style="display:none" onchange="fbLoadFramesForViewer(this.files)">
+      </div>
+      <div class="fb-status" id="fb-viewer-status"></div>
+    </div>
+
+    <div class="card" id="fb-viewer-stage" style="display:none">
+      <div class="label">▶ PLAYBACK</div>
+      <div class="fb-preview-box" id="fb-viewer-box">
+        <canvas id="fb-viewer-canvas"></canvas>
+      </div>
+      <div class="fb-playbar">
+        <button class="fb-play-btn" id="fb-play-btn" onclick="fbTogglePlay()">▶</button>
+        <input type="range" id="fb-scrub" min="0" max="0" value="0" step="1" oninput="fbScrub(this.value)" style="flex:1;accent-color:var(--accent)">
+      </div>
+      <div class="fb-frame-count" id="fb-frame-label">Frame 1 / 1</div>
+      <div class="fb-row" style="margin-top:14px">
+        <div class="fb-field">
+          <label>FPS: <span id="fb-fps-val">12</span></label>
+          <input type="range" id="fb-fps" min="1" max="60" value="12" oninput="document.getElementById('fb-fps-val').textContent=this.value">
+        </div>
+        <div class="fb-field">
+          <div class="fb-switch-row" style="padding-top:20px">
+            <b>Loop</b>
+            <label class="fb-switch"><input type="checkbox" id="fb-loop" checked><span class="fb-switch-slider"></span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>3DRBXMT · FLIPBOOK TOOL · 100% BROWSER-BASED · UNOFFICIAL, NOT AFFILIATED WITH ROBLOX CORPORATION</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js"></script>
+<script>
+// ============ shared state ============
+let fbSourceType = 'video';
+let fbFrames = [];        // array of {canvas} for generator source frames
+let fbViewerFrames = [];  // array of HTMLCanvasElement/Image for viewer playback
+let fbViewerIndex = 0;
+let fbViewerPlaying = false;
+let fbViewerTimer = null;
+let fbResultCanvas = null;
+let fbViewerSourceType = 'sheet';
+
+function fbSwitchMode(mode){
+  document.getElementById('fb-panel-generator').classList.toggle('active', mode==='generator');
+  document.getElementById('fb-panel-viewer').classList.toggle('active', mode==='viewer');
+  document.getElementById('fb-mode-gen-btn').classList.toggle('active', mode==='generator');
+  document.getElementById('fb-mode-view-btn').classList.toggle('active', mode==='viewer');
+}
+
+function fbSetSource(type){
+  fbSourceType = type;
+  document.getElementById('fb-src-video-tab').classList.toggle('active', type==='video');
+  document.getElementById('fb-src-gif-tab').classList.toggle('active', type==='gif');
+  document.getElementById('fb-src-seq-tab').classList.toggle('active', type==='sequence');
+  const input = document.getElementById('fb-file-input');
+  const dropText = document.getElementById('fb-drop-text');
+  if(type==='video'){ input.accept='video/*'; input.multiple=false; dropText.textContent='Tap to choose a video file (mp4, webm)'; }
+  else if(type==='gif'){ input.accept='image/gif'; input.multiple=false; dropText.textContent='Tap to choose a GIF file'; }
+  else { input.accept='image/*'; input.multiple=true; dropText.textContent='Tap to choose multiple frame images'; }
+  document.getElementById('fb-gen-options').style.display='none';
+  document.getElementById('fb-gen-result').style.display='none';
+  document.getElementById('fb-source-status').textContent='';
+  fbFrames = [];
+}
+
+function fbTriggerFileInput(){ document.getElementById('fb-file-input').click(); }
+
+function fbHandleFiles(files){
+  if(!files || !files.length) return;
+  if(fbSourceType==='video') fbLoadVideo(files[0]);
+  else if(fbSourceType==='gif') fbLoadGif(files[0]);
+  else fbLoadSequence(files);
+}
+
+// ---------- VIDEO ----------
+function fbLoadVideo(file){
+  const status = document.getElementById('fb-source-status');
+  status.textContent = 'Loading video...';
+  const url = URL.createObjectURL(file);
+  const vid = document.createElement('video');
+  vid.src = url; vid.muted = true; vid.playsInline = true;
+  vid.onloadedmetadata = function(){
+    const duration = vid.duration;
+    status.textContent = `✓ Video loaded (${duration.toFixed(1)}s, ${vid.videoWidth}x${vid.videoHeight})`;
+    document.getElementById('fb-gen-options').style.display = 'block';
+    document.getElementById('fb-gen-result').style.display = 'none';
+    fbFrames = { type:'video', vid, duration, w:vid.videoWidth, h:vid.videoHeight };
+    fbAutoGrid();
+  };
+  vid.onerror = function(){ status.textContent = '✗ Could not load this video file.'; };
+}
+
+async function fbExtractVideoFrames(vid, count){
+  const frames = [];
+  const w = vid.videoWidth, h = vid.videoHeight;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  for(let i=0;i<count;i++){
+    const t = (vid.duration * i) / count;
+    await new Promise(function(resolve){
+      const onSeek = function(){ vid.removeEventListener('seeked', onSeek); resolve(); };
+      vid.addEventListener('seeked', onSeek);
+      vid.currentTime = t;
+    });
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(vid,0,0,w,h);
+    const frameCv = document.createElement('canvas');
+    frameCv.width = w; frameCv.height = h;
+    frameCv.getContext('2d').drawImage(cv,0,0);
+    frames.push(frameCv);
+  }
+  return frames;
+}
+
+// ---------- GIF ----------
+function fbLoadGif(file){
+  const status = document.getElementById('fb-source-status');
+  status.textContent = 'Decoding GIF...';
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try{
+      const gifData = new Uint8Array(e.target.result);
+      const gif = new window.GIF(gifData);
+      const frames = gif.decompressFrames(true);
+      const w = frames[0].dims.width, h = frames[0].dims.height;
+      const frameCanvases = [];
+      const compose = document.createElement('canvas');
+      compose.width = w; compose.height = h;
+      const cctx = compose.getContext('2d');
+      frames.forEach(function(f){
+        const fc = document.createElement('canvas');
+        fc.width = f.dims.width; fc.height = f.dims.height;
+        fc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(f.patch), f.dims.width, f.dims.height), 0, 0);
+        cctx.drawImage(fc, f.dims.left, f.dims.top);
+        const snap = document.createElement('canvas');
+        snap.width = w; snap.height = h;
+        snap.getContext('2d').drawImage(compose,0,0);
+        frameCanvases.push(snap);
+      });
+      fbFrames = { type:'ready', frames: frameCanvases, w, h };
+      status.textContent = `✓ GIF decoded (${frameCanvases.length} frames, ${w}x${h})`;
+      document.getElementById('fb-frame-count').value = frameCanvases.length;
+      document.getElementById('fb-gen-options').style.display = 'block';
+      fbAutoGrid();
+    }catch(err){
+      status.textContent = '✗ Could not decode this GIF: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ---------- IMAGE SEQUENCE ----------
+function fbLoadSequence(files){
+  const status = document.getElementById('fb-source-status');
+  status.textContent = 'Loading images...';
+  const sorted = Array.from(files).sort(function(a,b){ return a.name.localeCompare(b.name, undefined, {numeric:true}); });
+  const loaders = sorted.map(function(file){
+    return new Promise(function(resolve){
+      const img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.src = URL.createObjectURL(file);
+    });
+  });
+  Promise.all(loaders).then(function(imgs){
+    const w = imgs[0].width, h = imgs[0].height;
+    const frameCanvases = imgs.map(function(img){
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      return c;
+    });
+    fbFrames = { type:'ready', frames: frameCanvases, w, h };
+    status.textContent = `✓ ${frameCanvases.length} frames loaded (${w}x${h})`;
+    document.getElementById('fb-frame-count').value = frameCanvases.length;
+    document.getElementById('fb-gen-options').style.display = 'block';
+    fbAutoGrid();
+  });
+}
+
+// ---------- grid helpers ----------
+function fbAutoGrid(){
+  const n = Math.max(1, parseInt(document.getElementById('fb-frame-count').value) || 1);
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  document.getElementById('fb-cols').value = cols;
+  document.getElementById('fb-rows').value = rows;
+  fbUpdateGridInfo();
+}
+function fbUpdateGridInfo(){
+  const cols = parseInt(document.getElementById('fb-cols').value) || 1;
+  const rows = parseInt(document.getElementById('fb-rows').value) || 1;
+  const n = parseInt(document.getElementById('fb-frame-count').value) || 1;
+  document.getElementById('fb-grid-info').textContent = `Grid: ${cols} x ${rows} (${cols*rows} cells for ${n} frames)`;
+}
+
+// ---------- generate sheet ----------
+async function fbGenerateSheet(){
+  const status = document.getElementById('fb-source-status');
+  const n = Math.max(1, parseInt(document.getElementById('fb-frame-count').value) || 1);
+  const cols = Math.max(1, parseInt(document.getElementById('fb-cols').value) || 1);
+  const rows = Math.max(1, parseInt(document.getElementById('fb-rows').value) || 1);
+  const sheetSize = parseInt(document.getElementById('fb-sheet-size').value);
+
+  let frames;
+  if(fbFrames && fbFrames.type === 'video'){
+    status.textContent = 'Extracting video frames...';
+    frames = await fbExtractVideoFrames(fbFrames.vid, n);
+  } else if(fbFrames && fbFrames.type === 'ready'){
+    frames = fbFrames.frames.slice(0, n);
+  } else {
+    status.textContent = '✗ Load a source first.';
+    return;
+  }
+
+  const cellW = Math.floor(sheetSize / cols);
+  const cellH = Math.floor(sheetSize / rows);
+  const sheet = document.createElement('canvas');
+  sheet.width = cellW * cols;
+  sheet.height = cellH * rows;
+  const ctx = sheet.getContext('2d');
+
+  frames.forEach(function(fcv, i){
+    const cx = (i % cols) * cellW;
+    const cy = Math.floor(i / cols) * cellH;
+    ctx.drawImage(fcv, 0, 0, fcv.width, fcv.height, cx, cy, cellW, cellH);
+  });
+
+  fbResultCanvas = sheet;
+  fbResultMeta = { frameCount: frames.length, columns: cols, rows: rows, cellWidth: cellW, cellHeight: cellH, sheetWidth: sheet.width, sheetHeight: sheet.height };
+
+  const resultCv = document.getElementById('fb-result-canvas');
+  resultCv.width = sheet.width; resultCv.height = sheet.height;
+  resultCv.getContext('2d').drawImage(sheet, 0, 0);
+  document.getElementById('fb-gen-result').style.display = 'block';
+  status.textContent = `✓ Flipbook sheet generated (${sheet.width}x${sheet.height}, ${frames.length} frames)`;
+}
+
+let fbResultMeta = null;
+
+function fbDownloadSheet(){
+  if(!fbResultCanvas) return;
+  const a = document.createElement('a');
+  a.href = fbResultCanvas.toDataURL('image/png');
+  a.download = 'flipbook_sheet.png';
+  a.click();
+}
+function fbDownloadMeta(){
+  if(!fbResultMeta) return;
+  const blob = new Blob([JSON.stringify(fbResultMeta, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flipbook_data.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function fbSendResultToViewer(){
+  if(!fbResultMeta) return;
+  const cols = fbResultMeta.columns, rows = fbResultMeta.rows, n = fbResultMeta.frameCount;
+  const cw = fbResultMeta.cellWidth, ch = fbResultMeta.cellHeight;
+  const framesArr = [];
+  for(let i=0;i<n;i++){
+    const cx=(i%cols)*cw, cy=Math.floor(i/cols)*ch;
+    const c = document.createElement('canvas');
+    c.width=cw; c.height=ch;
+    c.getContext('2d').drawImage(fbResultCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+    framesArr.push(c);
+  }
+  fbViewerFrames = framesArr;
+  fbSwitchMode('viewer');
+  fbStartViewerStage();
+}
+
+// ============ VIEWER ============
+function fbSetViewerSource(type){
+  fbViewerSourceType = type;
+  document.getElementById('fb-view-sheet-tab').classList.toggle('active', type==='sheet');
+  document.getElementById('fb-view-seq-tab').classList.toggle('active', type==='frames');
+  document.getElementById('fb-view-sheet-inputs').style.display = type==='sheet' ? 'block':'none';
+  document.getElementById('fb-view-frames-inputs').style.display = type==='frames' ? 'block':'none';
+}
+
+let fbLoadedSheetImg = null;
+function fbLoadSheetForViewer(file){
+  if(!file) return;
+  const status = document.getElementById('fb-viewer-status');
+  const img = new Image();
+  img.onload = function(){
+    fbLoadedSheetImg = img;
+    status.textContent = `✓ Sheet loaded (${img.width}x${img.height}). Set columns/rows then slice.`;
+  };
+  img.src = URL.createObjectURL(file);
+}
+function fbSliceSheetForViewer(){
+  const status = document.getElementById('fb-viewer-status');
+  if(!fbLoadedSheetImg){ status.textContent = '✗ Load a sprite sheet image first.'; return; }
+  const cols = Math.max(1, parseInt(document.getElementById('fb-view-cols').value) || 1);
+  const rows = Math.max(1, parseInt(document.getElementById('fb-view-rows').value) || 1);
+  const cw = Math.floor(fbLoadedSheetImg.width / cols);
+  const ch = Math.floor(fbLoadedSheetImg.height / rows);
+  const frames = [];
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      cv.getContext('2d').drawImage(fbLoadedSheetImg, c*cw, r*ch, cw, ch, 0, 0, cw, ch);
+      frames.push(cv);
+    }
+  }
+  fbViewerFrames = frames;
+  status.textContent = `✓ Sliced into ${frames.length} frames.`;
+  fbStartViewerStage();
+}
+function fbLoadFramesForViewer(files){
+  if(!files || !files.length) return;
+  const status = document.getElementById('fb-viewer-status');
+  status.textContent = 'Loading frames...';
+  const sorted = Array.from(files).sort(function(a,b){ return a.name.localeCompare(b.name, undefined, {numeric:true}); });
+  const loaders = sorted.map(function(file){
+    return new Promise(function(resolve){
+      const img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.src = URL.createObjectURL(file);
+    });
+  });
+  Promise.all(loaders).then(function(imgs){
+    const w = imgs[0].width, h = imgs[0].height;
+    fbViewerFrames = imgs.map(function(img){
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0);
+      return c;
+    });
+    status.textContent = `✓ ${fbViewerFrames.length} frames loaded.`;
+    fbStartViewerStage();
+  });
+}
+
+function fbStartViewerStage(){
+  if(!fbViewerFrames.length) return;
+  document.getElementById('fb-viewer-stage').style.display = 'block';
+  const scrub = document.getElementById('fb-scrub');
+  scrub.max = fbViewerFrames.length - 1;
+  scrub.value = 0;
+  fbViewerIndex = 0;
+  fbDrawViewerFrame();
+}
+function fbDrawViewerFrame(){
+  const f = fbViewerFrames[fbViewerIndex];
+  if(!f) return;
+  const cv = document.getElementById('fb-viewer-canvas');
+  cv.width = f.width; cv.height = f.height;
+  cv.getContext('2d').clearRect(0,0,f.width,f.height);
+  cv.getContext('2d').drawImage(f,0,0);
+  document.getElementById('fb-frame-label').textContent = `Frame ${fbViewerIndex+1} / ${fbViewerFrames.length}`;
+  document.getElementById('fb-scrub').value = fbViewerIndex;
+}
+function fbScrub(val){
+  fbViewerIndex = parseInt(val);
+  fbDrawViewerFrame();
+}
+function fbTogglePlay(){
+  fbViewerPlaying = !fbViewerPlaying;
+  document.getElementById('fb-play-btn').textContent = fbViewerPlaying ? '⏸' : '▶';
+  if(fbViewerPlaying) fbPlayLoop();
+  else clearTimeout(fbViewerTimer);
+}
+function fbPlayLoop(){
+  if(!fbViewerPlaying) return;
+  const fps = parseInt(document.getElementById('fb-fps').value) || 12;
+  const loop = document.getElementById('fb-loop').checked;
+  fbViewerIndex++;
+  if(fbViewerIndex >= fbViewerFrames.length){
+    if(loop) fbViewerIndex = 0;
+    else { fbViewerIndex = fbViewerFrames.length - 1; fbTogglePlay(); fbDrawViewerFrame(); return; }
+  }
+  fbDrawViewerFrame();
+  fbViewerTimer = setTimeout(fbPlayLoop, 1000 / fps);
+}
+</script>
+</body>
+</html>
