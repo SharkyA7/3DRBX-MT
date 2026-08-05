@@ -303,8 +303,11 @@ function fbLoadGif(file){
   reader.onload = async function(e){
     try{
       const gifData = new Uint8Array(e.target.result);
-      const gif = new window.GIF(gifData);
-      const frames = gif.decompressFrames(true);
+      const parseGIFFn = (window.gifuct && window.gifuct.parseGIF) || window.parseGIF;
+      const decompressFramesFn = (window.gifuct && window.gifuct.decompressFrames) || window.decompressFrames;
+      if(!parseGIFFn || !decompressFramesFn) throw new Error("GIF decoder library did not load correctly.");
+      const parsed = parseGIFFn(gifData.buffer);
+      const frames = decompressFramesFn(parsed, true);
       const w = frames[0].dims.width, h = frames[0].dims.height;
       const frameCanvases = [];
       const compose = document.createElement('canvas');
