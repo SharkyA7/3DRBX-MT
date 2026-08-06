@@ -19,6 +19,14 @@ body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-heig
 header{text-align:center;padding:44px 20px 28px;}
 .fb-back{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none;padding:6px 0;}
 .fb-back:hover{color:var(--white)}
+.fb-fs-btn{display:inline-flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:8px;padding:8px 14px;font-family:var(--font-ui);font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.03em;}
+.fb-fs-btn:hover{border-color:var(--accent);color:var(--accent);}
+.fb-rotate-overlay{position:fixed;inset:0;background:var(--bg);z-index:999999;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;}
+.fb-rotate-overlay.show{display:flex;}
+.fb-rotate-icon{font-size:48px;margin-bottom:18px;display:inline-block;animation:fbRotatePulse 1.6s ease-in-out infinite;}
+@keyframes fbRotatePulse{0%,100%{transform:rotate(0deg)}50%{transform:rotate(90deg)}}
+.fb-rotate-title{font-family:var(--font-px);font-size:12px;letter-spacing:2px;margin-bottom:10px;}
+.fb-rotate-desc{font-size:12px;color:var(--muted);max-width:280px;line-height:1.7;margin-bottom:22px;}
 h1{font-family:var(--font-px);font-size:clamp(13px,3vw,20px);letter-spacing:3px;line-height:1.5;margin-top:16px;margin-bottom:8px;}
 .sub{font-size:12px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;}
 main{max-width:880px;margin:0 auto;padding:0 16px 80px}
@@ -63,13 +71,52 @@ main{max-width:880px;margin:0 auto;padding:0 16px 80px}
 .fb-switch input:checked + .fb-switch-slider{background:rgba(80,232,244,.25);}
 .fb-switch input:checked + .fb-switch-slider::before{transform:translateX(15px);background:var(--accent);}
 footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);background:var(--s1);}
+
+/* ---- trim / thumb strip ---- */
+.fb-thumbstrip{display:flex;gap:2px;overflow-x:auto;margin-top:10px;padding:4px;background:var(--s2);border-radius:8px;scrollbar-width:none;}
+.fb-thumbstrip::-webkit-scrollbar{display:none}
+.fb-thumb{flex-shrink:0;width:36px;height:36px;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid transparent;opacity:.45;position:relative;}
+.fb-thumb canvas{width:100%;height:100%;object-fit:cover;display:block;}
+.fb-thumb.in-range{opacity:1;border-color:rgba(80,232,244,.25);}
+.fb-thumb.marker{border-color:var(--accent) !important;opacity:1;}
+.fb-trim-readout{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:8px;font-family:'Share Tech Mono',monospace;}
+.fb-mini-btn{background:var(--s2);border:1px solid var(--border);color:var(--white);border-radius:7px;padding:8px 4px;font-size:9px;font-weight:700;cursor:pointer;flex:1;text-align:center;}
+.fb-mini-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ---- crop presets ---- */
+.fb-preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.fb-preset-btn{background:var(--s2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:7px 12px;font-size:10px;font-weight:700;cursor:pointer;}
+.fb-preset-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(80,232,244,.08);}
+
+/* ---- chroma key ---- */
+.fb-chroma-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
+.fb-chroma-row input[type="color"]{width:38px;height:32px;border:1px solid var(--border);border-radius:6px;background:none;padding:0;cursor:pointer;}
+.fb-chroma-hex{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--white);font-family:'Share Tech Mono',monospace;font-size:11px;width:90px;}
+
+/* ---- stats ---- */
+.fb-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;font-size:10px;}
+.fb-stat{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
+.fb-stat b{display:block;color:var(--accent);font-size:12px;margin-top:2px;}
+
+/* ---- loop strategy ---- */
+.fb-loop-row{display:flex;gap:6px;margin-bottom:12px;}
+.fb-loop-btn{flex:1;background:var(--s2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 4px;font-size:10px;font-weight:700;cursor:pointer;text-align:center;}
+.fb-loop-btn.active{border-color:var(--accent);color:#001619;background:var(--accent);}
 </style>
 </head>
 <body>
 
+<div class="fb-rotate-overlay" id="fb-rotate-overlay">
+  <div class="fb-rotate-icon">📱</div>
+  <div class="fb-rotate-title">ROTATE YOUR DEVICE</div>
+  <p class="fb-rotate-desc">The Flipbook editor works best in landscape. Rotate your phone, or tap below to enter fullscreen landscape mode.</p>
+  <button class="btn" style="width:auto;padding:12px 24px" onclick="fbToggleFullscreen()">⛶ ENTER FULLSCREEN</button>
+</div>
+
 <header>
-  <div style="max-width:860px;margin:0 auto;padding:0 16px;text-align:left">
+  <div style="max-width:860px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
     <a class="fb-back" href="/">← Back to Main Site</a>
+    <button class="fb-fs-btn" id="fb-fullscreen-btn" onclick="fbToggleFullscreen()">⛶ FULLSCREEN</button>
   </div>
   <h1>FLIPBOOK</h1>
   <p class="sub">Texture Flipbook Tool</p>
@@ -97,50 +144,153 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
       </div>
       <input type="file" id="fb-file-input" accept="video/*" style="display:none" onchange="fbHandleFiles(this.files)">
       <div class="fb-status" id="fb-source-status"></div>
+      <div class="fb-field" style="margin-top:12px">
+        <label>Export Name</label>
+        <input type="text" id="fb-export-name" value="flipbook" style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--white);font-family:var(--font-ui);font-size:12px;">
+      </div>
     </div>
 
-    <div class="card" id="fb-gen-options" style="display:none">
-      <div class="label">⚙ SHEET OPTIONS</div>
-      <div class="fb-row">
-        <div class="fb-field">
-          <label>Columns</label>
-          <input type="number" id="fb-cols" min="1" max="16" value="4" oninput="fbUpdateGridInfo()">
-        </div>
-        <div class="fb-field">
-          <label>Rows</label>
-          <input type="number" id="fb-rows" min="1" max="16" value="4" oninput="fbUpdateGridInfo()">
-        </div>
+    <!-- TRIM & PREVIEW -->
+    <div class="card" id="fb-trim-card" style="display:none">
+      <div class="label">✂ TRIM &amp; PREVIEW</div>
+      <div class="fb-preview-box" id="fb-scrub-box" style="aspect-ratio:1/1">
+        <canvas id="fb-scrub-canvas"></canvas>
       </div>
+      <div class="fb-playbar">
+        <button class="fb-play-btn" id="fb-scrub-play-btn" onclick="fbToggleScrubPlay()">▶</button>
+        <input type="range" id="fb-scrub-slider" min="0" max="0" value="0" step="1" oninput="fbSeekScrub(this.value)" style="flex:1;accent-color:var(--accent)">
+      </div>
+      <div class="fb-thumbstrip" id="fb-thumbstrip"></div>
+      <div class="fb-trim-readout">
+        <span id="fb-trim-frame-label">Frame 0 / 0</span>
+        <span id="fb-trim-range-label">In: 0 · Out: 0 (0 frames)</span>
+      </div>
+      <div class="fb-btn-row" style="margin-top:10px">
+        <button class="fb-mini-btn" onclick="fbSetTrimIn()">⇤ SET IN</button>
+        <button class="fb-mini-btn" onclick="fbSetTrimOut()">SET OUT ⇥</button>
+        <button class="fb-mini-btn" onclick="fbResetTrim()">↺ RESET</button>
+      </div>
+    </div>
+
+    <!-- CROP -->
+    <div class="card" id="fb-crop-card" style="display:none">
+      <div class="label">⬛ CROP</div>
+      <div class="fb-preset-row" id="fb-crop-presets">
+        <button class="fb-preset-btn active" data-aspect="source" onclick="fbSetCropPreset('source')">Source</button>
+        <button class="fb-preset-btn" data-aspect="1:1" onclick="fbSetCropPreset('1:1')">1:1</button>
+        <button class="fb-preset-btn" data-aspect="16:9" onclick="fbSetCropPreset('16:9')">16:9</button>
+        <button class="fb-preset-btn" data-aspect="9:16" onclick="fbSetCropPreset('9:16')">9:16</button>
+        <button class="fb-preset-btn" data-aspect="4:3" onclick="fbSetCropPreset('4:3')">4:3</button>
+        <button class="fb-preset-btn" data-aspect="cell" onclick="fbSetCropPreset('cell')">Fit Cell</button>
+      </div>
+      <div class="fb-status" id="fb-crop-status">No crop · full source frame</div>
+    </div>
+
+    <!-- CHROMA KEY -->
+    <div class="card" id="fb-chroma-card" style="display:none">
+      <div class="fb-switch-row">
+        <div class="label" style="margin-bottom:0">🟩 CHROMA KEY</div>
+        <label class="fb-switch"><input type="checkbox" id="fb-chroma-enable" onchange="fbToggleChroma(this.checked)"><span class="fb-switch-slider"></span></label>
+      </div>
+      <div class="fb-chroma-row">
+        <input type="color" id="fb-chroma-color" value="#00ff00" onchange="fbUpdateChromaColor(this.value)">
+        <input type="text" class="fb-chroma-hex" id="fb-chroma-hex" value="#00FF00" onchange="fbUpdateChromaColor(this.value)">
+        <button class="fb-mini-btn" style="flex:none;padding:8px 12px" onclick="fbPickChromaColor()">🎯 PICK</button>
+      </div>
+      <div class="fb-field" style="margin-top:12px">
+        <label>Tolerance: <span id="fb-chroma-tol-val">40</span></label>
+        <input type="range" id="fb-chroma-tolerance" min="0" max="150" value="40" oninput="document.getElementById('fb-chroma-tol-val').textContent=this.value; fbRedrawScrub();">
+      </div>
+    </div>
+
+    <!-- SHEET / CONFIGURATION -->
+    <div class="card" id="fb-gen-options" style="display:none">
+      <div class="label">⚙ CONFIGURATION</div>
       <div class="fb-row">
         <div class="fb-field">
-          <label>Frame Count</label>
-          <input type="number" id="fb-frame-count" min="1" max="256" value="16" oninput="fbAutoGrid()">
+          <label>Sheet Width</label>
+          <select id="fb-sheet-w" onchange="fbUpdateStats()">
+            <option value="256">256px</option>
+            <option value="512" selected>512px</option>
+            <option value="1024">1024px</option>
+            <option value="2048">2048px</option>
+            <option value="4096">4096px</option>
+          </select>
         </div>
         <div class="fb-field">
-          <label>Sheet Size (power-of-2)</label>
-          <select id="fb-sheet-size">
-            <option value="256">256 x 256</option>
-            <option value="512" selected>512 x 512</option>
-            <option value="1024">1024 x 1024</option>
-            <option value="2048">2048 x 2048</option>
-            <option value="4096">4096 x 4096</option>
+          <label>Sheet Height</label>
+          <select id="fb-sheet-h" onchange="fbUpdateStats()">
+            <option value="256">256px</option>
+            <option value="512" selected>512px</option>
+            <option value="1024">1024px</option>
+            <option value="2048">2048px</option>
+            <option value="4096">4096px</option>
           </select>
         </div>
       </div>
-      <div class="fb-status" id="fb-grid-info"></div>
-      <button class="btn" style="margin-top:10px" onclick="fbGenerateSheet()">⚡ GENERATE FLIPBOOK SHEET</button>
+      <div class="fb-row">
+        <div class="fb-field">
+          <label>Columns</label>
+          <input type="number" id="fb-cols" min="1" max="16" value="4" oninput="fbUpdateStats()">
+        </div>
+        <div class="fb-field">
+          <label>Rows</label>
+          <input type="number" id="fb-rows" min="1" max="16" value="4" oninput="fbUpdateStats()">
+        </div>
+      </div>
+      <div class="fb-row">
+        <div class="fb-field">
+          <label>Fit Mode</label>
+          <select id="fb-fit-mode">
+            <option value="contain">Contain (preserve aspect, letterbox)</option>
+            <option value="cover">Cover (fill cell, crop overflow)</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </div>
+        <div class="fb-field">
+          <label>Frame Sampling</label>
+          <select id="fb-sampling">
+            <option value="linear">Linear · evenly spaced</option>
+          </select>
+        </div>
+      </div>
+      <div class="fb-switch-row">
+        <b style="font-size:10px">Frame Blend (fill extra cells smoothly)</b>
+        <label class="fb-switch"><input type="checkbox" id="fb-frame-blend"><span class="fb-switch-slider"></span></label>
+      </div>
+      <button class="fb-mini-btn" style="width:100%;margin-top:8px" onclick="fbMatchGridToTrim()">⊞ MATCH GRID TO TRIM LENGTH</button>
+      <div class="fb-stats-grid" id="fb-stats-grid"></div>
+    </div>
+
+    <!-- LOOP STRATEGY -->
+    <div class="card" id="fb-loop-card" style="display:none">
+      <div class="label">🔁 LOOP STRATEGY</div>
+      <div class="fb-loop-row">
+        <button class="fb-loop-btn" data-strategy="auto" onclick="fbSetLoopStrategy('auto')">↻ Auto</button>
+        <button class="fb-loop-btn" data-strategy="crossfade" onclick="fbSetLoopStrategy('crossfade')">⇄ Crossfade</button>
+        <button class="fb-loop-btn active" data-strategy="off" onclick="fbSetLoopStrategy('off')">✕ Off</button>
+      </div>
+      <button class="btn btn-outline" onclick="fbMakePerfectLoop()">🔄 MAKE PERFECT LOOP</button>
+    </div>
+
+    <div class="card" id="fb-generate-card" style="display:none">
+      <button class="btn" onclick="fbGenerateSheet()">⚡ GENERATE FLIPBOOK</button>
     </div>
 
     <div class="card" id="fb-gen-result" style="display:none">
-      <div class="label">🖼 RESULT</div>
+      <div class="label">🖼 OUTPUT</div>
       <div class="fb-preview-box" id="fb-result-box">
         <canvas id="fb-result-canvas"></canvas>
       </div>
-      <div class="fb-btn-row">
-        <button class="btn" onclick="fbDownloadSheet()">⬇ DOWNLOAD PNG</button>
-        <button class="btn btn-outline" onclick="fbDownloadMeta()">⬇ JSON DATA</button>
+      <div class="fb-status" id="fb-result-info"></div>
+      <div class="fb-btn-row" style="margin-top:10px">
+        <button class="btn" onclick="fbDownloadSheet()">⬇ Sheet PNG</button>
+        <button class="btn btn-outline" onclick="fbDownloadMeta()">⬇ Sidecar</button>
       </div>
-      <button class="btn btn-outline" style="margin-top:8px" onclick="fbSendResultToViewer()">▶ OPEN IN VIEWER</button>
+      <div class="fb-btn-row" style="margin-top:8px">
+        <button class="btn btn-outline" onclick="fbDownloadFrames()">⬇ Frames (ZIP)</button>
+        <button class="btn btn-outline" onclick="fbSendResultToViewer()">▶ Open in Viewer</button>
+      </div>
     </div>
   </div>
 
@@ -214,15 +364,77 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
   import { GifReader } from "https://cdn.jsdelivr.net/npm/omggif@1.0.10/+esm";
   window.GifReader = GifReader;
 </script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 // ============ shared state ============
+// ============ fullscreen + landscape ============
+function fbEnterFullscreenLandscape(){
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if(req){
+    Promise.resolve(req.call(el)).then(fbTryLockLandscape).catch(fbTryLockLandscape);
+  } else {
+    fbTryLockLandscape();
+  }
+}
+function fbTryLockLandscape(){
+  if(screen.orientation && screen.orientation.lock){
+    screen.orientation.lock('landscape').catch(function(){});
+  }
+}
+function fbExitFullscreen(){
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  if(exit) exit.call(document);
+  if(screen.orientation && screen.orientation.unlock){
+    try{ screen.orientation.unlock(); }catch(e){}
+  }
+}
+function fbIsFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+}
+function fbToggleFullscreen(){
+  if(fbIsFullscreen()) fbExitFullscreen();
+  else fbEnterFullscreenLandscape();
+}
+function fbUpdateFullscreenUI(){
+  const btn = document.getElementById('fb-fullscreen-btn');
+  if(btn) btn.textContent = fbIsFullscreen() ? '✕ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+  fbCheckOrientation();
+}
+function fbCheckOrientation(){
+  const overlay = document.getElementById('fb-rotate-overlay');
+  if(!overlay) return;
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const isMobile = window.innerWidth < 900;
+  overlay.classList.toggle('show', isPortrait && isMobile && !fbIsFullscreen());
+}
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'].forEach(function(ev){
+  document.addEventListener(ev, fbUpdateFullscreenUI);
+});
+window.addEventListener('resize', fbCheckOrientation);
+window.addEventListener('orientationchange', fbCheckOrientation);
+document.addEventListener('DOMContentLoaded', fbCheckOrientation);
+
 let fbSourceType = 'video';
-let fbFrames = [];        // array of {canvas} for generator source frames
-let fbViewerFrames = [];  // array of HTMLCanvasElement/Image for viewer playback
+let fbAllFrames = null;
+let fbTrimIn = 0;
+let fbTrimOut = 0;
+let fbScrubIndex = 0;
+let fbScrubPlaying = false;
+let fbScrubTimer = null;
+let fbCropPreset = 'source';
+let fbChromaEnabled = false;
+let fbChromaColor = {r:0,g:255,b:0};
+let fbChromaPicking = false;
+let fbLoopStrategy = 'off';
+let fbPerfectLoopApplied = false;
+let fbResultCanvas = null;
+let fbResultFrames = null;
+let fbResultMeta = null;
+let fbViewerFrames = [];
 let fbViewerIndex = 0;
 let fbViewerPlaying = false;
 let fbViewerTimer = null;
-let fbResultCanvas = null;
 let fbViewerSourceType = 'sheet';
 
 function fbSwitchMode(mode){
@@ -242,10 +454,12 @@ function fbSetSource(type){
   if(type==='video'){ input.accept='video/*'; input.multiple=false; dropText.textContent='Tap to choose a video file (mp4, webm)'; }
   else if(type==='gif'){ input.accept='image/gif'; input.multiple=false; dropText.textContent='Tap to choose a GIF file'; }
   else { input.accept='image/*'; input.multiple=true; dropText.textContent='Tap to choose multiple frame images'; }
-  document.getElementById('fb-gen-options').style.display='none';
-  document.getElementById('fb-gen-result').style.display='none';
+  ['fb-trim-card','fb-crop-card','fb-chroma-card','fb-gen-options','fb-loop-card','fb-generate-card','fb-gen-result'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
   document.getElementById('fb-source-status').textContent='';
-  fbFrames = [];
+  fbAllFrames = null;
 }
 
 function fbTriggerFileInput(){ document.getElementById('fb-file-input').click(); }
@@ -264,13 +478,14 @@ function fbLoadVideo(file){
   const url = URL.createObjectURL(file);
   const vid = document.createElement('video');
   vid.src = url; vid.muted = true; vid.playsInline = true;
-  vid.onloadedmetadata = function(){
+  vid.onloadedmetadata = async function(){
     const duration = vid.duration;
-    status.textContent = `✓ Video loaded (${duration.toFixed(1)}s, ${vid.videoWidth}x${vid.videoHeight})`;
-    document.getElementById('fb-gen-options').style.display = 'block';
-    document.getElementById('fb-gen-result').style.display = 'none';
-    fbFrames = { type:'video', vid, duration, w:vid.videoWidth, h:vid.videoHeight };
-    fbAutoGrid();
+    const sampleCount = Math.max(8, Math.min(60, Math.round(duration*10)));
+    status.textContent = `Extracting ${sampleCount} frames from video...`;
+    const frames = await fbExtractVideoFrames(vid, sampleCount);
+    fbAllFrames = { frames: frames, w: vid.videoWidth, h: vid.videoHeight, fps: sampleCount/duration };
+    status.textContent = `✓ Video loaded — ${frames.length} frames extracted (${vid.videoWidth}x${vid.videoHeight})`;
+    fbAfterFramesReady();
   };
   vid.onerror = function(){ status.textContent = '✗ Could not load this video file.'; };
 }
@@ -278,9 +493,6 @@ function fbLoadVideo(file){
 async function fbExtractVideoFrames(vid, count){
   const frames = [];
   const w = vid.videoWidth, h = vid.videoHeight;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
   for(let i=0;i<count;i++){
     const t = (vid.duration * i) / count;
     await new Promise(function(resolve){
@@ -288,11 +500,9 @@ async function fbExtractVideoFrames(vid, count){
       vid.addEventListener('seeked', onSeek);
       vid.currentTime = t;
     });
-    ctx.clearRect(0,0,w,h);
-    ctx.drawImage(vid,0,0,w,h);
     const frameCv = document.createElement('canvas');
     frameCv.width = w; frameCv.height = h;
-    frameCv.getContext('2d').drawImage(cv,0,0);
+    frameCv.getContext('2d').drawImage(vid,0,0,w,h);
     frames.push(frameCv);
   }
   return frames;
@@ -323,11 +533,9 @@ function fbLoadGif(file){
         snap.getContext('2d').drawImage(compose,0,0);
         frameCanvases.push(snap);
       }
-      fbFrames = { type:'ready', frames: frameCanvases, w, h };
+      fbAllFrames = { frames: frameCanvases, w:w, h:h, fps: 12 };
       status.textContent = `✓ GIF decoded (${frameCanvases.length} frames, ${w}x${h})`;
-      document.getElementById('fb-frame-count').value = frameCanvases.length;
-      document.getElementById('fb-gen-options').style.display = 'block';
-      fbAutoGrid();
+      fbAfterFramesReady();
     }catch(err){
       status.textContent = '✗ Could not decode this GIF: ' + err.message;
     }
@@ -355,103 +563,420 @@ function fbLoadSequence(files){
       c.getContext('2d').drawImage(img, 0, 0, w, h);
       return c;
     });
-    fbFrames = { type:'ready', frames: frameCanvases, w, h };
+    fbAllFrames = { frames: frameCanvases, w:w, h:h, fps: 12 };
     status.textContent = `✓ ${frameCanvases.length} frames loaded (${w}x${h})`;
-    document.getElementById('fb-frame-count').value = frameCanvases.length;
-    document.getElementById('fb-gen-options').style.display = 'block';
-    fbAutoGrid();
+    fbAfterFramesReady();
   });
 }
 
-// ---------- grid helpers ----------
-function fbAutoGrid(){
-  const n = Math.max(1, parseInt(document.getElementById('fb-frame-count').value) || 1);
+// ---------- after any source is ready ----------
+function fbAfterFramesReady(){
+  fbTrimIn = 0;
+  fbTrimOut = fbAllFrames.frames.length - 1;
+  fbScrubIndex = 0;
+  fbCropPreset = 'source';
+  fbChromaEnabled = false;
+  fbPerfectLoopApplied = false;
+
+  document.getElementById('fb-chroma-enable').checked = false;
+  document.querySelectorAll('#fb-crop-presets .fb-preset-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.aspect==='source'); });
+  document.getElementById('fb-crop-status').textContent = 'No crop · full source frame';
+  fbSetLoopStrategy('off');
+
+  ['fb-trim-card','fb-crop-card','fb-chroma-card','fb-gen-options','fb-loop-card','fb-generate-card'].forEach(function(id){
+    document.getElementById(id).style.display = 'block';
+  });
+  document.getElementById('fb-gen-result').style.display = 'none';
+
+  const slider = document.getElementById('fb-scrub-slider');
+  slider.max = fbAllFrames.frames.length - 1;
+  slider.value = 0;
+
+  fbBuildThumbstrip();
+  fbAutoGridFromTrim();
+  fbSeekScrub(0);
+  fbUpdateTrimReadout();
+}
+
+// ---------- thumbstrip ----------
+function fbBuildThumbstrip(){
+  const strip = document.getElementById('fb-thumbstrip');
+  strip.innerHTML = '';
+  fbAllFrames.frames.forEach(function(fcv, i){
+    const div = document.createElement('div');
+    div.className = 'fb-thumb';
+    div.dataset.idx = i;
+    div.onclick = function(){ fbSeekScrub(i); };
+    const c = document.createElement('canvas');
+    c.width = 36; c.height = 36;
+    const cctx = c.getContext('2d');
+    const scale = Math.max(36/fcv.width, 36/fcv.height);
+    const sw = fcv.width*scale, sh = fcv.height*scale;
+    cctx.drawImage(fcv, (36-sw)/2, (36-sh)/2, sw, sh);
+    div.appendChild(c);
+    strip.appendChild(div);
+  });
+  fbUpdateThumbHighlight();
+}
+function fbUpdateThumbHighlight(){
+  document.querySelectorAll('.fb-thumb').forEach(function(el){
+    const i = parseInt(el.dataset.idx);
+    el.classList.toggle('in-range', i>=fbTrimIn && i<=fbTrimOut);
+    el.classList.toggle('marker', i===fbTrimIn || i===fbTrimOut);
+  });
+}
+
+// ---------- scrub / live preview (crop + chroma) ----------
+function fbSeekScrub(val){
+  fbScrubIndex = parseInt(val);
+  document.getElementById('fb-scrub-slider').value = fbScrubIndex;
+  fbRedrawScrub();
+}
+function fbGetCropRect(fcv){
+  const w = fcv.width, h = fcv.height;
+  if(fbCropPreset === 'source') return {x:0,y:0,w:w,h:h};
+  let targetAspect;
+  if(fbCropPreset === 'cell'){
+    const cols = parseInt(document.getElementById('fb-cols').value)||1;
+    const rows = parseInt(document.getElementById('fb-rows').value)||1;
+    const sw = parseInt(document.getElementById('fb-sheet-w').value)||512;
+    const sh = parseInt(document.getElementById('fb-sheet-h').value)||512;
+    targetAspect = (sw/cols) / (sh/rows);
+  } else {
+    const parts = fbCropPreset.split(':');
+    targetAspect = parseFloat(parts[0])/parseFloat(parts[1]);
+  }
+  const srcAspect = w/h;
+  let cw, ch;
+  if(srcAspect > targetAspect){ ch = h; cw = h*targetAspect; }
+  else { cw = w; ch = w/targetAspect; }
+  return { x:(w-cw)/2, y:(h-ch)/2, w:cw, h:ch };
+}
+function fbApplyChromaKeyToCtx(ctx, w, h){
+  if(!fbChromaEnabled) return;
+  const tol = parseInt(document.getElementById('fb-chroma-tolerance').value)||40;
+  const imgData = ctx.getImageData(0,0,w,h);
+  const d = imgData.data;
+  const cr=fbChromaColor.r, cg=fbChromaColor.g, cb=fbChromaColor.b;
+  for(let i=0;i<d.length;i+=4){
+    const dr=d[i]-cr, dg=d[i+1]-cg, db=d[i+2]-cb;
+    const dist = Math.sqrt(dr*dr+dg*dg+db*db);
+    if(dist < tol) d[i+3] = 0;
+  }
+  ctx.putImageData(imgData,0,0);
+}
+function fbRedrawScrub(){
+  if(!fbAllFrames) return;
+  const fcv = fbAllFrames.frames[fbScrubIndex];
+  if(!fcv) return;
+  const crop = fbGetCropRect(fcv);
+  const cv = document.getElementById('fb-scrub-canvas');
+  cv.width = crop.w; cv.height = crop.h;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,crop.w,crop.h);
+  ctx.drawImage(fcv, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+  fbApplyChromaKeyToCtx(ctx, crop.w, crop.h);
+  document.getElementById('fb-trim-frame-label').textContent = `Frame ${fbScrubIndex+1} / ${fbAllFrames.frames.length}`;
+  fbUpdateThumbHighlight();
+}
+
+// ---------- scrub playback ----------
+function fbToggleScrubPlay(){
+  fbScrubPlaying = !fbScrubPlaying;
+  document.getElementById('fb-scrub-play-btn').textContent = fbScrubPlaying ? '⏸' : '▶';
+  if(fbScrubPlaying) fbScrubPlayLoop();
+  else clearTimeout(fbScrubTimer);
+}
+function fbScrubPlayLoop(){
+  if(!fbScrubPlaying) return;
+  fbScrubIndex++;
+  if(fbScrubIndex > fbTrimOut) fbScrubIndex = fbTrimIn;
+  fbSeekScrub(fbScrubIndex);
+  fbScrubTimer = setTimeout(fbScrubPlayLoop, 1000/12);
+}
+
+// ---------- trim controls ----------
+function fbSetTrimIn(){
+  fbTrimIn = fbScrubIndex;
+  if(fbTrimIn > fbTrimOut) fbTrimOut = fbTrimIn;
+  fbUpdateTrimReadout();
+}
+function fbSetTrimOut(){
+  fbTrimOut = fbScrubIndex;
+  if(fbTrimOut < fbTrimIn) fbTrimIn = fbTrimOut;
+  fbUpdateTrimReadout();
+}
+function fbResetTrim(){
+  fbTrimIn = 0; fbTrimOut = fbAllFrames.frames.length - 1;
+  fbUpdateTrimReadout();
+}
+function fbUpdateTrimReadout(){
+  const n = fbTrimOut - fbTrimIn + 1;
+  document.getElementById('fb-trim-range-label').textContent = `In: ${fbTrimIn} · Out: ${fbTrimOut} (${n} frames)`;
+  fbUpdateThumbHighlight();
+  fbUpdateStats();
+}
+
+// ---------- crop presets ----------
+function fbSetCropPreset(preset){
+  fbCropPreset = preset;
+  document.querySelectorAll('#fb-crop-presets .fb-preset-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.aspect === preset);
+  });
+  const label = preset==='source' ? 'No crop · full source frame' : (preset==='cell' ? 'Cropped to match cell aspect ratio' : `Cropped to ${preset} (centered)`);
+  document.getElementById('fb-crop-status').textContent = label;
+  fbRedrawScrub();
+}
+
+// ---------- chroma key ----------
+function fbToggleChroma(val){
+  fbChromaEnabled = val;
+  fbRedrawScrub();
+}
+function fbUpdateChromaColor(val){
+  const hex = val.charAt(0)==='#' ? val : '#'+val;
+  document.getElementById('fb-chroma-color').value = hex;
+  document.getElementById('fb-chroma-hex').value = hex.toUpperCase();
+  const r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
+  fbChromaColor = {r:r,g:g,b:b};
+  fbRedrawScrub();
+}
+function fbPickChromaColor(){
+  fbChromaPicking = true;
+  document.getElementById('fb-scrub-canvas').style.cursor = 'crosshair';
+  document.getElementById('fb-source-status').textContent = 'Tap the preview above to pick a color...';
+}
+document.addEventListener('DOMContentLoaded', function(){
+  const cv = document.getElementById('fb-scrub-canvas');
+  if(!cv) return;
+  cv.addEventListener('click', function(e){
+    if(!fbChromaPicking) return;
+    const rect = cv.getBoundingClientRect();
+    const x = Math.max(0, Math.min(cv.width-1, Math.floor((e.clientX - rect.left) * (cv.width/rect.width))));
+    const y = Math.max(0, Math.min(cv.height-1, Math.floor((e.clientY - rect.top) * (cv.height/rect.height))));
+    const ctx = cv.getContext('2d');
+    const px = ctx.getImageData(x,y,1,1).data;
+    const hex = '#' + [px[0],px[1],px[2]].map(function(v){ return v.toString(16).padStart(2,'0'); }).join('');
+    fbUpdateChromaColor(hex);
+    document.getElementById('fb-chroma-enable').checked = true;
+    fbChromaEnabled = true;
+    fbChromaPicking = false;
+    cv.style.cursor = 'default';
+    document.getElementById('fb-source-status').textContent = '✓ Color picked: ' + hex;
+  });
+});
+
+// ---------- grid / stats ----------
+function fbAutoGridFromTrim(){
+  const n = Math.max(1, fbTrimOut - fbTrimIn + 1);
   const cols = Math.ceil(Math.sqrt(n));
   const rows = Math.ceil(n / cols);
   document.getElementById('fb-cols').value = cols;
   document.getElementById('fb-rows').value = rows;
-  fbUpdateGridInfo();
+  fbUpdateStats();
 }
-function fbUpdateGridInfo(){
-  const cols = parseInt(document.getElementById('fb-cols').value) || 1;
-  const rows = parseInt(document.getElementById('fb-rows').value) || 1;
-  const n = parseInt(document.getElementById('fb-frame-count').value) || 1;
-  document.getElementById('fb-grid-info').textContent = `Grid: ${cols} x ${rows} (${cols*rows} cells for ${n} frames)`;
+function fbMatchGridToTrim(){ fbAutoGridFromTrim(); }
+function fbUpdateStats(){
+  if(!fbAllFrames) return;
+  const cols = Math.max(1, parseInt(document.getElementById('fb-cols').value)||1);
+  const rows = Math.max(1, parseInt(document.getElementById('fb-rows').value)||1);
+  const trimmed = fbTrimOut - fbTrimIn + 1;
+  const cells = cols*rows;
+  const sheetW = parseInt(document.getElementById('fb-sheet-w').value)||512;
+  const sheetH = parseInt(document.getElementById('fb-sheet-h').value)||512;
+  const ratio = trimmed>0 ? (cells/trimmed).toFixed(2) : '0';
+  const srcAspect = (fbAllFrames.w/fbAllFrames.h).toFixed(3);
+  const memMB = (sheetW*sheetH*4/1048576).toFixed(2);
+  document.getElementById('fb-stats-grid').innerHTML =
+    '<div class="fb-stat">Cells<b>'+cells+'</b></div>'+
+    '<div class="fb-stat">Trimmed frames<b>'+trimmed+'</b></div>'+
+    '<div class="fb-stat">Sample ratio<b>'+ratio+'</b></div>'+
+    '<div class="fb-stat">Source aspect<b>'+srcAspect+'</b></div>'+
+    '<div class="fb-stat" style="grid-column:span 2">Est. memory<b>'+memMB+' MB</b></div>';
+}
+
+// ---------- loop strategy ----------
+function fbSetLoopStrategy(s){
+  fbLoopStrategy = s;
+  document.querySelectorAll('.fb-loop-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.strategy === s);
+  });
+}
+function fbMakePerfectLoop(){
+  fbPerfectLoopApplied = true;
+  if(fbLoopStrategy === 'off') fbSetLoopStrategy('crossfade');
+  document.getElementById('fb-source-status').textContent = '✓ Perfect loop blending will be applied when you generate.';
 }
 
 // ---------- generate sheet ----------
 async function fbGenerateSheet(){
-  const status = document.getElementById('fb-source-status');
-  const n = Math.max(1, parseInt(document.getElementById('fb-frame-count').value) || 1);
+  if(!fbAllFrames) return;
+  const genBtn = document.querySelector('#fb-generate-card .btn');
+  genBtn.textContent = 'BUILDING...';
+  genBtn.disabled = true;
+
   const cols = Math.max(1, parseInt(document.getElementById('fb-cols').value) || 1);
   const rows = Math.max(1, parseInt(document.getElementById('fb-rows').value) || 1);
-  const sheetSize = parseInt(document.getElementById('fb-sheet-size').value);
+  const sheetW = parseInt(document.getElementById('fb-sheet-w').value) || 512;
+  const sheetH = parseInt(document.getElementById('fb-sheet-h').value) || 512;
+  const fitMode = document.getElementById('fb-fit-mode').value;
+  const frameBlend = document.getElementById('fb-frame-blend').checked;
+  const cells = cols * rows;
 
-  let frames;
-  if(fbFrames && fbFrames.type === 'video'){
-    status.textContent = 'Extracting video frames...';
-    frames = await fbExtractVideoFrames(fbFrames.vid, n);
-  } else if(fbFrames && fbFrames.type === 'ready'){
-    frames = fbFrames.frames.slice(0, n);
-  } else {
-    status.textContent = '✗ Load a source first.';
-    return;
+  const trimmedSrc = fbAllFrames.frames.slice(fbTrimIn, fbTrimOut + 1);
+
+  let cropped = trimmedSrc.map(function(fcv){
+    const crop = fbGetCropRect(fcv);
+    const c = document.createElement('canvas');
+    c.width = crop.w; c.height = crop.h;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(fcv, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+    fbApplyChromaKeyToCtx(cctx, crop.w, crop.h);
+    return c;
+  });
+
+  if(fbPerfectLoopApplied && cropped.length > 3){
+    const blendCount = Math.min(5, Math.floor(cropped.length/4));
+    for(let k=0;k<blendCount;k++){
+      const idx = cropped.length - 1 - k;
+      const alpha = (1 - (k+1)/(blendCount+1)) * 0.5;
+      const src = cropped[idx];
+      const first = cropped[0];
+      const blended = document.createElement('canvas');
+      blended.width = src.width; blended.height = src.height;
+      const bctx = blended.getContext('2d');
+      bctx.drawImage(src,0,0);
+      bctx.globalAlpha = alpha;
+      bctx.drawImage(first,0,0,src.width,src.height);
+      bctx.globalAlpha = 1;
+      cropped[idx] = blended;
+    }
   }
 
-  const cellW = Math.floor(sheetSize / cols);
-  const cellH = Math.floor(sheetSize / rows);
+  let finalFrames = [];
+  if(cropped.length >= cells){
+    for(let i=0;i<cells;i++){
+      const srcIdx = Math.min(cropped.length-1, Math.floor(i * cropped.length / cells));
+      finalFrames.push(cropped[srcIdx]);
+    }
+  } else {
+    for(let i=0;i<cells;i++){
+      if(i < cropped.length){ finalFrames.push(cropped[i]); continue; }
+      if(frameBlend && cropped.length > 1){
+        const t = i / (cells - 1);
+        const srcPos = t * (cropped.length - 1);
+        const i0 = Math.floor(srcPos), i1 = Math.min(cropped.length-1, i0+1);
+        const frac = srcPos - i0;
+        const a = cropped[i0], b = cropped[i1];
+        const blended = document.createElement('canvas');
+        blended.width = a.width; blended.height = a.height;
+        const bctx = blended.getContext('2d');
+        bctx.drawImage(a,0,0);
+        bctx.globalAlpha = frac;
+        bctx.drawImage(b,0,0,a.width,a.height);
+        bctx.globalAlpha = 1;
+        finalFrames.push(blended);
+      } else {
+        finalFrames.push(cropped[cropped.length-1]);
+      }
+    }
+  }
+
+  const cellW = Math.floor(sheetW / cols);
+  const cellH = Math.floor(sheetH / rows);
   const sheet = document.createElement('canvas');
   sheet.width = cellW * cols;
   sheet.height = cellH * rows;
   const ctx = sheet.getContext('2d');
 
-  frames.forEach(function(fcv, i){
+  finalFrames.forEach(function(fcv, i){
     const cx = (i % cols) * cellW;
     const cy = Math.floor(i / cols) * cellH;
-    ctx.drawImage(fcv, 0, 0, fcv.width, fcv.height, cx, cy, cellW, cellH);
+    if(fitMode === 'stretch'){
+      ctx.drawImage(fcv, 0, 0, fcv.width, fcv.height, cx, cy, cellW, cellH);
+    } else if(fitMode === 'cover'){
+      const scale = Math.max(cellW/fcv.width, cellH/fcv.height);
+      const dw = fcv.width*scale, dh = fcv.height*scale;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(cx,cy,cellW,cellH); ctx.clip();
+      ctx.drawImage(fcv, cx+(cellW-dw)/2, cy+(cellH-dh)/2, dw, dh);
+      ctx.restore();
+    } else {
+      const scale = Math.min(cellW/fcv.width, cellH/fcv.height);
+      const dw = fcv.width*scale, dh = fcv.height*scale;
+      ctx.drawImage(fcv, cx+(cellW-dw)/2, cy+(cellH-dh)/2, dw, dh);
+    }
   });
 
   fbResultCanvas = sheet;
-  fbResultMeta = { frameCount: frames.length, columns: cols, rows: rows, cellWidth: cellW, cellHeight: cellH, sheetWidth: sheet.width, sheetHeight: sheet.height };
+  fbResultFrames = finalFrames;
+  const exportName = (document.getElementById('fb-export-name').value || 'flipbook').trim() || 'flipbook';
+  fbResultMeta = {
+    exportName: exportName,
+    frameCount: finalFrames.length,
+    trimmedSourceFrames: cropped.length,
+    columns: cols, rows: rows,
+    cellWidth: cellW, cellHeight: cellH,
+    sheetWidth: sheet.width, sheetHeight: sheet.height,
+    fitMode: fitMode,
+    frameBlend: frameBlend,
+    loopStrategy: fbLoopStrategy,
+    perfectLoop: fbPerfectLoopApplied,
+    chromaKey: fbChromaEnabled ? { color: document.getElementById('fb-chroma-hex').value, tolerance: parseInt(document.getElementById('fb-chroma-tolerance').value) } : null,
+    cropPreset: fbCropPreset
+  };
 
   const resultCv = document.getElementById('fb-result-canvas');
   resultCv.width = sheet.width; resultCv.height = sheet.height;
   resultCv.getContext('2d').drawImage(sheet, 0, 0);
   document.getElementById('fb-gen-result').style.display = 'block';
-  status.textContent = `✓ Flipbook sheet generated (${sheet.width}x${sheet.height}, ${frames.length} frames)`;
+  document.getElementById('fb-result-info').textContent = `✓ Sheet ${sheet.width}x${sheet.height}, grid ${cols}x${rows}, cell ${cellW}x${cellH}.`;
+  genBtn.textContent = '⚡ GENERATE FLIPBOOK';
+  genBtn.disabled = false;
 }
 
-let fbResultMeta = null;
-
+// ---------- downloads ----------
 function fbDownloadSheet(){
   if(!fbResultCanvas) return;
+  const name = (document.getElementById('fb-export-name').value || 'flipbook').trim() || 'flipbook';
   const a = document.createElement('a');
   a.href = fbResultCanvas.toDataURL('image/png');
-  a.download = 'flipbook_sheet.png';
+  a.download = name + '.png';
   a.click();
 }
 function fbDownloadMeta(){
   if(!fbResultMeta) return;
+  const name = (document.getElementById('fb-export-name').value || 'flipbook').trim() || 'flipbook';
   const blob = new Blob([JSON.stringify(fbResultMeta, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'flipbook_data.json';
+  a.download = name + '_sidecar.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+async function fbDownloadFrames(){
+  if(!fbResultFrames || !fbResultFrames.length) return;
+  if(typeof JSZip === 'undefined'){
+    document.getElementById('fb-result-info').textContent = '✗ ZIP library did not load — try reloading the page.';
+    return;
+  }
+  const name = (document.getElementById('fb-export-name').value || 'flipbook').trim() || 'flipbook';
+  const zip = new JSZip();
+  fbResultFrames.forEach(function(cv, i){
+    const dataUrl = cv.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    zip.file(name + '_frame_' + String(i).padStart(3,'0') + '.png', base64, {base64:true});
+  });
+  const blob = await zip.generateAsync({type:'blob'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '_frames.zip';
   a.click();
   URL.revokeObjectURL(a.href);
 }
 function fbSendResultToViewer(){
-  if(!fbResultMeta) return;
-  const cols = fbResultMeta.columns, rows = fbResultMeta.rows, n = fbResultMeta.frameCount;
-  const cw = fbResultMeta.cellWidth, ch = fbResultMeta.cellHeight;
-  const framesArr = [];
-  for(let i=0;i<n;i++){
-    const cx=(i%cols)*cw, cy=Math.floor(i/cols)*ch;
-    const c = document.createElement('canvas');
-    c.width=cw; c.height=ch;
-    c.getContext('2d').drawImage(fbResultCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
-    framesArr.push(c);
-  }
-  fbViewerFrames = framesArr;
+  if(!fbResultFrames) return;
+  fbViewerFrames = fbResultFrames;
   fbSwitchMode('viewer');
   fbStartViewerStage();
 }
