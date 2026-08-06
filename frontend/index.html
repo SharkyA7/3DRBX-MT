@@ -808,6 +808,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <a class="dropdown-item" href="/Flipbook" style="text-decoration:none"><img class="nav-icon" src="/icons/FLIPBOOK.svg" alt=""> <span data-t-id="FLIPBOOK" data-t-en="FLIPBOOK">FLIPBOOK</span></a>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+        <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
     </div>
@@ -1237,6 +1238,34 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <strong>3D Viewer</strong>
         <span data-t-id="untuk preview langsung." data-t-en="tab for instant preview.">untuk preview langsung.</span>
       </p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-vengine">
+    <div class="card">
+      <div class="label">🔗 <span data-t-id="FORMAT MESH YANG DIDUKUNG" data-t-en="SUPPORTED MESH FORMATS">SUPPORTED MESH FORMATS</span></div>
+      <p style="font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
+        <span data-t-id="V-ENGINE menunjukkan versi format mesh Roblox yang terdeteksi dan didukung oleh tool ini." data-t-en="V-ENGINE shows which Roblox mesh format version is detected and supported by this tool.">V-ENGINE menunjukkan versi format mesh Roblox yang terdeteksi dan didukung oleh tool ini.</span>
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead>
+          <tr style="color:var(--accent);font-family:'Press Start 2P',monospace;font-size:8px">
+            <th style="text-align:left;padding:8px 6px;border-bottom:1px solid var(--border2)"><span data-t-id="VERSI" data-t-en="VERSION">VERSION</span></th>
+            <th style="text-align:left;padding:8px 6px;border-bottom:1px solid var(--border2)"><span data-t-id="FORMAT" data-t-en="FORMAT">FORMAT</span></th>
+            <th style="text-align:left;padding:8px 6px;border-bottom:1px solid var(--border2)"><span data-t-id="STATUS" data-t-en="STATUS">STATUS</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v1.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)">ASCII</td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--green)">✓ <span data-t-id="didukung" data-t-en="support">support</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v2.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)">Binary</td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--green)">✓ <span data-t-id="didukung" data-t-en="support">support</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v3.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)">Binary + LOD</td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--green)">✓ <span data-t-id="didukung" data-t-en="support">support</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v4.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)">Binary + Skinning</td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--amber)">⚠ <span data-t-id="(hanya geometri)" data-t-en="(geometry only)">(geometry only)</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v5.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)">Binary + CSG/UNION</td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--green)">✓ <span data-t-id="didukung" data-t-en="support">support</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v6.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)"><span data-t-id="Segera hadir" data-t-en="Coming soon">Coming soon</span></td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted)">✗ <span data-t-id="Tidak tersedia" data-t-en="Unavailable">Unavailable</span></td></tr>
+          <tr><td style="padding:8px 6px;border-bottom:1px solid var(--border)">v7.00</td><td style="padding:8px 6px;border-bottom:1px solid var(--border)"><span data-t-id="Segera hadir" data-t-en="Coming soon">Coming soon</span></td><td style="padding:8px 6px;border-bottom:1px solid var(--border);color:var(--muted)">✗ <span data-t-id="Tidak tersedia" data-t-en="Unavailable">Unavailable</span></td></tr>
+          <tr><td style="padding:8px 6px">v8.00</td><td style="padding:8px 6px"><span data-t-id="Segera hadir" data-t-en="Coming soon">Coming soon</span></td><td style="padding:8px 6px;color:var(--muted)">✗ <span data-t-id="Tidak tersedia" data-t-en="Unavailable">Unavailable</span></td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
