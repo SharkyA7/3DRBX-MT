@@ -49,6 +49,15 @@ main{max-width:880px;margin:0 auto;padding:0 16px 80px}
 .fb-preset-thumb img{width:100%;height:100%;object-fit:cover;}
 .fb-preset-name{font-size:10px;font-weight:700;color:var(--white);padding:8px 10px 2px;}
 .fb-preset-meta{font-size:8px;color:var(--muted);padding:0 10px 8px;letter-spacing:.03em;}
+.fb-preset-badge{display:inline-block;font-size:7px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:5px;background:rgba(80,232,244,.12);color:var(--accent);margin:0 10px 8px;}
+.fb-preset-add-card{background:transparent;border:2px dashed var(--border2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;aspect-ratio:1/1.25;color:var(--muted);font-size:10px;font-weight:700;transition:border-color .15s,color .15s;}
+.fb-preset-add-card:hover{border-color:var(--accent);color:var(--accent);}
+.fb-submit-form{grid-column:1/-1;background:var(--s2);border:1px solid var(--border2);border-radius:10px;padding:14px;}
+.fb-submit-form .fb-field{margin-bottom:10px;}
+.fb-submit-form input[type="text"],.fb-submit-form input[type="url"],.fb-submit-form input[type="number"]{width:100%;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--white);font-family:var(--font-ui);font-size:11px;}
+.fb-submit-form label{display:block;font-size:9px;color:var(--muted);margin-bottom:4px;letter-spacing:.03em;text-transform:uppercase;}
+.fb-submit-btns{display:flex;gap:8px;}
+.fb-submit-btns .btn{flex:1;}
 .fb-drop:hover,.fb-drop.dragover{border-color:var(--accent);background:rgba(80,232,244,.05);}
 .fb-drop-icon{font-size:26px;margin-bottom:8px;opacity:.6;}
 .fb-drop-text{font-size:11px;color:var(--muted);}
@@ -493,33 +502,153 @@ function fbSetSource(type){
   fbAllFrames = null;
 }
 
+// ============ Community preset submissions (shared, public) ============
+// Uses jsonbin.io's free tier — a plain JSON storage API callable via fetch().
+// SETUP REQUIRED: create a free bin at jsonbin.io, set it to "Public" (so GET
+// needs no key), then paste your Bin ID and Master Key below.
+const FB_JSONBIN_ID = "YOUR_BIN_ID_HERE";
+const FB_JSONBIN_KEY = "YOUR_MASTER_KEY_HERE";
+const FB_JSONBIN_URL = "https://api.jsonbin.io/v3/b/" + FB_JSONBIN_ID;
+const FB_JSONBIN_CONFIGURED = FB_JSONBIN_ID !== "YOUR_BIN_ID_HERE" && FB_JSONBIN_KEY !== "YOUR_MASTER_KEY_HERE";
+
+let fbCommunityClips = [];
+let fbCommunitySheets = [];
+let fbCommunityLoaded = false;
+
+async function fbLoadCommunityPresets(){
+  if(!FB_JSONBIN_CONFIGURED){ fbCommunityLoaded = true; return; }
+  try{
+    const res = await fetch(FB_JSONBIN_URL + "/latest");
+    if(!res.ok) throw new Error("fetch failed");
+    const data = await res.json();
+    const record = data.record || {};
+    fbCommunityClips = Array.isArray(record.clips) ? record.clips : [];
+    fbCommunitySheets = Array.isArray(record.sheets) ? record.sheets : [];
+  }catch(e){
+    fbCommunityClips = [];
+    fbCommunitySheets = [];
+  }
+  fbCommunityLoaded = true;
+}
+
+async function fbSubmitCommunityPreset(kind, entry){
+  if(!FB_JSONBIN_CONFIGURED){
+    throw new Error("The community library isn't set up yet — ask the site owner to finish jsonbin.io setup.");
+  }
+  const lastSubmit = Number(localStorage.getItem('fb_last_submit') || 0);
+  const now = Date.now();
+  if(now - lastSubmit < 60000){
+    throw new Error("Please wait a bit before submitting another preset.");
+  }
+  const nextClips = fbCommunityClips.slice();
+  const nextSheets = fbCommunitySheets.slice();
+  if(kind === 'clips') nextClips.push(entry); else nextSheets.push(entry);
+  const res = await fetch(FB_JSONBIN_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Master-Key": FB_JSONBIN_KEY },
+    body: JSON.stringify({ clips: nextClips, sheets: nextSheets })
+  });
+  if(!res.ok) throw new Error("Could not submit right now — try again later.");
+  fbCommunityClips = nextClips;
+  fbCommunitySheets = nextSheets;
+  localStorage.setItem('fb_last_submit', String(now));
+}
+
+function fbValidateMediaUrl(url, kind){
+  return new Promise(function(resolve, reject){
+    if(!/^https:\/\//i.test(url)){ reject(new Error("URL must start with https://")); return; }
+    if(kind === 'clips'){
+      const vid = document.createElement('video');
+      vid.crossOrigin = 'anonymous';
+      vid.onloadedmetadata = function(){ resolve(); };
+      vid.onerror = function(){ reject(new Error("Couldn't load this as a video — check the link.")); };
+      vid.src = url;
+    } else {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function(){ resolve(); };
+      img.onerror = function(){ reject(new Error("Couldn't load this as an image — check the link.")); };
+      img.src = url;
+    }
+  });
+}
+
+function fbToggleSubmitForm(kind){
+  const existing = document.getElementById('fb-submit-form-' + kind);
+  if(existing){ existing.remove(); return; }
+  const grid = document.getElementById(kind === 'clips' ? 'fb-clip-preset-grid' : 'fb-preset-grid');
+  const form = document.createElement('div');
+  form.className = 'fb-submit-form';
+  form.id = 'fb-submit-form-' + kind;
+  const sheetFields = kind === 'sheets' ? (
+    '<div class="fb-row">'
+    + '<div class="fb-field"><label>Columns</label><input type="number" id="fb-submit-cols-' + kind + '" min="1" max="16" value="4"></div>'
+    + '<div class="fb-field"><label>Rows</label><input type="number" id="fb-submit-rows-' + kind + '" min="1" max="16" value="4"></div>'
+    + '</div>'
+  ) : '';
+  form.innerHTML = '<div class="fb-field"><label>Name</label><input type="text" id="fb-submit-name-' + kind + '" placeholder="e.g. Blue Fire Loop"></div>'
+    + '<div class="fb-field"><label>Direct URL to the file</label><input type="url" id="fb-submit-url-' + kind + '" placeholder="https://..."></div>'
+    + sheetFields
+    + '<div class="fb-status" id="fb-submit-status-' + kind + '"></div>'
+    + '<div class="fb-submit-btns"><button class="btn" onclick="fbSubmitFromForm(\'' + kind + '\')">Submit</button><button class="btn btn-outline" onclick="fbToggleSubmitForm(\'' + kind + '\')">Cancel</button></div>';
+  grid.appendChild(form);
+}
+
+async function fbSubmitFromForm(kind){
+  const status = document.getElementById('fb-submit-status-' + kind);
+  const name = document.getElementById('fb-submit-name-' + kind).value.trim();
+  const url = document.getElementById('fb-submit-url-' + kind).value.trim();
+  if(!name || !url){ status.textContent = '✗ Fill in both a name and a URL.'; return; }
+  const entry = { name: name, url: url };
+  if(kind === 'sheets'){
+    entry.cols = Math.max(1, parseInt(document.getElementById('fb-submit-cols-sheets').value) || 4);
+    entry.rows = Math.max(1, parseInt(document.getElementById('fb-submit-rows-sheets').value) || 4);
+  }
+  status.textContent = 'Checking the link works...';
+  try{
+    await fbValidateMediaUrl(url, kind);
+    status.textContent = 'Submitting...';
+    await fbSubmitCommunityPreset(kind, entry);
+    status.textContent = '✓ Added! Refreshing gallery...';
+    if(kind === 'clips'){
+      document.getElementById('fb-clip-preset-grid').dataset.rendered = '';
+      fbRenderClipPresetGallery();
+    } else {
+      document.getElementById('fb-preset-grid').dataset.rendered = '';
+      fbRenderPresetGallery();
+    }
+  }catch(e){
+    status.textContent = '✗ ' + e.message;
+  }
+}
+
 // Raw source clip presets — free-to-use stock footage. Real, working links only;
 // more will be added as R3nZzi provides them.
 const FB_CLIP_PRESETS = [
   { name: "Smoke, Steam FX (Pixabay)", thumb: "https://cdn.pixabay.com/video/2018/05/24/16428-272487408_tiny.jpg", url: "https://cdn.pixabay.com/video/2018/05/24/16428-272487408_large.mp4" }
 ];
 
-function fbRenderClipPresetGallery(){
+async function fbRenderClipPresetGallery(){
   const grid = document.getElementById('fb-clip-preset-grid');
   if(grid.dataset.rendered === '1') return;
   grid.dataset.rendered = '1';
-  let html = FB_CLIP_PRESETS.map(function(p, i){
+  if(!fbCommunityLoaded) await fbLoadCommunityPresets();
+  const all = FB_CLIP_PRESETS.map(function(p){ return Object.assign({community:false}, p); })
+    .concat(fbCommunityClips.map(function(p){ return Object.assign({community:true}, p); }));
+  let html = all.map(function(p, i){
     return '<div class="fb-preset-card" onclick="fbLoadClipPreset(' + i + ')" id="fb-clip-card-' + i + '">'
-      + '<div class="fb-preset-thumb"><img src="' + p.thumb + '" alt="' + p.name + '"></div>'
+      + '<div class="fb-preset-thumb">' + (p.thumb ? '<img src="' + p.thumb + '" alt="' + p.name + '">' : '🎞') + '</div>'
       + '<div class="fb-preset-name">' + p.name + '</div>'
-      + '<div class="fb-preset-meta">Free · Pixabay License</div>'
+      + (p.community ? '<div class="fb-preset-badge">COMMUNITY</div>' : '<div class="fb-preset-meta">Free · Pixabay License</div>')
       + '</div>';
   }).join('');
-  html += '<div class="fb-preset-card" style="opacity:.4;cursor:default;pointer-events:none">'
-    + '<div class="fb-preset-thumb">🔜</div>'
-    + '<div class="fb-preset-name">More coming soon</div>'
-    + '<div class="fb-preset-meta">Library in progress</div>'
-    + '</div>';
+  html += '<div class="fb-preset-add-card" onclick="fbToggleSubmitForm(\'clips\')"><div style="font-size:20px">➕</div>Submit a clip</div>';
   grid.innerHTML = html;
+  window.fbClipPresetsAll = all;
 }
 
 function fbLoadClipPreset(i){
-  const p = FB_CLIP_PRESETS[i];
+  const p = window.fbClipPresetsAll[i];
   const card = document.getElementById('fb-clip-card-' + i);
   if(card) card.classList.add('loading');
   fbLoadRemoteVideo(p.url, function(){ if(card) card.classList.remove('loading'); });
@@ -1090,18 +1219,24 @@ const FB_PRESET_GALLERY = [
   { name: "Magic (example)", cols: 4, rows: 4, url: "https://placehold.co/512x512/8855ff/ffffff?text=MAGIC" }
 ];
 
-function fbRenderPresetGallery(){
+async function fbRenderPresetGallery(){
   const grid = document.getElementById('fb-preset-grid');
   if(grid.dataset.rendered === '1') return;
   grid.dataset.rendered = '1';
-  grid.innerHTML = FB_PRESET_GALLERY.map(function(p, i){
+  if(!fbCommunityLoaded) await fbLoadCommunityPresets();
+  const all = FB_PRESET_GALLERY.map(function(p){ return Object.assign({community:false}, p); })
+    .concat(fbCommunitySheets.map(function(p){ return Object.assign({community:true}, p); }));
+  let html = all.map(function(p, i){
     return '<div class="fb-preset-card" onclick="fbLoadPreset(' + i + ')" id="fb-preset-card-' + i + '">'
       + '<div class="fb-preset-thumb" id="fb-preset-thumb-' + i + '">🎞</div>'
       + '<div class="fb-preset-name">' + p.name + '</div>'
-      + '<div class="fb-preset-meta">' + p.cols + '×' + p.rows + ' grid</div>'
+      + (p.community ? '<div class="fb-preset-badge">COMMUNITY</div>' : '<div class="fb-preset-meta">' + p.cols + '×' + p.rows + ' grid</div>')
       + '</div>';
   }).join('');
-  FB_PRESET_GALLERY.forEach(function(p, i){
+  html += '<div class="fb-preset-add-card" onclick="fbToggleSubmitForm(\'sheets\')"><div style="font-size:20px">➕</div>Submit a sheet</div>';
+  grid.innerHTML = html;
+  window.fbSheetPresetsAll = all;
+  all.forEach(function(p, i){
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function(){
@@ -1113,7 +1248,7 @@ function fbRenderPresetGallery(){
 }
 
 function fbLoadPreset(i){
-  const p = FB_PRESET_GALLERY[i];
+  const p = window.fbSheetPresetsAll[i];
   const status = document.getElementById('fb-viewer-status');
   const card = document.getElementById('fb-preset-card-' + i);
   if(card) card.classList.add('loading');
