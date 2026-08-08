@@ -41,6 +41,14 @@ main{max-width:880px;margin:0 auto;padding:0 16px 80px}
 .fb-src-tab{flex:1;text-align:center;padding:9px 6px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
 .fb-src-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(80,232,244,.08);}
 .fb-drop{border:2px dashed var(--border2);border-radius:10px;padding:26px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:14px;}
+.fb-preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fb-preset-card{background:var(--s2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:border-color .15s;}
+.fb-preset-card:hover{border-color:var(--accent);}
+.fb-preset-card.loading{opacity:.5;pointer-events:none;}
+.fb-preset-thumb{width:100%;aspect-ratio:1/1;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:24px;overflow:hidden;}
+.fb-preset-thumb img{width:100%;height:100%;object-fit:cover;}
+.fb-preset-name{font-size:10px;font-weight:700;color:var(--white);padding:8px 10px 2px;}
+.fb-preset-meta{font-size:8px;color:var(--muted);padding:0 10px 8px;letter-spacing:.03em;}
 .fb-drop:hover,.fb-drop.dragover{border-color:var(--accent);background:rgba(80,232,244,.05);}
 .fb-drop-icon{font-size:26px;margin-bottom:8px;opacity:.6;}
 .fb-drop-text{font-size:11px;color:var(--muted);}
@@ -136,6 +144,7 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
         <div class="fb-src-tab active" id="fb-src-video-tab" onclick="fbSetSource('video')">VIDEO</div>
         <div class="fb-src-tab" id="fb-src-gif-tab" onclick="fbSetSource('gif')">GIF</div>
         <div class="fb-src-tab" id="fb-src-seq-tab" onclick="fbSetSource('sequence')">IMAGE SEQUENCE</div>
+        <div class="fb-src-tab" id="fb-src-preset-tab" onclick="fbSetSource('presets')">🎞 PRESETS</div>
       </div>
 
       <div class="fb-drop" id="fb-drop-zone" onclick="fbTriggerFileInput()">
@@ -143,6 +152,11 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
         <div class="fb-drop-text" id="fb-drop-text">Tap to choose a video file (mp4, webm)</div>
       </div>
       <input type="file" id="fb-file-input" accept="video/*" style="display:none" onchange="fbHandleFiles(this.files)">
+
+      <div id="fb-src-preset-inputs" style="display:none">
+        <p style="font-size:9px;color:var(--muted);margin-bottom:10px;line-height:1.6">Raw source clips — pick one to auto-load into the pipeline below, then trim/crop/pack it yourself.</p>
+        <div class="fb-preset-grid" id="fb-clip-preset-grid"></div>
+      </div>
       <div class="fb-status" id="fb-source-status"></div>
       <div class="fb-field" style="margin-top:12px">
         <label>Export Name</label>
@@ -301,6 +315,7 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
       <div class="fb-src-tabs">
         <div class="fb-src-tab active" id="fb-view-sheet-tab" onclick="fbSetViewerSource('sheet')">SPRITE SHEET</div>
         <div class="fb-src-tab" id="fb-view-seq-tab" onclick="fbSetViewerSource('frames')">SEPARATE FRAMES</div>
+        <div class="fb-src-tab" id="fb-view-preset-tab" onclick="fbSetViewerSource('presets')">🎞 PRESETS</div>
       </div>
 
       <div id="fb-view-sheet-inputs">
@@ -328,6 +343,11 @@ footer{text-align:center;padding:20px;font-size:11px;color:var(--muted);border-t
           <div class="fb-drop-text">Tap to choose multiple frame images</div>
         </div>
         <input type="file" id="fb-view-frames-input" accept="image/*" multiple style="display:none" onchange="fbLoadFramesForViewer(this.files)">
+      </div>
+
+      <div id="fb-view-preset-inputs" style="display:none">
+        <p style="font-size:9px;color:var(--muted);margin-bottom:10px;line-height:1.6">⚠ EXAMPLE placeholders for now — swap in the real library once it's ready.</p>
+        <div class="fb-preset-grid" id="fb-preset-grid"></div>
       </div>
       <div class="fb-status" id="fb-viewer-status"></div>
     </div>
@@ -449,17 +469,86 @@ function fbSetSource(type){
   document.getElementById('fb-src-video-tab').classList.toggle('active', type==='video');
   document.getElementById('fb-src-gif-tab').classList.toggle('active', type==='gif');
   document.getElementById('fb-src-seq-tab').classList.toggle('active', type==='sequence');
+  document.getElementById('fb-src-preset-tab').classList.toggle('active', type==='presets');
   const input = document.getElementById('fb-file-input');
   const dropText = document.getElementById('fb-drop-text');
-  if(type==='video'){ input.accept='video/*'; input.multiple=false; dropText.textContent='Tap to choose a video file (mp4, webm)'; }
-  else if(type==='gif'){ input.accept='image/gif'; input.multiple=false; dropText.textContent='Tap to choose a GIF file'; }
-  else { input.accept='image/*'; input.multiple=true; dropText.textContent='Tap to choose multiple frame images'; }
+  const dropZone = document.getElementById('fb-drop-zone');
+  const presetInputs = document.getElementById('fb-src-preset-inputs');
+  if(type==='presets'){
+    dropZone.style.display = 'none';
+    presetInputs.style.display = 'block';
+    fbRenderClipPresetGallery();
+  } else {
+    dropZone.style.display = 'block';
+    presetInputs.style.display = 'none';
+    if(type==='video'){ input.accept='video/*'; input.multiple=false; dropText.textContent='Tap to choose a video file (mp4, webm)'; }
+    else if(type==='gif'){ input.accept='image/gif'; input.multiple=false; dropText.textContent='Tap to choose a GIF file'; }
+    else { input.accept='image/*'; input.multiple=true; dropText.textContent='Tap to choose multiple frame images'; }
+  }
   ['fb-trim-card','fb-crop-card','fb-chroma-card','fb-gen-options','fb-loop-card','fb-generate-card','fb-gen-result'].forEach(function(id){
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
   document.getElementById('fb-source-status').textContent='';
   fbAllFrames = null;
+}
+
+// Raw source clip presets — free-to-use stock footage. Real, working links only;
+// more will be added as R3nZzi provides them.
+const FB_CLIP_PRESETS = [
+  { name: "Smoke, Steam FX (Pixabay)", thumb: "https://cdn.pixabay.com/video/2018/05/24/16428-272487408_tiny.jpg", url: "https://cdn.pixabay.com/video/2018/05/24/16428-272487408_large.mp4" }
+];
+
+function fbRenderClipPresetGallery(){
+  const grid = document.getElementById('fb-clip-preset-grid');
+  if(grid.dataset.rendered === '1') return;
+  grid.dataset.rendered = '1';
+  let html = FB_CLIP_PRESETS.map(function(p, i){
+    return '<div class="fb-preset-card" onclick="fbLoadClipPreset(' + i + ')" id="fb-clip-card-' + i + '">'
+      + '<div class="fb-preset-thumb"><img src="' + p.thumb + '" alt="' + p.name + '"></div>'
+      + '<div class="fb-preset-name">' + p.name + '</div>'
+      + '<div class="fb-preset-meta">Free · Pixabay License</div>'
+      + '</div>';
+  }).join('');
+  html += '<div class="fb-preset-card" style="opacity:.4;cursor:default;pointer-events:none">'
+    + '<div class="fb-preset-thumb">🔜</div>'
+    + '<div class="fb-preset-name">More coming soon</div>'
+    + '<div class="fb-preset-meta">Library in progress</div>'
+    + '</div>';
+  grid.innerHTML = html;
+}
+
+function fbLoadClipPreset(i){
+  const p = FB_CLIP_PRESETS[i];
+  const card = document.getElementById('fb-clip-card-' + i);
+  if(card) card.classList.add('loading');
+  fbLoadRemoteVideo(p.url, function(){ if(card) card.classList.remove('loading'); });
+}
+
+function fbLoadRemoteVideo(url, onDone){
+  const status = document.getElementById('fb-source-status');
+  status.textContent = 'Loading clip...';
+  const vid = document.createElement('video');
+  vid.crossOrigin = 'anonymous';
+  vid.src = url; vid.muted = true; vid.playsInline = true;
+  vid.onloadedmetadata = async function(){
+    const duration = vid.duration;
+    const sampleCount = Math.max(8, Math.min(60, Math.round(duration*10)));
+    status.textContent = `Extracting ${sampleCount} frames from clip...`;
+    try{
+      const frames = await fbExtractVideoFrames(vid, sampleCount);
+      fbAllFrames = { frames: frames, w: vid.videoWidth, h: vid.videoHeight, fps: sampleCount/duration };
+      status.textContent = `✓ Clip loaded — ${frames.length} frames extracted (${vid.videoWidth}x${vid.videoHeight})`;
+      fbAfterFramesReady();
+    }catch(e){
+      status.textContent = '✗ Could not process this clip (possibly a CORS restriction). Try downloading it and uploading manually instead.';
+    }
+    if(onDone) onDone();
+  };
+  vid.onerror = function(){
+    status.textContent = '✗ Could not load this clip.';
+    if(onDone) onDone();
+  };
 }
 
 function fbTriggerFileInput(){ document.getElementById('fb-file-input').click(); }
@@ -986,8 +1075,64 @@ function fbSetViewerSource(type){
   fbViewerSourceType = type;
   document.getElementById('fb-view-sheet-tab').classList.toggle('active', type==='sheet');
   document.getElementById('fb-view-seq-tab').classList.toggle('active', type==='frames');
+  document.getElementById('fb-view-preset-tab').classList.toggle('active', type==='presets');
   document.getElementById('fb-view-sheet-inputs').style.display = type==='sheet' ? 'block':'none';
   document.getElementById('fb-view-frames-inputs').style.display = type==='frames' ? 'block':'none';
+  document.getElementById('fb-view-preset-inputs').style.display = type==='presets' ? 'block':'none';
+  if(type==='presets') fbRenderPresetGallery();
+}
+
+// EXAMPLE placeholders only — replace with R3nZzi's real library links once ready.
+const FB_PRESET_GALLERY = [
+  { name: "Fire (example)", cols: 4, rows: 4, url: "https://placehold.co/512x512/ff6600/ffffff?text=FIRE" },
+  { name: "Smoke (example)", cols: 4, rows: 4, url: "https://placehold.co/512x512/777777/ffffff?text=SMOKE" },
+  { name: "Explosion (example)", cols: 8, rows: 8, url: "https://placehold.co/512x512/ffaa00/000000?text=EXPLOSION" },
+  { name: "Magic (example)", cols: 4, rows: 4, url: "https://placehold.co/512x512/8855ff/ffffff?text=MAGIC" }
+];
+
+function fbRenderPresetGallery(){
+  const grid = document.getElementById('fb-preset-grid');
+  if(grid.dataset.rendered === '1') return;
+  grid.dataset.rendered = '1';
+  grid.innerHTML = FB_PRESET_GALLERY.map(function(p, i){
+    return '<div class="fb-preset-card" onclick="fbLoadPreset(' + i + ')" id="fb-preset-card-' + i + '">'
+      + '<div class="fb-preset-thumb" id="fb-preset-thumb-' + i + '">🎞</div>'
+      + '<div class="fb-preset-name">' + p.name + '</div>'
+      + '<div class="fb-preset-meta">' + p.cols + '×' + p.rows + ' grid</div>'
+      + '</div>';
+  }).join('');
+  FB_PRESET_GALLERY.forEach(function(p, i){
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      const thumb = document.getElementById('fb-preset-thumb-' + i);
+      if(thumb) thumb.innerHTML = '<img src="' + p.url + '" alt="' + p.name + '">';
+    };
+    img.src = p.url;
+  });
+}
+
+function fbLoadPreset(i){
+  const p = FB_PRESET_GALLERY[i];
+  const status = document.getElementById('fb-viewer-status');
+  const card = document.getElementById('fb-preset-card-' + i);
+  if(card) card.classList.add('loading');
+  status.textContent = 'Loading ' + p.name + '...';
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function(){
+    fbLoadedSheetImg = img;
+    document.getElementById('fb-view-cols').value = p.cols;
+    document.getElementById('fb-view-rows').value = p.rows;
+    fbSliceSheetForViewer();
+    if(card) card.classList.remove('loading');
+    status.textContent = '✓ ' + p.name + ' loaded (' + p.cols + '×' + p.rows + ').';
+  };
+  img.onerror = function(){
+    if(card) card.classList.remove('loading');
+    status.textContent = '✗ Could not load this preset — the link may be down.';
+  };
+  img.src = p.url;
 }
 
 let fbLoadedSheetImg = null;
