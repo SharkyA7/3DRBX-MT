@@ -506,8 +506,8 @@ function fbSetSource(type){
 // Uses jsonbin.io's free tier — a plain JSON storage API callable via fetch().
 // SETUP REQUIRED: create a free bin at jsonbin.io, set it to "Public" (so GET
 // needs no key), then paste your Bin ID and Master Key below.
-const FB_JSONBIN_ID = "6a76d1b6f5f4af5e29fa8522";
-const FB_JSONBIN_KEY = "$2a$10$UXNZnnzh2HPwBRMQMmi1cOQQnHiYgiN2HrFOTRaeqjQFYI.0MAYe.";
+const FB_JSONBIN_ID = "YOUR_BIN_ID_HERE";
+const FB_JSONBIN_KEY = "YOUR_MASTER_KEY_HERE";
 const FB_JSONBIN_URL = "https://api.jsonbin.io/v3/b/" + FB_JSONBIN_ID;
 const FB_JSONBIN_CONFIGURED = FB_JSONBIN_ID !== "YOUR_BIN_ID_HERE" && FB_JSONBIN_KEY !== "YOUR_MASTER_KEY_HERE";
 
@@ -557,7 +557,7 @@ async function fbSubmitCommunityPreset(kind, entry){
 // Known stock-site "page" URL patterns (not direct file links) — used to give
 // people specific instructions instead of a generic failure.
 const FB_KNOWN_PAGE_HOSTS = [
-  { match: /pixabay\.com\/(videos|photos|illustrations)\//i, name: "Pixabay", tip: "look for the green \"Free Download\" button on that page — long-press it and choose \"Copy Link\", then paste that here instead." },
+  { match: /^https?:\/\/(?!cdn\.)([\w-]+\.)?pixabay\.com\//i, name: "Pixabay", tip: "Pixabay's own download link needs you to be logged in to actually work when hotlinked. Open the video's page, tap \"Free Download\", then long-press the actual video player and choose \"Copy Video Address\" — or ask for help finding the real cdn.pixabay.com link." },
   { match: /pexels\.com\/(video|photo)\//i, name: "Pexels", tip: "tap the download button on that page, long-press it, and choose \"Copy Link\" instead of the page link." },
   { match: /unsplash\.com\/photos\//i, name: "Unsplash", tip: "tap the download button, long-press it, and choose \"Copy Link\" instead of the page link." },
   { match: /giphy\.com\/gifs\//i, name: "GIPHY", tip: "tap the \"GIF Link\" / copy-link option on that page — it should give you a direct .gif URL." }
