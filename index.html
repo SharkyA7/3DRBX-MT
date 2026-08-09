@@ -42,12 +42,12 @@ h1{font-family:var(--font-px);font-size:clamp(14px,3vw,24px);color:var(--white);
 h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .sub{font-family:var(--font-ui);font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;}
 .scan{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);margin-top:32px;opacity:.2;}
-.trust-banner{display:flex;background:var(--accent);border-radius:14px;padding:22px 16px;margin:0 auto 32px;max-width:860px;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:16px;box-shadow:0 0 24px rgba(80,232,244,.25);}
-.trust-banner-item{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;min-width:90px;}
-.trust-banner-icon{width:56px;height:56px;border-radius:50%;background:#001619;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
+.trust-banner{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;background:transparent;border:1px solid var(--accent);border-radius:14px;padding:22px 16px;margin:0 auto 32px;max-width:860px;gap:12px;}
+.trust-banner-item{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.trust-banner-icon{width:56px;height:56px;border-radius:50%;background:transparent;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
 .trust-banner-icon img{width:32px;height:32px;object-fit:contain;}
-.trust-banner-num{font-family:var(--font-px);font-size:28px;color:#001619;line-height:1.1;}
-.trust-banner-label{font-family:var(--font-ui);font-size:13px;font-weight:800;color:#001619;letter-spacing:.02em;text-align:center;text-transform:uppercase;}
+.trust-banner-num{font-family:var(--font-px);font-size:28px;color:var(--accent);line-height:1.1;}
+.trust-banner-label{font-family:var(--font-ui);font-size:12px;font-weight:800;color:var(--white);letter-spacing:.02em;text-align:center;text-transform:uppercase;}
 main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
 .tabs{display:flex;justify-content:center;gap:4px;margin-bottom:24px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:6px;overflow-x:auto;overflow-y:visible;scrollbar-width:none;}
 @media (min-width:768px){
@@ -1306,11 +1306,11 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="trust-banner-label"><span data-t-id="PENGGUNA" data-t-en="USERS">USERS</span></div>
   </div>
   <div class="trust-banner-item">
-    <div class="trust-banner-icon"><img src="/icons/NO ADS.svg" alt=""></div>
+    <div class="trust-banner-icon"><img src="/icons/NO ADS.SVG" alt=""></div>
     <div class="trust-banner-label"><span data-t-id="TANPA IKLAN" data-t-en="NO ADS">NO ADS</span></div>
   </div>
   <div class="trust-banner-item">
-    <div class="trust-banner-icon"><img src="/icons/VERIFIED.svg" alt=""></div>
+    <div class="trust-banner-icon"><img src="/icons/VERIFIED.SVG" alt=""></div>
     <div class="trust-banner-label"><span data-t-id="AMAN TERVERIFIKASI" data-t-en="VERIFIED SAFE">VERIFIED SAFE</span></div>
   </div>
 </section>
