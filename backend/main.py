@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, Response, redirect
 import httpx, os, io, zipfile, time, json, struct, requests
 import lz4.block, re
+from urllib.parse import urlparse
 
 def safe_filename(name):
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
@@ -1188,6 +1189,14 @@ def frontend():
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
     return "<h1>Roblox Downloader</h1>"
 
+@app.get("/Flipbook")
+@app.get("/flipbook")
+def flipbook_page():
+    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    p = os.path.join(base,"flipbook.html")
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    return "<h1>Flipbook page not found</h1>",404
+
 @app.get("/maintenance")
 def maintenance_preview():
     """Preview maintenance page langsung"""
@@ -1457,7 +1466,18 @@ def proxy_fetch():
     """General proxy - browser minta server untuk fetch URL apapun dari Roblox CDN"""
     url = request.args.get("url","")
     if not url: return jsonify({"error":"url required"}),400
-    if "roblox.com" not in url and "rbxcdn.com" not in url:
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return jsonify({"error":"invalid url"}),400
+    if parsed.scheme not in ("http","https"):
+        return jsonify({"error":"invalid url scheme"}),403
+    host = (parsed.hostname or "").lower()
+    is_allowed_host = (
+        host == "roblox.com" or host.endswith(".roblox.com") or
+        host == "rbxcdn.com" or host.endswith(".rbxcdn.com")
+    )
+    if not is_allowed_host:
         return jsonify({"error":"only roblox domains allowed"}),403
     try:
         h = {
@@ -1548,29 +1568,6 @@ application = app
 @app.get("/api/audio/test")
 def audio_test():
     return jsonify({"status":"audio ok"})
-
-@app.get("/api/debug/asset-raw")
-def debug_asset_raw():
-    """TEMPORARY - inspect/download raw asset file"""
-    aid = request.args.get("id","")
-    raw = request.args.get("raw","")
-    if not aid: return jsonify({"error":"id required"}),400
-    try:
-        s = get_scraper()
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
-        content = r.content
-        if raw == "1":
-            return Response(content, mimetype="application/octet-stream",
-                headers={"Content-Disposition": f'attachment; filename="{aid}.rbxm"'})
-        return jsonify({
-            "status": r.status_code,
-            "content_type": r.headers.get("content-type"),
-            "size": len(content),
-            "first_200_bytes": content[:200].decode("utf-8","replace"),
-            "first_50_hex": content[:50].hex()
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.get("/api/v2/model/info")
 def model_info():
@@ -1775,19 +1772,6 @@ def model_mesh():
         })
     except Exception as e:
         return handle_roblox_error(e, "model_mesh")
-
-
-@app.get("/api/debug/thumbnail3d")
-def debug_thumbnail3d():
-    """TEMP: cek apakah Roblox punya 3D thumbnail render untuk asset Model (bypass CSG decode)."""
-    aid = request.args.get("id", "")
-    if not aid: return jsonify({"error": "id required"}), 400
-    try:
-        s = get_scraper()
-        r = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={aid}", timeout=20)
-        return jsonify({"status": r.status_code, "body": r.text[:1000]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.get("/api/v2/model/texture")
