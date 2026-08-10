@@ -121,3 +121,11 @@ Open browser: http://localhost:8000
 3. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 ---
+
+## Deploy to production (Vercel.com)
+
+1. Push code to GitHub (make sure `.env` is in `.gitignore`)
+2. In Render/Railway dashboard → add environment variables:
+   - `ROBLOX_API_KEY` = your key
+   - `ROBLOX_COOKIE` = your cookie
+3. DON'T PUT YOUR API KEY AND COOKIE IN FRONTEND OR IN GIT
