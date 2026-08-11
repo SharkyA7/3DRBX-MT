@@ -1,10 +1,16 @@
 from flask import Flask, jsonify, request, Response, redirect
-import httpx, os, io, zipfile, time, json, struct, requests
+import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
 from urllib.parse import urlparse
 
 def safe_filename(name):
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
+
+def safe_error(e, status=500):
+    """Log the real exception server-side, return a generic message to the client
+    so internal details (paths, library internals, stack traces) never leak out."""
+    print(f"[ERROR] {type(e).__name__}: {e}")
+    return jsonify({"error": "Internal server error, please try again later."}), status
 
 # ── INLINED MESH CONVERTER (avoids services import issue on Vercel) ──
 from dataclasses import dataclass, field
@@ -320,6 +326,11 @@ def add_cors(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
@@ -984,7 +995,7 @@ def avatar_info():
             "profileUrl":f"https://www.roblox.com/users/{uid}/profile"}
         cache_set(f"info_{user}",result)
         return jsonify(result)
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/3d-urls")
 def avatar_3d_urls():
@@ -996,7 +1007,7 @@ def avatar_3d_urls():
         if not url: return jsonify({"error":"3D thumbnail tidak tersedia","hints":["Coba lagi dalam 30 detik","Avatar mungkin R6"]}),503
         m=rget(url)
         return jsonify({"userId":uid,"objUrl":m.get("obj"),"mtlUrl":m.get("mtl"),"textures":m.get("textures",[])})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 def fix_url(url):
     if url and not url.startswith("http"):
@@ -1036,7 +1047,7 @@ def avatar_download_full():
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
             headers={"Content-Disposition":f'attachment; filename="{name}_full.zip"'})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/procedural-download")
 def avatar_procedural_download():
@@ -1060,7 +1071,7 @@ def avatar_procedural_download():
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
             headers={"Content-Disposition":f'attachment; filename="{name}_procedural.zip"'})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 @app.get("/api/catalog/info")
 def catalog_info():
@@ -1109,7 +1120,7 @@ def catalog_info():
         return jsonify({"assetId":aid_int,"name":name,"assetType":atype,
             "creatorName":creator,"price":price,
             "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
@@ -1174,7 +1185,7 @@ def catalog_download_full():
         fname = f"{safe}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
             headers={"Content-Disposition":f'attachment; filename="{fname}"'})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 # Set True saat maintenance
 MAINTENANCE = os.getenv("MAINTENANCE","false").lower() == "true"
@@ -1276,7 +1287,7 @@ def avatar_smart_download():
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
             headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 def get_hash_url(h):
     """Port dari global.js Faizdzn - convert hash ke rbxcdn URL"""
@@ -1459,7 +1470,7 @@ def proxy_avatar_3d():
             import json as _j
             return jsonify(_j.loads(r.json()["contents"])), 200
     except Exception as e:
-        return jsonify({"error":str(e)}),500
+        return safe_error(e)
 
 @app.get("/api/proxy/fetch")
 def proxy_fetch():
@@ -1493,7 +1504,7 @@ def proxy_fetch():
                 return jsonify({"b64": base64.b64encode(r.content).decode()})
             return jsonify(r.json())
     except Exception as e:
-        return jsonify({"error":str(e)}),500
+        return safe_error(e)
 
 
 @app.get("/api/audio/info")
@@ -1514,7 +1525,7 @@ def audio_info():
             "created": d.get("Created",""),
             "robloxUrl": f"https://www.roblox.com/library/{aid}"
         })
-    except Exception as e: return jsonify({"error":str(e)}),500
+    except Exception as e: return safe_error(e)
 
 @app.get("/api/audio/download")
 def audio_download():
@@ -2004,8 +2015,7 @@ def model_convert():
         })
 
     except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+        return safe_error(e)
 
 
 @app.get("/api/v2/model/mesh-union")
@@ -2245,7 +2255,7 @@ def maintenance_toggle():
     data = request.get_json(force=True, silent=True) or {}
     password = data.get("password", "")
     admin_password = os.environ.get("MAINTENANCE_ADMIN_PASSWORD", "")
-    if not admin_password or password != admin_password:
+    if not admin_password or not secrets.compare_digest(password, admin_password):
         return jsonify({"error": "Invalid password"}), 403
     new_state = not get_maintenance_state()
     set_maintenance_state(new_state)
