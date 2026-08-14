@@ -781,6 +781,25 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     </div>
   </div>
 </div>
+
+<div class="modal-overlay" id="discord-modal" style="display:none">
+  <div class="modal-box">
+    <img src="/icons/3DRBXMT BANNER.png" alt="3DRBXMT Discord" style="width:100%;display:block;border-radius:16px 16px 0 0">
+    <div class="modal-header" style="padding-top:16px">
+      <div class="modal-title-wrap">
+        <div class="modal-badge">🎮 3DRBX-MT COMMUNITY</div>
+        <div class="modal-title">JOIN OUR<br>DISCORD</div>
+      </div>
+      <button onclick="closeDiscordModal()" style="background:transparent;border:none;color:var(--gray);font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <p class="modal-desc" data-t-id="Gabung Discord untuk update terbaru, laporkan bug, request fitur, dan ngobrol bareng komunitas 3DRBXMT." data-t-en="Join our Discord for the latest updates, bug reports, feature requests, and chatting with the 3DRBXMT community.">Gabung Discord untuk update terbaru, laporkan bug, request fitur, dan ngobrol bareng komunitas 3DRBXMT.</p>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-primary" onclick="window.open('https://discord.gg/FwPPMgMapT','_blank')">🎮 <span data-t-id="GABUNG SEKARANG" data-t-en="JOIN NOW">JOIN NOW</span></button>
+      <button class="modal-btn modal-btn-secondary" onclick="closeDiscordModal()" data-t-id="TUTUP" data-t-en="CLOSE">CLOSE</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div id="oauth-bar" style="display:none;justify-content:flex-end;max-width:860px;margin:0 auto;padding:8px 16px 0;gap:10px;align-items:center">
     <span id="oauth-username" style="font-size:10px;color:var(--accent)"></span>
@@ -813,6 +832,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/3D TEXTURE.svg" alt=""> <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
         <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/3D VIEWER.svg" alt=""> <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
         <a class="dropdown-item" href="/Flipbook" style="text-decoration:none"><img class="nav-icon" src="/icons/FLIPBOOK.svg" alt=""> <span data-t-id="FLIPBOOK" data-t-en="FLIPBOOK">FLIPBOOK</span></a>
+        <div class="dropdown-item" onclick="openDiscordModal();document.getElementById('dropdown-menu').style.display='none'">🎮 <span data-t-id="GABUNG DISCORD" data-t-en="JOIN DISCORD">JOIN DISCORD</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
@@ -1307,11 +1327,11 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     <div class="trust-banner-label"><span data-t-id="PENGGUNA" data-t-en="USERS">USERS</span></div>
   </div>
   <div class="trust-banner-item">
-    <div class="trust-banner-icon"><img src="/icons/NO ADS.svg" alt=""></div>
+    <div class="trust-banner-icon"><img src="/icons/NO ADS.SVG" alt=""></div>
     <div class="trust-banner-label"><span data-t-id="TANPA IKLAN" data-t-en="NO ADS">NO ADS</span></div>
   </div>
   <div class="trust-banner-item">
-    <div class="trust-banner-icon"><img src="/icons/VERIFIED.svg" alt=""></div>
+    <div class="trust-banner-icon"><img src="/icons/VERIFIED.SVG" alt=""></div>
     <div class="trust-banner-label"><span data-t-id="AMAN TERVERIFIKASI" data-t-en="VERIFIED SAFE">VERIFIED SAFE</span></div>
   </div>
 </section>
@@ -1964,6 +1984,13 @@ function closeModal(){
       overlay.style.display = 'none';
       localStorage.setItem('modal_seen','1');
     });
+}
+
+function openDiscordModal(){
+  document.getElementById('discord-modal').style.display = 'flex';
+}
+function closeDiscordModal(){
+  document.getElementById('discord-modal').style.display = 'none';
 }
 window.onerror = function(msg,src,line,col,err){
   alert('JS ERROR: '+msg+' line:'+line);
