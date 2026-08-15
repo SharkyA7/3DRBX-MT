@@ -728,6 +728,86 @@ def decode_string_array(raw, count):
     return out
 
 
+# Property type byte values, per rbx-dom's binary format spec ordering.
+# PROP_TYPE_STRING is exercised constantly by this codebase (Name, MeshId in most files) so it's effectively
+# VERIFIED. PROP_TYPE_SHARED_STRING is UNVERIFIED here - inferred from the public spec's enum ordering, not
+# confirmed against a real file in this environment (no network access to fetch a live asset and test).
+PROP_TYPE_STRING = 0x01
+PROP_TYPE_SHARED_STRING = 0x1C
+
+
+def parse_shared_strings(chunks):
+    """UNVERIFIED (best-effort per rbx-dom binary.md "SSTR" chunk spec, not tested against a live file here).
+    Layout: version:u32, num_entries:u32, then per entry: md5_hash[16 bytes] (unused for lookup - shared
+    strings are referenced by table index, not hash), length:u32, data[length] (raw string bytes, plain
+    sequential - not interleaved, since SSTR is a single flat table rather than a per-instance property array).
+    Returns an ordered list of raw bytes, or [] if there's no SSTR chunk (older/simpler files won't have one)."""
+    for name, body in chunks:
+        if name != "SSTR":
+            continue
+        try:
+            pos = 0
+            _version = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+            num_entries = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+            entries = []
+            for _ in range(num_entries):
+                pos += 16  # md5 hash, not needed for index-based lookup
+                length = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                entries.append(body[pos:pos+length])
+                pos += length
+            return entries
+        except Exception:
+            # Malformed/unexpected SSTR layout - degrade to "no shared strings" rather than crash the parse.
+            return []
+    return []
+
+
+def decode_shared_string_array(raw, count, sstrings):
+    """UNVERIFIED (best-effort, not tested against a live file here - no network access in this environment).
+    Assumed layout: plain interleaved u32 indices (same byte-plane-transpose convention used elsewhere for
+    fixed-size property arrays in this format, no delta/zigzag) into the SSTR table built by
+    parse_shared_strings(). Returns [''] * count on any decode failure so callers can treat it as "no value"
+    rather than propagating a crash or garbage bytes."""
+    if not sstrings:
+        return [""] * count
+    try:
+        idxs = _read_interleaved_be_u32(raw, count)
+    except Exception:
+        return [""] * count
+    out = []
+    for idx in idxs:
+        if 0 <= idx < len(sstrings):
+            try:
+                out.append(sstrings[idx].decode("utf-8", "replace"))
+            except Exception:
+                out.append("")
+        else:
+            out.append("")
+    return out
+
+
+def decode_string_like_prop(chunks, type_id, prop_name, count, sstrings):
+    """dtype-aware replacement for blindly calling decode_string_array() on MeshId/TextureID/AssetId.
+    Previously this codebase assumed every 'string-like' property was PROP_TYPE_STRING, which silently fed
+    raw SharedString-table-index bytes into the literal-string decoder whenever Studio deduped a repeated
+    value (this is the likely cause of TextureID resolving to garbage / failing to download, while MeshId -
+    rarely deduped since meshes are usually unique per-part - kept working).
+    Returns (values, dtype) - values is list[str|None] length count; dtype is exposed to the API response
+    for debugging/reporting since the SharedString path here is unverified."""
+    dtype, raw = find_prop_chunk(chunks, type_id, prop_name)
+    if raw is None:
+        return [None] * count, dtype
+    if dtype == PROP_TYPE_STRING:
+        vals = decode_string_array(raw, count)
+    elif dtype == PROP_TYPE_SHARED_STRING:
+        vals = decode_shared_string_array(raw, count, sstrings)
+    else:
+        # Unrecognized type for what should be a string-like prop - don't guess and feed garbage downstream,
+        # just report no value so the frontend skips it cleanly instead of hitting a bogus download.
+        vals = [None] * count
+    return [v if v else None for v in vals], dtype
+
+
 def decode_vector3_array(raw, count):
     """VERIFIED: 3x interleaved+ROR1 f32 arrays -> (x,y,z) tuples."""
     plane = count * 4
@@ -1640,6 +1720,7 @@ def model_info():
 
         supported = (0 < total_parts_all <= 500)
 
+        sstrings = parse_shared_strings(chunks)
         parts = []
 
         def decode_class(type_id, count, class_name):
@@ -1662,15 +1743,10 @@ def model_info():
 
             mesh_ids = [None]*count
             texture_ids = [None]*count
+            tex_dtype = None
             if class_name == "MeshPart":
-                _, mid_raw = find_prop_chunk(chunks, type_id, "MeshId")
-                if mid_raw:
-                    raw_ids = decode_string_array(mid_raw, count)
-                    mesh_ids = [m if m else None for m in raw_ids]
-                _, tex_raw = find_prop_chunk(chunks, type_id, "TextureID")
-                if tex_raw:
-                    raw_tex = decode_string_array(tex_raw, count)
-                    texture_ids = [t if t else None for t in raw_tex]
+                mesh_ids, _mesh_dtype = decode_string_like_prop(chunks, type_id, "MeshId", count, sstrings)
+                texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
 
             for i in range(count):
                 parts.append({
@@ -1681,7 +1757,8 @@ def model_info():
                     "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
                     "rotation": rotations[i],
                     "color": {"status": "best-effort", "value": list(colors[i])},
-                    "textureId": texture_ids[i]
+                    "textureId": texture_ids[i],
+                    "textureIdType": tex_dtype
                 })
 
         decode_class(meshpart_tid, meshpart_count, "MeshPart")
@@ -1911,6 +1988,7 @@ def model_convert():
 
         supported = (0 < total_parts_all <= 500)
 
+        sstrings = parse_shared_strings(chunks) if pre_parts is None else []
         parts = []
 
         def decode_class(type_id, count, class_name):
@@ -1934,15 +2012,10 @@ def model_convert():
 
             mesh_ids = [None]*count
             texture_ids = [None]*count
+            tex_dtype = None
             if class_name == "MeshPart":
-                _, mid_raw = find_prop_chunk(chunks, type_id, "MeshId")
-                if mid_raw:
-                    raw_ids = decode_string_array(mid_raw, count)
-                    mesh_ids = [m if m else None for m in raw_ids]
-                _, tex_raw = find_prop_chunk(chunks, type_id, "TextureID")
-                if tex_raw:
-                    raw_tex = decode_string_array(tex_raw, count)
-                    texture_ids = [t if t else None for t in raw_tex]
+                mesh_ids, _mesh_dtype = decode_string_like_prop(chunks, type_id, "MeshId", count, sstrings)
+                texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
 
             for i in range(count):
                 parts.append({
@@ -1950,6 +2023,7 @@ def model_convert():
                     "className": class_name,
                     "meshId": mesh_ids[i],
                     "textureId": texture_ids[i],
+                    "textureIdType": tex_dtype,
                     "position": {"status": "decoded", "value": [round(v,4) for v in positions[i]]},
                     "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
                     "rotation": rotations[i],
