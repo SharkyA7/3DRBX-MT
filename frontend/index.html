@@ -992,8 +992,8 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     </div>
   </div>
 
-  <!-- ── 3D MODEL PANEL ── -->
-  <div class="panel" id="panel-model3d">
+  <!-- ── 3D MODEL PANEL (RETIRED PLACEHOLDER, KEPT FOR REFERENCE) ── -->
+  <div class="panel" id="panel-model3d-retired-notice" style="display:none">
     <div class="card" style="border-color:var(--red);background:rgba(255,68,102,.05)">
       <div style="text-align:center;padding:20px 10px">
         <div style="font-size:32px;margin-bottom:12px">🚧</div>
@@ -1011,8 +1011,13 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     </div>
   </div>
 
-  <!-- ── 3D MODEL PANEL (DISABLED, KEPT FOR REFERENCE) ── -->
-  <div class="panel" id="panel-model3d-disabled" style="display:none">
+  <!-- ── 3D MODEL PANEL (RE-ENABLED) ── -->
+  <div class="panel" id="panel-model3d">
+    <div class="card" style="border-color:#ffb84d;background:rgba(255,184,77,.06);margin-bottom:12px">
+      <div style="font-size:10px;color:#ffb84d;line-height:1.7">
+        🧪 <span data-t-id="EXPERIMENTAL: perbaikan decode TextureID (SharedString) baru saja diterapkan dan belum diuji terhadap asset Roblox nyata. Kalau BUILD GLB texture-nya masih salah/hilang, DOWNLOAD RBXM tetap jadi fallback yang aman untuk import manual di Roblox Studio." data-t-en="EXPERIMENTAL: a TextureID (SharedString) decode fix was just applied and hasn't been tested against a real Roblox asset yet. If BUILD GLB textures still come out wrong/missing, DOWNLOAD RBXM remains the safe fallback for manual import in Roblox Studio.">EXPERIMENTAL: perbaikan decode TextureID (SharedString) baru saja diterapkan dan belum diuji terhadap asset Roblox nyata. Kalau BUILD GLB texture-nya masih salah/hilang, DOWNLOAD RBXM tetap jadi fallback yang aman untuk import manual di Roblox Studio.</span>
+      </div>
+    </div>
     <div class="card">
       <div class="label"><span data-t-id="CARI 3D MODEL (create.roblox.com)" data-t-en="SEARCH 3D MODEL (create.roblox.com)">CARI 3D MODEL (create.roblox.com)</span></div>
       <input class="inp" id="model-input" type="text" data-t-ph-id="Asset ID atau URL create.roblox.com" data-t-ph-en="Asset ID or create.roblox.com URL" placeholder="Asset ID atau URL create.roblox.com">
