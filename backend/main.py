@@ -1829,10 +1829,10 @@ def model_info():
         reasons = []
         if animation_classes_found:
             reasons.append(
-                f"Ini animation asset ({', '.join(animation_classes_found)} terdeteksi), bukan model statis — "
-                "3D Model Assets cuma bisa render MeshPart/Part/Union. Rig yang ikut ke-embed di asset ini "
-                "cuma dummy buat preview animasi, jadi hasil render-nya bakal kotak-kotak berantakan kalau dipaksa. "
-                "Kalau ini karakter, coba pakai fitur Avatar."
+                f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+                "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+                "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+                "If this is a character, try the Avatar feature instead."
             )
         if total_parts_all > 100:
             reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
@@ -2114,10 +2114,10 @@ def model_convert():
         reasons = []
         if animation_classes_found:
             reasons.append(
-                f"Ini animation asset ({', '.join(animation_classes_found)} terdeteksi), bukan model statis — "
-                "3D Model Assets cuma bisa render MeshPart/Part/Union. Rig yang ikut ke-embed di asset ini "
-                "cuma dummy buat preview animasi, jadi hasil render-nya bakal kotak-kotak berantakan kalau dipaksa. "
-                "Kalau ini karakter, coba pakai fitur Avatar."
+                f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+                "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+                "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+                "If this is a character, try the Avatar feature instead."
             )
         if total_parts_all > 100:
             reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
