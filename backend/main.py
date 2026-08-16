@@ -1639,6 +1639,91 @@ def item_v2():
             headers={"Content-Disposition":f'attachment; filename="{fname}"'})
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
 
+MAX_BATCH_ITEMS = 25
+
+@app.get("/api/v2/item-batch")
+def item_batch_v2():
+    """Packed catalog download - multiple items, ONE zip, each in its own folder.
+    Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion."""
+    ids_param = request.args.get("ids","")
+    if not ids_param: return jsonify({"error":"ids required"}),400
+    raw_ids = [x.strip() for x in ids_param.split(",") if x.strip()]
+    if not raw_ids: return jsonify({"error":"ids required"}),400
+    if len(raw_ids) > MAX_BATCH_ITEMS:
+        return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
+
+    try:
+        s = get_scraper()
+        buf = io.BytesIO()
+        log_lines = []
+        used_folders = set()
+
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            for raw_id in raw_ids:
+                try:
+                    file_id = int(raw_id)
+                except ValueError:
+                    log_lines.append(f"- {raw_id}: GAGAL - ID tidak valid")
+                    continue
+
+                try:
+                    try:
+                        d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
+                        item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
+                    except:
+                        item_name = str(file_id)
+                    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+                    r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
+                    if r3d.status_code != 200:
+                        raise Exception(f"3D thumbnail error {r3d.status_code}")
+                    manifest_url = r3d.json().get("imageUrl")
+                    if not manifest_url:
+                        raise Exception("item ini tidak punya model 3D")
+
+                    manifest = s.get(manifest_url, timeout=15).json()
+                    obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
+                    tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
+
+                    obj_data  = s.get(obj_url, timeout=30).text
+                    mtl_raw   = s.get(mtl_url, timeout=15).text
+                    mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
+
+                    folder = f"{safe_name}_{file_id}"
+                    n = folder; i = 2
+                    while n in used_folders: n = f"{folder}_{i}"; i += 1
+                    folder = n; used_folders.add(folder)
+
+                    zf.writestr(f"{folder}/{safe_name}.obj", obj_data)
+                    zf.writestr(f"{folder}/{safe_name}.mtl", mtl_fixed)
+                    for i, tex_url in enumerate(tex_urls):
+                        try:
+                            tb = s.get(tex_url, timeout=20)
+                            if tb.status_code == 200:
+                                zf.writestr(f"{folder}/{tex_names[i]}", tb.content)
+                        except: pass
+
+                    log_lines.append(f"- {item_name} (ID {file_id}): OK -> {folder}/")
+                except Exception as ie:
+                    log_lines.append(f"- ID {raw_id}: GAGAL - {ie}")
+
+            zf.writestr("README.txt",
+                "CATALOG PACKED DOWNLOAD\n" + "=" * 30 + "\n\n" +
+                "\n".join(log_lines) +
+                "\n\nSetiap item ada di folder sendiri (OBJ + MTL + texture PNG).\n\n"
+                "NOMAD SCULPT:\n  Files > Import > buka folder item > pilih file .obj\n"
+                "PRISMA 3D:\n  + > Import > OBJ > pilih file .obj di dalam folder item"
+            )
+
+        if not used_folders:
+            return jsonify({"error":"Semua item gagal diproses."}),502
+
+        buf.seek(0)
+        fname = f"catalog_packed_{len(used_folders)}items.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return handle_roblox_error(e, "catalog_item_batch_download")
+
 @app.get("/api/proxy/avatar-3d")
 def proxy_avatar_3d():
     """Proxy endpoint - browser call ini, server fetch ke Roblox pakai cookie"""
