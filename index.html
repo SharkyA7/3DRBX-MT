@@ -508,9 +508,10 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
   try{
     const meshParts = data.parts.filter(p => p.className === "MeshPart" && p.meshId);
-    const boxParts  = data.parts.filter(p => p.className === "Part");
+    const boxParts  = data.parts.filter(p => p.className === "Part" && !(p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId));
+    const specialFileParts = data.parts.filter(p => p.className === "Part" && p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId);
     const unionParts = data.parts.filter(p => p.className === "UnionOperation" && p.unionAssetId);
-    const uniqueMeshIds = [...new Set(meshParts.map(p => p.meshId))];
+    const uniqueMeshIds = [...new Set([...meshParts.map(p => p.meshId), ...specialFileParts.map(p => p.specialMesh.meshId)])];
     const uniqueUnionIds = [...new Set(unionParts.map(p => p.unionAssetId))];
 
     const objLoader = new OBJLoader();
@@ -580,7 +581,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     }
 
     // Fetch texture images untuk MeshPart yang punya TextureID
-    const uniqueTextureIds = [...new Set(meshParts.map(p => p.textureId).filter(Boolean))];
+    const uniqueTextureIds = [...new Set([...meshParts.map(p => p.textureId), ...specialFileParts.map(p => p.specialMesh.textureId)].filter(Boolean))];
     const textureCache = {};
     if(uniqueTextureIds.length > 0){
       statusEl.textContent = `⏳ Mengunduh ${uniqueTextureIds.length} texture...`;
@@ -636,9 +637,49 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     for(const part of boxParts){
       const [sx,sy,sz] = part.size.value;
       const [r,g,b] = part.color.value;
-      const geom = new THREE.BoxGeometry(sx, sy, sz);
       const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r/255, g/255, b/255) });
+      let geom, extraScale = null;
+
+      if(part.specialMesh && part.specialMesh.meshType === "Head"){
+        // Built-in Roblox "Head" mesh has no downloadable asset — approximate with
+        // a sphere scaled to the part's bounding box, adjusted by SpecialMesh.Scale.
+        const [hsx,hsy,hsz] = part.specialMesh.scale || [1,1,1];
+        geom = new THREE.SphereGeometry(1, 24, 16);
+        extraScale = [sx/2*hsx, sy/2*hsy, sz/2*hsz];
+      } else if(part.shape === "Ball"){
+        geom = new THREE.SphereGeometry(1, 24, 16);
+        extraScale = [sx/2, sy/2, sz/2];
+      } else if(part.shape === "Cylinder"){
+        // NOTE: Roblox aligns a Cylinder part's round axis along local X,
+        // unlike THREE.CylinderGeometry's default Y-axis — rotated to match.
+        const radius = (sy + sz) / 4;
+        geom = new THREE.CylinderGeometry(radius, radius, sx, 24);
+        geom.rotateZ(Math.PI/2);
+      } else {
+        geom = new THREE.BoxGeometry(sx, sy, sz);
+      }
+
       const mesh = new THREE.Mesh(geom, mat);
+      if(extraScale) mesh.scale.set(...extraScale);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "Part";
+      root.add(mesh);
+    }
+
+    for(const part of specialFileParts){
+      const geom = meshGeomCache[part.specialMesh.meshId];
+      if(!geom){ skippedParts++; continue; }
+      const [r,g,b] = part.color.value;
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      if(part.specialMesh.textureId && textureCache[part.specialMesh.textureId]){
+        matOpts.map = textureCache[part.specialMesh.textureId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mesh = new THREE.Mesh(geom.clone(), mat);
+      const [sx,sy,sz] = part.size.value;
+      const [msx,msy,msz] = part.specialMesh.scale || [1,1,1];
+      mesh.scale.set(sx*msx, sy*msy, sz*msz);
       applyTransform(mesh, part);
       mesh.name = part.name || "Part";
       root.add(mesh);
