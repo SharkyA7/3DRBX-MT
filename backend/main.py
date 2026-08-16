@@ -372,6 +372,7 @@ def parse_rbxmx(data):
     TARGET_CLASSES = {'MeshPart', 'Part', 'UnionOperation'}
     counts = {'MeshPart': 0, 'Part': 0, 'UnionOperation': 0}
     parts = []
+    animation_classes_found = set()
 
     def get_text(props, tag, attr_name):
         el = props.find(f"{tag}[@name='{attr_name}']")
@@ -420,6 +421,8 @@ def parse_rbxmx(data):
 
     for item in root.iter('Item'):
         cls = item.get('class')
+        if cls in ANIMATION_CLASSES:
+            animation_classes_found.add(cls)
         if cls not in TARGET_CLASSES:
             continue
         counts[cls] = counts.get(cls, 0) + 1
@@ -453,7 +456,8 @@ def parse_rbxmx(data):
         "meshPartCount": counts['MeshPart'],
         "partCount": counts['Part'],
         "unionCount": counts['UnionOperation'],
-        "parts": parts
+        "parts": parts,
+        "animationClassesFound": sorted(animation_classes_found)
     }
 
 
@@ -904,6 +908,23 @@ def decode_bool_array(raw, count):
 # minus the ROR1 rotation). Enum.PartType only has 3 members and this
 # has been stable for years: Ball=0, Block=1, Cylinder=2.
 _PART_SHAPE_NAMES = {0: "Ball", 1: "Block", 2: "Cylinder"}
+
+# Classes that only ever show up in animation/pose assets (KeyframeSequence packs,
+# baked rig previews, etc). If any of these are present, the file isn't a static
+# Model/prop at all -- it's an animation asset that happens to embed a dummy rig
+# (usually named things like "Thumbnail [delete me]") to preview the keyframes.
+# The Model Assets pipeline only understands MeshPart/Part/UnionOperation geometry,
+# so instead of silently rendering that dummy rig's raw saved Part CFrames (which
+# produces a scattered pile of boxes frozen mid-pose), we detect and reject it with
+# an explicit reason.
+ANIMATION_CLASSES = {"KeyframeSequence", "Keyframe", "Pose", "Motor6D", "Animation"}
+
+
+def detect_animation_classes(type_map):
+    """type_map: {type_id: {"class_name": str, "count": int, ...}} from parse_inst_chunks.
+    Returns sorted list of animation-only class names present, or [] if none."""
+    found = {info["class_name"] for info in type_map.values() if info["class_name"] in ANIMATION_CLASSES}
+    return sorted(found)
 
 def decode_part_shapes_and_meshes(chunks, type_map):
     """Returns (shape_by_referent, specialmesh_by_part_referent).
@@ -1780,6 +1801,7 @@ def model_info():
             union_count = parsed["unionCount"]
             total_parts = meshpart_count + part_count
             pre_parts = parsed["parts"]
+            animation_classes_found = parsed.get("animationClassesFound", [])
         else:
             try:
                 chunks, num_types, num_instances = parse_chunks(data)
@@ -1801,15 +1823,23 @@ def model_info():
             total_parts = meshpart_count + part_count
             pre_parts = None
             shape_by_referent, specialmesh_by_part = decode_part_shapes_and_meshes(chunks, type_map)
+            animation_classes_found = detect_animation_classes(type_map)
 
         total_parts_all = meshpart_count + part_count + union_count
         reasons = []
+        if animation_classes_found:
+            reasons.append(
+                f"Ini animation asset ({', '.join(animation_classes_found)} terdeteksi), bukan model statis — "
+                "3D Model Assets cuma bisa render MeshPart/Part/Union. Rig yang ikut ke-embed di asset ini "
+                "cuma dummy buat preview animasi, jadi hasil render-nya bakal kotak-kotak berantakan kalau dipaksa. "
+                "Kalau ini karakter, coba pakai fitur Avatar."
+            )
         if total_parts_all > 100:
             reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
-        if total_parts_all == 0:
+        if total_parts_all == 0 and not animation_classes_found:
             reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
 
-        supported = (0 < total_parts_all <= 500)
+        supported = (0 < total_parts_all <= 500) and not animation_classes_found
 
         sstrings = parse_shared_strings(chunks)
         parts = []
@@ -1911,7 +1941,9 @@ def model_info():
             "partCount": part_count,
             "unionCount": union_count,
             "totalParts": total_parts_all,
-            "parts": parts
+            "parts": parts,
+            "isAnimationAsset": bool(animation_classes_found),
+            "animationClassesFound": animation_classes_found
         })
 
     except ValueError:
@@ -2054,6 +2086,7 @@ def model_convert():
                 union_count = parsed["unionCount"]
                 total_parts = meshpart_count + part_count
                 pre_parts = parsed["parts"]
+                animation_classes_found = parsed.get("animationClassesFound", [])
             except Exception as e:
                 return jsonify({"error": f"Gagal parse XML: {str(e)}", "supported": False}), 422
         else:
@@ -2075,15 +2108,23 @@ def model_convert():
             part_count = type_map.get(part_tid, {}).get("count", 0) if part_tid is not None else 0
             union_count = type_map.get(union_tid, {}).get("count", 0) if union_tid is not None else 0
             total_parts = meshpart_count + part_count
+            animation_classes_found = detect_animation_classes(type_map)
 
         total_parts_all = meshpart_count + part_count + union_count
         reasons = []
+        if animation_classes_found:
+            reasons.append(
+                f"Ini animation asset ({', '.join(animation_classes_found)} terdeteksi), bukan model statis — "
+                "3D Model Assets cuma bisa render MeshPart/Part/Union. Rig yang ikut ke-embed di asset ini "
+                "cuma dummy buat preview animasi, jadi hasil render-nya bakal kotak-kotak berantakan kalau dipaksa. "
+                "Kalau ini karakter, coba pakai fitur Avatar."
+            )
         if total_parts_all > 100:
             reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
-        if total_parts_all == 0:
+        if total_parts_all == 0 and not animation_classes_found:
             reasons.append("Tidak ada MeshPart/Part/Union ditemukan")
 
-        supported = (0 < total_parts_all <= 500)
+        supported = (0 < total_parts_all <= 500) and not animation_classes_found
 
         sstrings = parse_shared_strings(chunks) if pre_parts is None else []
         if pre_parts is None:
@@ -2192,7 +2233,9 @@ def model_convert():
             "partCount": part_count,
             "unionCount": union_count,
             "totalParts": total_parts_all,
-            "parts": parts
+            "parts": parts,
+            "isAnimationAsset": bool(animation_classes_found),
+            "animationClassesFound": animation_classes_found
         })
 
     except Exception as e:
