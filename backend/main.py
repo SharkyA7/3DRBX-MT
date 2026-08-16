@@ -897,6 +897,96 @@ def decode_cframe_full(raw, count):
 def decode_bool_array(raw, count):
     return [bool(b) for b in raw[:count]]
 
+
+# ── PART SHAPE + SPECIALMESH LINKING ────────────────────────────────
+# VERIFIED against a real R6 rig .rbxm: Part.shape is stored as a
+# byte-plane-transposed uint32 array (same trick as decode_f32_array,
+# minus the ROR1 rotation). Enum.PartType only has 3 members and this
+# has been stable for years: Ball=0, Block=1, Cylinder=2.
+_PART_SHAPE_NAMES = {0: "Ball", 1: "Block", 2: "Cylinder"}
+
+def decode_part_shapes_and_meshes(chunks, type_map):
+    """Returns (shape_by_referent, specialmesh_by_part_referent).
+
+    Most rigs (R6/legacy R15) give body parts a plain className="Part"
+    with Shape=Block, and rely on a child SpecialMesh instance to define
+    the *actual* visual shape (built-in Head mesh, or a custom FileMesh
+    asset). Without decoding SpecialMesh + the PRNT (parent) chunk, we
+    have no way to know a Part has an overriding mesh at all — every
+    Part just falls back to a plain box using its bounding-box size,
+    which is why rigs render as chunky overlapping cubes.
+    Only MeshType 0 (Head) and 5 (FileMesh) are verified against a real
+    file; anything else is left as None so the caller can fall back to
+    the existing box-render behavior instead of guessing.
+    """
+    MESHTYPE_NAMES = {0: "Head", 5: "FileMesh"}
+
+    shape_by_referent = {}
+    specialmesh_by_part = {}
+
+    part_tid = specialmesh_tid = None
+    for tid, info in type_map.items():
+        if info["class_name"] == "Part": part_tid = tid
+        elif info["class_name"] == "SpecialMesh": specialmesh_tid = tid
+
+    if part_tid is not None:
+        referents = type_map[part_tid]["referents"]
+        count = len(referents)
+        if count > 0:
+            _, shape_raw = find_prop_chunk(chunks, part_tid, "shape")
+            if shape_raw:
+                raw_vals = _read_interleaved_be_u32(shape_raw, count)
+                for ref, v in zip(referents, raw_vals):
+                    shape_by_referent[ref] = _PART_SHAPE_NAMES.get(v, "Block")
+
+    if specialmesh_tid is not None and part_tid is not None:
+        sm_referents = type_map[specialmesh_tid]["referents"]
+        count = len(sm_referents)
+        if count > 0:
+            _, meshid_raw = find_prop_chunk(chunks, specialmesh_tid, "MeshId")
+            mesh_ids = decode_string_array(meshid_raw, count) if meshid_raw else [""] * count
+
+            _, texid_raw = find_prop_chunk(chunks, specialmesh_tid, "TextureId")
+            texture_ids = decode_string_array(texid_raw, count) if texid_raw else [""] * count
+
+            _, meshtype_raw = find_prop_chunk(chunks, specialmesh_tid, "MeshType")
+            mesh_types = _read_interleaved_be_u32(meshtype_raw, count) if meshtype_raw else [1] * count
+
+            _, scale_raw = find_prop_chunk(chunks, specialmesh_tid, "Scale")
+            scales = decode_vector3_array(scale_raw, count) if scale_raw else [(1.0, 1.0, 1.0)] * count
+
+            _, offset_raw = find_prop_chunk(chunks, specialmesh_tid, "Offset")
+            offsets = decode_vector3_array(offset_raw, count) if offset_raw else [(0.0, 0.0, 0.0)] * count
+
+            child_to_parent = {}
+            for name, body in chunks:
+                if name == "PRNT":
+                    pos = 1
+                    pcount = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                    children = read_referent_array(body[pos:pos+pcount*4], pcount); pos += pcount*4
+                    parents  = read_referent_array(body[pos:pos+pcount*4], pcount)
+                    child_to_parent = dict(zip(children, parents))
+                    break
+
+            part_referents_set = set(type_map[part_tid]["referents"])
+
+            for i, ref in enumerate(sm_referents):
+                parent_ref = child_to_parent.get(ref)
+                if parent_ref in part_referents_set:
+                    mtype_name = MESHTYPE_NAMES.get(mesh_types[i])
+                    if mtype_name is None:
+                        continue  # unverified MeshType — skip rather than guess
+                    specialmesh_by_part[parent_ref] = {
+                        "meshType": mtype_name,
+                        "meshId": mesh_ids[i] or None,
+                        "textureId": texture_ids[i] or None,
+                        "scale": [round(v, 4) for v in scales[i]],
+                        "offset": [round(v, 4) for v in offsets[i]],
+                    }
+
+    return shape_by_referent, specialmesh_by_part
+
+
 # Cloudscraper dengan cookie Roblox
 import cloudscraper as _cs
 _scraper = None
@@ -1710,6 +1800,7 @@ def model_info():
             union_count = type_map.get(union_tid, {}).get("count", 0) if union_tid is not None else 0
             total_parts = meshpart_count + part_count
             pre_parts = None
+            shape_by_referent, specialmesh_by_part = decode_part_shapes_and_meshes(chunks, type_map)
 
         total_parts_all = meshpart_count + part_count + union_count
         reasons = []
@@ -1726,6 +1817,7 @@ def model_info():
         def decode_class(type_id, count, class_name):
             if type_id is None or count == 0:
                 return
+            referents = type_map[type_id]["referents"]
             _, size_raw = find_prop_chunk(chunks, type_id, "size")
             sizes = decode_vector3_array(size_raw, count) if size_raw else [(1.0,1.0,1.0)]*count
 
@@ -1749,7 +1841,7 @@ def model_info():
                 texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
 
             for i in range(count):
-                parts.append({
+                part_dict = {
                     "name": names[i],
                     "className": class_name,
                     "meshId": mesh_ids[i],
@@ -1759,7 +1851,12 @@ def model_info():
                     "color": {"status": "best-effort", "value": list(colors[i])},
                     "textureId": texture_ids[i],
                     "textureIdType": tex_dtype
-                })
+                }
+                if class_name == "Part":
+                    ref = referents[i]
+                    part_dict["shape"] = shape_by_referent.get(ref, "Block")
+                    part_dict["specialMesh"] = specialmesh_by_part.get(ref)
+                parts.append(part_dict)
 
         decode_class(meshpart_tid, meshpart_count, "MeshPart")
         decode_class(part_tid, part_count, "Part")
@@ -1989,11 +2086,16 @@ def model_convert():
         supported = (0 < total_parts_all <= 500)
 
         sstrings = parse_shared_strings(chunks) if pre_parts is None else []
+        if pre_parts is None:
+            shape_by_referent, specialmesh_by_part = decode_part_shapes_and_meshes(chunks, type_map)
+        else:
+            shape_by_referent, specialmesh_by_part = {}, {}
         parts = []
 
         def decode_class(type_id, count, class_name):
             if type_id is None or count == 0:
                 return
+            referents = type_map[type_id]["referents"]
             _, size_raw = find_prop_chunk(chunks, type_id, "size")
             sizes = decode_vector3_array(size_raw, count) if size_raw else [(1.0,1.0,1.0)]*count
 
@@ -2018,7 +2120,7 @@ def model_convert():
                 texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
 
             for i in range(count):
-                parts.append({
+                part_dict = {
                     "name": names[i],
                     "className": class_name,
                     "meshId": mesh_ids[i],
@@ -2028,7 +2130,12 @@ def model_convert():
                     "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
                     "rotation": rotations[i],
                     "color": {"status": "best-effort", "value": list(colors[i])}
-                })
+                }
+                if class_name == "Part":
+                    ref = referents[i]
+                    part_dict["shape"] = shape_by_referent.get(ref, "Block")
+                    part_dict["specialMesh"] = specialmesh_by_part.get(ref)
+                parts.append(part_dict)
 
         if pre_parts is not None:
             parts = pre_parts
