@@ -496,17 +496,11 @@ window.convertZipToGLB = async function(zipBlob, baseName, statusCallback){
   URL.revokeObjectURL(a.href);
 };
 
-window.buildModelGLB = async function(customStatusEl, customBtn){
-  const statusEl = customStatusEl || document.getElementById("model-status");
-  const btn = customBtn || document.getElementById("model-build-btn");
-  if(!window.currentModelData || !window.currentModelData.supported){
-    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
-    return;
-  }
-  const data = window.currentModelData;
-  btn.disabled = true;
-
-  try{
+// Shared assembly step used by both "Build GLB" and "Download OBJ+Texture ZIP".
+// Fetches all mesh/union geometry + textures once and returns a fully-transformed
+// THREE.Group (root) plus the raw texture cache, so neither export path has to
+// re-download anything the other already fetched.
+window.assembleModelScene = async function(data, statusEl){
     const meshParts = data.parts.filter(p => p.className === "MeshPart" && p.meshId);
     const boxParts  = data.parts.filter(p => p.className === "Part" && !(p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId));
     const specialFileParts = data.parts.filter(p => p.className === "Part" && p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId);
@@ -701,6 +695,22 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       root.add(mesh);
     }
 
+    return { root, meshParts, boxParts, specialFileParts, unionParts, textureCache, failedMeshes, skippedParts };
+};
+
+window.buildModelGLB = async function(customStatusEl, customBtn){
+  const statusEl = customStatusEl || document.getElementById("model-status");
+  const btn = customBtn || document.getElementById("model-build-btn");
+  if(!window.currentModelData || !window.currentModelData.supported){
+    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
+    return;
+  }
+  const data = window.currentModelData;
+  btn.disabled = true;
+
+  try{
+    const { root, meshParts, boxParts, unionParts, failedMeshes } = await window.assembleModelScene(data, statusEl);
+
     statusEl.textContent = "⏳ Export GLB...";
     const exporter = new GLTFExporter();
     exporter.parse(root, (result) => {
@@ -718,6 +728,129 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       statusEl.textContent = "✗ Export GLB gagal: " + err.message;
       btn.disabled = false;
     }, { binary: true });
+
+  }catch(e){
+    statusEl.textContent = "✗ " + e.message;
+    btn.disabled = false;
+  }
+};
+
+// Download OBJ + MTL + texture files as a ZIP -- some mobile sculpting/viewer
+// apps (Nomad Sculpt, Prisma 3D) don't reliably read textures embedded in a
+// binary GLB. OBJ+MTL with textures as plain loose PNG files sidesteps that
+// entirely, same fix already used for the Avatar "real" download.
+window.downloadModelOBJZip = async function(customStatusEl, customBtn){
+  const statusEl = customStatusEl || document.getElementById("model-status");
+  const btn = customBtn || document.getElementById("model-objzip-btn");
+  if(!window.currentModelData || !window.currentModelData.supported){
+    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
+    return;
+  }
+  const data = window.currentModelData;
+  btn.disabled = true;
+
+  try{
+    const { root, meshParts, boxParts, unionParts, textureCache, failedMeshes } = await window.assembleModelScene(data, statusEl);
+
+    statusEl.textContent = "⏳ Menyusun OBJ + MTL...";
+    const name = `model_${data.assetId}`;
+    const objLines = ["# " + name, ""];
+    const mtlLines = [];
+    const zip = new JSZip();
+    const texFileByUuid = {}; // THREE.Texture.uuid -> filename in zip, avoids exporting the same image twice
+    let texIndex = 0;
+    let vOffset = 1, vtOffset = 1;
+    let matIndex = 0;
+
+    objLines.push(`mtllib ${name}.mtl`);
+
+    const meshesToExport = [];
+    root.traverse(child => { if(child.isMesh) meshesToExport.push(child); });
+
+    for(const mesh of meshesToExport){
+      mesh.updateMatrix();
+      const geom = mesh.geometry;
+      const pos = geom.attributes.position;
+      const uv = geom.attributes.uv;
+      const matName = `mat_${matIndex++}`;
+      const mat = mesh.material;
+
+      // Material block
+      mtlLines.push(`newmtl ${matName}`);
+      const col = mat.color || new THREE.Color(1,1,1);
+      mtlLines.push(`Kd ${col.r.toFixed(4)} ${col.g.toFixed(4)} ${col.b.toFixed(4)}`);
+      mtlLines.push(`Ka 0 0 0`, `Ks 0 0 0`, `d 1`, `illum 1`);
+      if(mat.map){
+        let texFile = texFileByUuid[mat.map.uuid];
+        if(!texFile){
+          const img = mat.map.image; // ImageBitmap
+          const c = document.createElement("canvas");
+          c.width = img.width; c.height = img.height;
+          c.getContext("2d").drawImage(img, 0, 0);
+          const pngBlob = await new Promise(r => c.toBlob(r, "image/png"));
+          texFile = `textures/texture_${texIndex++}.png`;
+          zip.file(texFile, pngBlob);
+          texFileByUuid[mat.map.uuid] = texFile;
+        }
+        mtlLines.push(`map_Kd ${texFile}`);
+      }
+      mtlLines.push("");
+
+      // Geometry block, baked to world space so the OBJ needs no separate transform nodes
+      objLines.push(`o ${mesh.name || matName}`);
+      const v = new THREE.Vector3();
+      for(let i=0; i<pos.count; i++){
+        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrix);
+        objLines.push(`v ${v.x.toFixed(6)} ${v.y.toFixed(6)} ${v.z.toFixed(6)}`);
+      }
+      if(uv){
+        for(let i=0; i<uv.count; i++){
+          objLines.push(`vt ${uv.getX(i).toFixed(6)} ${uv.getY(i).toFixed(6)}`);
+        }
+      }
+      objLines.push(`usemtl ${matName}`);
+      const idx = geom.index;
+      const faceCount = idx ? idx.count/3 : pos.count/3;
+      for(let f=0; f<faceCount; f++){
+        const a = (idx ? idx.getX(f*3)   : f*3)   + vOffset;
+        const b = (idx ? idx.getX(f*3+1) : f*3+1) + vOffset;
+        const c = (idx ? idx.getX(f*3+2) : f*3+2) + vOffset;
+        if(uv){
+          const ta = a - vOffset + vtOffset, tb = b - vOffset + vtOffset, tc = c - vOffset + vtOffset;
+          objLines.push(`f ${a}/${ta} ${b}/${tb} ${c}/${tc}`);
+        } else {
+          objLines.push(`f ${a} ${b} ${c}`);
+        }
+      }
+      vOffset += pos.count;
+      if(uv) vtOffset += uv.count;
+    }
+
+    zip.file(`${name}.obj`, objLines.join("\n"));
+    zip.file(`${name}.mtl`, mtlLines.join("\n"));
+    zip.file("README.txt",
+      `Model: ${name}\n\n`+
+      `Cara import di Nomad Sculpt:\n`+
+      `  1. Files -> Import -> pilih ${name}.obj\n`+
+      `  2. Tap mesh -> Material -> Base Color -> load texture dari textures/\n\n`+
+      `Cara import di Prisma 3D:\n`+
+      `  1. + -> Import -> OBJ -> pilih ${name}.obj\n`+
+      `  2. Material -> Texture -> pilih file dari textures/\n\n`+
+      `Kalau texture nggak muncul otomatis pas import, itu wajar untuk OBJ -- ` +
+      `link-kan manual dari folder textures/ sesuai instruksi di atas.`
+    );
+
+    statusEl.textContent = "⏳ Membuat ZIP...";
+    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE"});
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(blob),
+      download: `${name}_obj.zip`
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+    const failNote = failedMeshes > 0 ? ` (${failedMeshes} gagal di-skip)` : "";
+    statusEl.textContent = `✓ OBJ+ZIP berhasil! ${meshesToExport.length} mesh, ${Object.keys(texFileByUuid).length} texture${failNote}.`;
+    btn.disabled = false;
 
   }catch(e){
     statusEl.textContent = "✗ " + e.message;
@@ -1086,6 +1219,8 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       </div>
       <div id="model-reasons" style="margin-top:10px;font-size:9px;color:#ff7777"></div>
       <button class="btn btn-green" id="model-build-btn" onclick="buildModelGLB()" disabled style="margin-top:14px;opacity:0.5">⬇ <span data-t-id="BUILD GLB" data-t-en="BUILD GLB">BUILD GLB</span></button>
+      <button class="btn btn-green" id="model-objzip-btn" onclick="downloadModelOBJZip()" disabled style="margin-top:8px;opacity:0.5">⬇ <span data-t-id="OBJ + TEXTURE (ZIP)" data-t-en="OBJ + TEXTURE (ZIP)">OBJ + TEXTURE (ZIP)</span></button>
+      <div style="margin-top:4px;font-size:8px;color:var(--gray)"><span data-t-id="Pakai ini kalau texture GLB nggak muncul di Nomad Sculpt / Prisma 3D" data-t-en="Use this if GLB textures don't show up in Nomad Sculpt / Prisma 3D">Pakai ini kalau texture GLB nggak muncul di Nomad Sculpt / Prisma 3D</span></div>
     </div>
 
     <div class="card" style="margin-top:12px">
@@ -1107,6 +1242,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         </div>
         <div id="rbxm-reasons" style="margin-top:8px;font-size:9px;color:#ff7777"></div>
         <button class="btn btn-green" id="rbxm-build-btn" onclick="buildFromUpload()" disabled style="margin-top:12px;opacity:0.5;width:100%">⬇ <span data-t-id="BUILD GLB DARI FILE" data-t-en="BUILD GLB FROM FILE">BUILD GLB DARI FILE</span></button>
+        <button class="btn btn-green" id="rbxm-objzip-btn" onclick="downloadOBJZipFromUpload()" disabled style="margin-top:8px;opacity:0.5;width:100%">⬇ <span data-t-id="OBJ + TEXTURE (ZIP)" data-t-en="OBJ + TEXTURE (ZIP)">OBJ + TEXTURE (ZIP)</span></button>
       </div>
     </div>
   </div>
@@ -2194,14 +2330,19 @@ async function handleRBXMUpload(event){
 
     const badge = document.getElementById("rbxm-support-badge");
     const buildBtn = document.getElementById("rbxm-build-btn");
+    const objZipBtn = document.getElementById("rbxm-objzip-btn");
     if(data.supported){
       badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — siap dikonversi ke GLB';
       buildBtn.disabled = false;
       buildBtn.style.opacity = "1";
+      objZipBtn.disabled = false;
+      objZipBtn.style.opacity = "1";
     } else {
       badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span>';
       buildBtn.disabled = true;
       buildBtn.style.opacity = "0.5";
+      objZipBtn.disabled = true;
+      objZipBtn.style.opacity = "0.5";
     }
 
     document.getElementById("rbxm-filename").textContent = data.filename || file.name;
@@ -2230,12 +2371,16 @@ async function buildFromUpload(){
   // Reuse buildModelGLB - sudah set window.currentModelData di handleRBXMUpload
   const btn = document.getElementById("rbxm-build-btn");
   const statusEl = document.getElementById("rbxm-upload-status");
-  // Redirect status output ke rbxm-upload-status
-  const origStatus = document.getElementById("model-status");
-  const origBuildBtn = document.getElementById("model-build-btn");
-  // Sementara swap element reference supaya buildModelGLB update status yang benar
   btn.disabled = true;
   await window.buildModelGLB(statusEl, btn);
+}
+
+async function downloadOBJZipFromUpload(){
+  // Reuse downloadModelOBJZip - sudah set window.currentModelData di handleRBXMUpload
+  const btn = document.getElementById("rbxm-objzip-btn");
+  const statusEl = document.getElementById("rbxm-upload-status");
+  btn.disabled = true;
+  await window.downloadModelOBJZip(statusEl, btn);
 }
 
 async function downloadRBXM(){
@@ -2285,14 +2430,19 @@ async function fetchModelInfo(){
 
     const badge = document.getElementById("model-support-badge");
     const buildBtn = document.getElementById("model-build-btn");
+    const objZipBtn = document.getElementById("model-objzip-btn");
     if(data.supported){
       badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — model sederhana, siap dibangun';
       buildBtn.disabled = false;
       buildBtn.style.opacity = "1";
+      objZipBtn.disabled = false;
+      objZipBtn.style.opacity = "1";
     } else {
       badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span> — di luar scope MVP saat ini';
       buildBtn.disabled = true;
       buildBtn.style.opacity = "0.5";
+      objZipBtn.disabled = true;
+      objZipBtn.style.opacity = "0.5";
     }
 
     document.getElementById("model-meshpart-count").textContent = data.meshPartCount ?? "—";
