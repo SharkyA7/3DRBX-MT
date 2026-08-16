@@ -1295,6 +1295,22 @@ def catalog_info():
             except: pass
 
         if not item:
+            # Bukan Asset — coba sebagai Bundle
+            bundle = _resolve_bundle(aid_int, s)
+            if bundle:
+                thumb = _bundle_thumbnail(aid_int, s)
+                return jsonify({
+                    "assetId": aid_int,
+                    "isBundle": True,
+                    "name": bundle["name"],
+                    "assetType": "Bundle",
+                    "assetTypeId": None,
+                    "creatorName": bundle.get("creatorName",""),
+                    "price": bundle.get("price"),
+                    "thumbnailUrl": thumb,
+                    "catalogUrl": f"https://www.roblox.com/bundles/{aid_int}",
+                    "bundleItemCount": len(bundle["asset_ids"]),
+                })
             return jsonify({"error":f"Asset {aid} tidak ditemukan atau tidak dapat diakses"}),404
 
         # Thumbnail
@@ -1501,6 +1517,73 @@ def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
         mtl_text = mtl_text.replace(h, fname)
     return mtl_text
 
+# ── SHARED: single-asset mesh fetch + bundle resolution ────────────
+def _fetch_asset_mesh(file_id, s):
+    """Fetch one Asset's name + real OBJ/MTL/texture data. Raises on failure."""
+    try:
+        d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
+        item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
+    except:
+        item_name = str(file_id)
+    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+    r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
+    if r3d.status_code != 200:
+        raise Exception(f"3D thumbnail error {r3d.status_code}")
+    manifest_url = r3d.json().get("imageUrl")
+    if not manifest_url:
+        raise Exception("item ini tidak punya model 3D")
+
+    manifest = s.get(manifest_url, timeout=15).json()
+    obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
+    tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
+
+    obj_data  = s.get(obj_url, timeout=30).text
+    mtl_raw   = s.get(mtl_url, timeout=15).text
+    mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
+    return item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls
+
+def _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=True):
+    """Fetch one Asset and write OBJ+MTL(+textures) into an open ZipFile. Returns (item_name, ok, error)."""
+    try:
+        item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s)
+        prefix = f"{folder}/" if folder else ""
+        zf.writestr(f"{prefix}{safe_name}.obj", obj_data)
+        zf.writestr(f"{prefix}{safe_name}.mtl", mtl_fixed)
+        if include_textures:
+            for i, tex_url in enumerate(tex_urls):
+                try:
+                    tb = s.get(tex_url, timeout=20)
+                    if tb.status_code == 200:
+                        zf.writestr(f"{prefix}{tex_names[i]}", tb.content)
+                except: pass
+        return item_name, True, None
+    except Exception as e:
+        return None, False, str(e)
+
+def _resolve_bundle(bundle_id, s):
+    """Return {'name','creatorName','price','asset_ids'} if bundle_id is a valid Bundle, else None."""
+    try:
+        r = s.get(f"https://catalog.roblox.com/v1/bundles/{bundle_id}/details", timeout=10)
+        if r.status_code != 200: return None
+        bd = r.json()
+        asset_ids = [it.get("id") for it in bd.get("items", []) if it.get("type") == "Asset" and it.get("id")]
+        return {
+            "name": bd.get("name") or f"Bundle {bundle_id}",
+            "creatorName": (bd.get("creator") or {}).get("name",""),
+            "price": bd.get("price"),
+            "asset_ids": asset_ids,
+        }
+    except Exception:
+        return None
+
+def _bundle_thumbnail(bundle_id, s):
+    try:
+        th = s.get(f"https://thumbnails.roblox.com/v1/bundles/thumbnails?bundleIds={bundle_id}&size=420x420&format=Png", timeout=10).json()
+        return (th.get("data") or [{}])[0].get("imageUrl")
+    except Exception:
+        return None
+
 @app.get("/api/v2/avatar")
 def avatar_v2():
     """Avatar download - real mesh + UV texture"""
@@ -1574,7 +1657,9 @@ def avatar_v2():
 
 @app.get("/api/v2/item")
 def item_v2():
-    """Item download - cloudscraper + format OBJ/GLTF (Faizdzn method)"""
+    """Item/Bundle download - cloudscraper + format OBJ/GLTF (Faizdzn method).
+    If the ID isn't a plain Asset, falls back to resolving it as a Bundle and
+    packs every component asset into the same ZIP."""
     aid = request.args.get("id","")
     fmt = request.args.get("format","gltf").lower()
     if not aid: return jsonify({"error":"id required"}),400
@@ -1582,56 +1667,39 @@ def item_v2():
         file_id = int(aid)
         s = get_scraper()
 
-        # Get item name
-        try:
-            d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
-            item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
-            safe_name = "".join(c if c.isalnum() or c in" _-" else "_" for c in item_name).strip()
-        except:
-            item_name = str(file_id); safe_name = str(file_id)
-
-        # Get 3D manifest pakai scraper
-        r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
-        if r3d.status_code != 200:
-            return jsonify({"error":f"3D thumbnail item error {r3d.status_code}"}),503
-        d = r3d.json()
-        manifest_url = d.get("imageUrl")
-        if not manifest_url:
-            return jsonify({"error":"3D thumbnail item tidak tersedia — item ini mungkin tidak punya model 3D"}),503
-
-        # Fetch manifest JSON
-        manifest = s.get(manifest_url, timeout=15).json()
-
-        # Convert hash -> CDN URL
-        obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
-        tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
-
-        # Download OBJ + MTL pakai scraper
-        obj_data  = s.get(obj_url, timeout=30).text
-        mtl_raw   = s.get(mtl_url, timeout=15).text
-        mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
-
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f"{safe_name}.obj", obj_data)
-            zf.writestr(f"{safe_name}.mtl", mtl_fixed)
+            item_name, ok, err = _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=(fmt=="gltf"))
+            is_bundle = False
+            bundle_results = []
 
-            if fmt == "gltf":
-                # Include all UV textures
-                for i, tex_url in enumerate(tex_urls):
-                    try:
-                        tb = s.get(tex_url, timeout=20)
-                        if tb.status_code == 200:
-                            zf.writestr(tex_names[i], tb.content)
-                    except: pass
-            # OBJ mode: no textures
+            if not ok:
+                bundle = _resolve_bundle(file_id, s)
+                if not bundle:
+                    return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
+                if not bundle["asset_ids"]:
+                    return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
 
-            zf.writestr("README.txt",
-                f"Item  : {item_name}\nFormat: {fmt.upper()}\n\n"
-                f"NOMAD SCULPT:\n  Files > Import > {safe_name}.obj\n"
-                + (f"  Material > Base Color > {tex_names[0] if tex_names else ''}\n" if fmt=="gltf" else "")
-                + f"\nPRISMA 3D:\n  + > Import > OBJ > {safe_name}.obj"
+                is_bundle = True
+                item_name = bundle["name"]
+                for comp_id in bundle["asset_ids"]:
+                    cname, cok, cerr = _write_asset_to_zip(zf, s, comp_id, folder=None, include_textures=(fmt=="gltf"))
+                    bundle_results.append((cname or f"Asset {comp_id}", cok, cerr))
+                if not any(r[1] for r in bundle_results):
+                    return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
+
+            safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+            readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
+            if is_bundle:
+                readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
+                    f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
+                ) + "\n"
+            readme += (
+                f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
+                f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
             )
+            zf.writestr("README.txt", readme)
 
         buf.seek(0)
         fname = f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
@@ -1643,8 +1711,10 @@ MAX_BATCH_ITEMS = 25
 
 @app.get("/api/v2/item-batch")
 def item_batch_v2():
-    """Packed catalog download - multiple items, ONE zip, each in its own folder.
-    Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion."""
+    """Packed catalog download - multiple items (or bundles), ONE zip, each in its own folder.
+    Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion.
+    If an ID isn't a plain Asset, it's resolved as a Bundle and its components are packed
+    into a subfolder together."""
     ids_param = request.args.get("ids","")
     if not ids_param: return jsonify({"error":"ids required"}),400
     raw_ids = [x.strip() for x in ids_param.split(",") if x.strip()]
@@ -1658,6 +1728,12 @@ def item_batch_v2():
         log_lines = []
         used_folders = set()
 
+        def unique_folder(base):
+            n = base; i = 2
+            while n in used_folders: n = f"{base}_{i}"; i += 1
+            used_folders.add(n)
+            return n
+
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             for raw_id in raw_ids:
                 try:
@@ -1667,33 +1743,8 @@ def item_batch_v2():
                     continue
 
                 try:
-                    try:
-                        d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
-                        item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
-                    except:
-                        item_name = str(file_id)
-                    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
-
-                    r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
-                    if r3d.status_code != 200:
-                        raise Exception(f"3D thumbnail error {r3d.status_code}")
-                    manifest_url = r3d.json().get("imageUrl")
-                    if not manifest_url:
-                        raise Exception("item ini tidak punya model 3D")
-
-                    manifest = s.get(manifest_url, timeout=15).json()
-                    obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
-                    tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
-
-                    obj_data  = s.get(obj_url, timeout=30).text
-                    mtl_raw   = s.get(mtl_url, timeout=15).text
-                    mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
-
-                    folder = f"{safe_name}_{file_id}"
-                    n = folder; i = 2
-                    while n in used_folders: n = f"{folder}_{i}"; i += 1
-                    folder = n; used_folders.add(folder)
-
+                    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s)
+                    folder = unique_folder(f"{safe_name}_{file_id}")
                     zf.writestr(f"{folder}/{safe_name}.obj", obj_data)
                     zf.writestr(f"{folder}/{safe_name}.mtl", mtl_fixed)
                     for i, tex_url in enumerate(tex_urls):
@@ -1702,15 +1753,32 @@ def item_batch_v2():
                             if tb.status_code == 200:
                                 zf.writestr(f"{folder}/{tex_names[i]}", tb.content)
                         except: pass
-
                     log_lines.append(f"- {item_name} (ID {file_id}): OK -> {folder}/")
-                except Exception as ie:
-                    log_lines.append(f"- ID {raw_id}: GAGAL - {ie}")
+                    continue
+                except Exception as e:
+                    asset_err = str(e)  # fall through to bundle resolution below
+
+                bundle = _resolve_bundle(file_id, s)
+                if not bundle or not bundle["asset_ids"]:
+                    log_lines.append(f"- ID {raw_id}: GAGAL - {asset_err}")
+                    continue
+
+                safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in bundle["name"]).strip() or str(file_id)
+                folder = unique_folder(f"{safe_bname}_{file_id}_BUNDLE")
+                comp_results = []
+                for comp_id in bundle["asset_ids"]:
+                    cname, cok, cerr = _write_asset_to_zip(zf, s, comp_id, folder=folder, include_textures=True)
+                    comp_results.append((cname or f"Asset {comp_id}", cok, cerr))
+                if any(r[1] for r in comp_results):
+                    names = ", ".join(n if ok2 else f"{n} (gagal)" for n, ok2, e2 in comp_results)
+                    log_lines.append(f"- {bundle['name']} (Bundle ID {file_id}): OK -> {folder}/ [{names}]")
+                else:
+                    log_lines.append(f"- {bundle['name']} (Bundle ID {file_id}): GAGAL - semua komponen gagal")
 
             zf.writestr("README.txt",
                 "CATALOG PACKED DOWNLOAD\n" + "=" * 30 + "\n\n" +
                 "\n".join(log_lines) +
-                "\n\nSetiap item ada di folder sendiri (OBJ + MTL + texture PNG).\n\n"
+                "\n\nSetiap item/bundle ada di folder sendiri (OBJ + MTL + texture PNG).\n\n"
                 "NOMAD SCULPT:\n  Files > Import > buka folder item > pilih file .obj\n"
                 "PRISMA 3D:\n  + > Import > OBJ > pilih file .obj di dalam folder item"
             )
