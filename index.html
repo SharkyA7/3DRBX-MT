@@ -1967,11 +1967,12 @@ async function downloadCatalog(format){
   if(!currentAssetId) return;
   st('cat-status',`⏳ Mengunduh data...`,'loading');
   try{
+    const name=document.getElementById('cat-name').textContent||currentAssetId;
     // Selalu minta versi dengan texture (gltf di backend = obj+mtl+texture bundle) sbg sumber konversi
-    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf`);
+    // &name= dikirim supaya penamaan file di dalam ZIP dijamin sama persis dengan yang tampil di preview
+    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf&name=${encodeURIComponent(name)}`);
     if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
-    const name=document.getElementById('cat-name').textContent||currentAssetId;
 
     if(format === 'gltf'){
       if(!window.convertZipToGLB){ throw new Error("Konverter GLB belum siap, coba lagi sebentar."); }
@@ -2066,8 +2067,14 @@ async function downloadPackedCatalog(){
   prog('pk-prog', 15);
   st('pk-status', `⏳ Membungkus ${packedItems.length} item (OBJ+Texture)…`,'loading');
   try{
-    const ids = packedItems.map(it=>it.id).join(',');
-    const res = await fetch(`${BASE}/api/v2/item-batch?ids=${ids}`);
+    // Kirim nama yang sudah diambil sewaktu PREVIEW, supaya nama file/folder di ZIP
+    // dijamin sama persis dengan yang tampil di grid — tidak perlu tebak-tebak lagi.
+    const items = packedItems.map(it=>({ id: it.id, name: it.name, isBundle: !!it.isBundle }));
+    const res = await fetch(`${BASE}/api/v2/item-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal membuat ZIP'); }
     prog('pk-prog', 90);
     const blob = await res.blob();
@@ -2092,7 +2099,7 @@ const ROUTES=[
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
-  ['GET','GET /api/v2/item-batch?ids=','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder)'],
+  ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
