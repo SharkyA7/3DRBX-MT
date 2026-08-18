@@ -76,8 +76,9 @@ Open browser: http://localhost:8000
 | `GET /api/avatar/3d-urls?user=` | OBJ/MTL URLs from Roblox CDN |
 | `GET /api/avatar/download?user=&format=` | Download ZIP (OBJ or GLTF) |
 | `GET /api/avatar/wearing?user=` | List of equipped assets |
-| `GET /api/catalog/info?asset_id=` | Catalog item details |
-| `GET /api/catalog/download?asset_id=&format=` | Download item mesh |
+| `GET /api/catalog/info?asset_id=` | Catalog item **or bundle** details |
+| `GET /api/v2/item?id=&format=&name=` | Download one item/bundle (real mesh, OBJ/GLTF) |
+| `POST /api/v2/item-batch` | Packed Catalog — many items/bundles into one ZIP (`{"items":[{"id":..,"name":..}]}`) |
 | `GET /api/catalog/raw?asset_id=` | Raw file without conversion |
 | `GET /docs` | Automatic Swagger UI |
 
@@ -129,3 +130,18 @@ Open browser: http://localhost:8000
    - `ROBLOX_API_KEY` = your key
    - `ROBLOX_COOKIE` = your cookie
 3. DON'T PUT YOUR API KEY AND COOKIE IN FRONTEND OR IN GIT
+
+---
+
+## License
+
+3DRBX-MT is licensed under the [MIT License](LICENSE), with one carve-out:
+a small originally-ported technique (hash → CDN URL resolution) traces back
+to an unlicensed third-party repo. See [LICENSE](LICENSE) and
+[CREDITS.md](CREDITS.md) for the full details — the project has grown well
+beyond that origin at this point, but the attribution stays for transparency.
+
+All downloaded Roblox meshes, textures, and metadata remain the property of
+Roblox Corporation and/or the original asset creators; this tool doesn't
+grant you any rights over that content beyond what Roblox itself allows.
+
