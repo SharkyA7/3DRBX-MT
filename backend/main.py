@@ -1518,13 +1518,36 @@ def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
     return mtl_text
 
 # ── SHARED: single-asset mesh fetch + bundle resolution ────────────
-def _fetch_asset_mesh(file_id, s):
-    """Fetch one Asset's name + real OBJ/MTL/texture data. Raises on failure."""
+def _resolve_item_name(file_id, s):
+    """Robustly resolve an Asset's display name — mirrors catalog_info's multi-endpoint
+    approach using cloudscraper (s), instead of a plain HTTP POST that Cloudflare tends
+    to silently block. Returns the name, or None if every attempt fails."""
+    endpoints = [
+        f"https://catalog.roblox.com/v1/catalog/items/{file_id}/details?itemType=Asset",
+        f"https://economy.roblox.com/v2/assets/{file_id}/details",
+        f"https://apis.roblox.com/assets/v1/assets/{file_id}",
+    ]
+    for ep in endpoints:
+        try:
+            r = s.get(ep, timeout=10)
+            if r.status_code == 200:
+                name = r.json().get("name") or r.json().get("displayName")
+                if name: return name
+        except: continue
     try:
-        d2 = rpost("https://catalog.roblox.com/v1/catalog/items/details",{"items":[{"itemType":"Asset","id":file_id}]})
-        item_name = (d2.get("data") or [{}])[0].get("name", str(file_id))
-    except:
-        item_name = str(file_id)
+        r = s.post("https://catalog.roblox.com/v1/catalog/items/details",
+                    json={"items":[{"itemType":"Asset","id":file_id}]}, timeout=10)
+        if r.status_code == 200:
+            name = (r.json().get("data") or [{}])[0].get("name")
+            if name: return name
+    except: pass
+    return None
+
+def _fetch_asset_mesh(file_id, s, known_name=None):
+    """Fetch one Asset's name + real OBJ/MTL/texture data. Raises on failure.
+    Pass known_name (e.g. from the frontend's earlier /api/catalog/info lookup)
+    to skip name resolution entirely and guarantee it matches what the user saw."""
+    item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
     safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
 
     r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
@@ -1543,10 +1566,10 @@ def _fetch_asset_mesh(file_id, s):
     mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
     return item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls
 
-def _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=True):
+def _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=True, known_name=None):
     """Fetch one Asset and write OBJ+MTL(+textures) into an open ZipFile. Returns (item_name, ok, error)."""
     try:
-        item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s)
+        item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
         prefix = f"{folder}/" if folder else ""
         zf.writestr(f"{prefix}{safe_name}.obj", obj_data)
         zf.writestr(f"{prefix}{safe_name}.mtl", mtl_fixed)
@@ -1659,9 +1682,12 @@ def avatar_v2():
 def item_v2():
     """Item/Bundle download - cloudscraper + format OBJ/GLTF (Faizdzn method).
     If the ID isn't a plain Asset, falls back to resolving it as a Bundle and
-    packs every component asset into the same ZIP."""
+    packs every component asset into the same ZIP.
+    Optional ?name= lets the frontend pass the name it already resolved
+    (e.g. from /api/catalog/info) so it's guaranteed to match what the user saw."""
     aid = request.args.get("id","")
     fmt = request.args.get("format","gltf").lower()
+    known_name = (request.args.get("name") or "").strip() or None
     if not aid: return jsonify({"error":"id required"}),400
     try:
         file_id = int(aid)
@@ -1669,7 +1695,7 @@ def item_v2():
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            item_name, ok, err = _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=(fmt=="gltf"))
+            item_name, ok, err = _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=(fmt=="gltf"), known_name=known_name)
             is_bundle = False
             bundle_results = []
 
@@ -1681,7 +1707,7 @@ def item_v2():
                     return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
 
                 is_bundle = True
-                item_name = bundle["name"]
+                item_name = known_name or bundle["name"]
                 for comp_id in bundle["asset_ids"]:
                     cname, cok, cerr = _write_asset_to_zip(zf, s, comp_id, folder=None, include_textures=(fmt=="gltf"))
                     bundle_results.append((cname or f"Asset {comp_id}", cok, cerr))
@@ -1709,17 +1735,32 @@ def item_v2():
 
 MAX_BATCH_ITEMS = 25
 
-@app.get("/api/v2/item-batch")
+@app.route("/api/v2/item-batch", methods=["GET","POST"])
 def item_batch_v2():
     """Packed catalog download - multiple items (or bundles), ONE zip, each in its own folder.
     Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion.
     If an ID isn't a plain Asset, it's resolved as a Bundle and its components are packed
-    into a subfolder together."""
-    ids_param = request.args.get("ids","")
-    if not ids_param: return jsonify({"error":"ids required"}),400
-    raw_ids = [x.strip() for x in ids_param.split(",") if x.strip()]
-    if not raw_ids: return jsonify({"error":"ids required"}),400
-    if len(raw_ids) > MAX_BATCH_ITEMS:
+    into a subfolder together.
+
+    Preferred: POST JSON {"items":[{"id":123,"name":"Exact Name","isBundle":false}, ...]}
+    — names come from the frontend's earlier /api/catalog/info lookup (the Packed Catalog
+    preview), so folder/file names are guaranteed to match exactly what the user saw,
+    instead of re-resolving the name here.
+    Legacy: GET ?ids=1,2,3 still works, resolving names server-side."""
+    entries = []  # list of (id_str, known_name_or_None)
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        for it in (body.get("items") or []):
+            iid = it.get("id")
+            if iid is None: continue
+            entries.append((str(iid), (it.get("name") or "").strip() or None))
+    else:
+        ids_param = request.args.get("ids","")
+        for raw_id in [x.strip() for x in ids_param.split(",") if x.strip()]:
+            entries.append((raw_id, None))
+
+    if not entries: return jsonify({"error":"ids/items required"}),400
+    if len(entries) > MAX_BATCH_ITEMS:
         return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
 
     try:
@@ -1735,7 +1776,7 @@ def item_batch_v2():
             return n
 
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            for raw_id in raw_ids:
+            for raw_id, known_name in entries:
                 try:
                     file_id = int(raw_id)
                 except ValueError:
@@ -1743,7 +1784,7 @@ def item_batch_v2():
                     continue
 
                 try:
-                    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s)
+                    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
                     folder = unique_folder(f"{safe_name}_{file_id}")
                     zf.writestr(f"{folder}/{safe_name}.obj", obj_data)
                     zf.writestr(f"{folder}/{safe_name}.mtl", mtl_fixed)
@@ -1763,7 +1804,8 @@ def item_batch_v2():
                     log_lines.append(f"- ID {raw_id}: GAGAL - {asset_err}")
                     continue
 
-                safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in bundle["name"]).strip() or str(file_id)
+                bundle_display_name = known_name or bundle["name"]
+                safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in bundle_display_name).strip() or str(file_id)
                 folder = unique_folder(f"{safe_bname}_{file_id}_BUNDLE")
                 comp_results = []
                 for comp_id in bundle["asset_ids"]:
@@ -1771,9 +1813,9 @@ def item_batch_v2():
                     comp_results.append((cname or f"Asset {comp_id}", cok, cerr))
                 if any(r[1] for r in comp_results):
                     names = ", ".join(n if ok2 else f"{n} (gagal)" for n, ok2, e2 in comp_results)
-                    log_lines.append(f"- {bundle['name']} (Bundle ID {file_id}): OK -> {folder}/ [{names}]")
+                    log_lines.append(f"- {bundle_display_name} (Bundle ID {file_id}): OK -> {folder}/ [{names}]")
                 else:
-                    log_lines.append(f"- {bundle['name']} (Bundle ID {file_id}): GAGAL - semua komponen gagal")
+                    log_lines.append(f"- {bundle_display_name} (Bundle ID {file_id}): GAGAL - semua komponen gagal")
 
             zf.writestr("README.txt",
                 "CATALOG PACKED DOWNLOAD\n" + "=" * 30 + "\n\n" +
