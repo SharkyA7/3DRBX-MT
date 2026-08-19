@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, Response, redirect
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def safe_filename(name):
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
@@ -356,6 +357,38 @@ def cache_get(key):
 
 def cache_set(key, val):
     _cache[key] = (val, time.time())
+
+# ── Best-effort in-memory rate limiting ─────────────────────────────
+# NOTE: Vercel serverless containers are ephemeral, so this resets on cold starts
+# and isn't shared across containers — it's not a bulletproof/distributed limiter.
+# What it DOES protect against: one client rapid-firing many requests against a
+# single warm container in a short window (e.g. a script hammering /item-batch),
+# which is exactly the pattern that risks getting this server's outbound IP
+# flagged by Roblox's Cloudflare protection — which would break the tool for
+# every user, not just the one doing it. For real distributed rate limiting
+# you'd want Vercel Edge Config / Upstash Redis or similar.
+_rate_buckets = {}
+
+def get_client_ip():
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+def check_rate_limit(bucket_name, limit, window_s):
+    """Returns a (response, status) tuple to return immediately if the caller is
+    over the limit, or None if they're clear to proceed."""
+    key = f"{bucket_name}:{get_client_ip()}"
+    now = time.time()
+    bucket = _rate_buckets.setdefault(key, [])
+    while bucket and now - bucket[0] > window_s:
+        bucket.pop(0)
+    if len(bucket) >= limit:
+        retry_after = int(window_s - (now - bucket[0])) + 1
+        return jsonify({"error": f"Terlalu banyak permintaan. Coba lagi dalam {retry_after} detik."}), 429
+    bucket.append(now)
+    return None
+
 API_KEY = os.getenv("ROBLOX_API_KEY","")
 TIMEOUT = 15
 
@@ -1209,6 +1242,8 @@ def fix_url(url):
 def avatar_download_full():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
+    rl = check_rate_limit("avatar-download", limit=15, window_s=60)
+    if rl: return rl
     try:
         uid=resolve(user)
         info=rget(f"https://users.roblox.com/v1/users/{uid}")
@@ -1244,6 +1279,8 @@ def avatar_download_full():
 def avatar_procedural_download():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
+    rl = check_rate_limit("avatar-download", limit=15, window_s=60)
+    if rl: return rl
     try:
         uid=resolve(user)
         av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
@@ -1269,8 +1306,16 @@ def catalog_info():
     aid = request.args.get("asset_id","")
     if not aid: return jsonify({"error":"asset_id required"}),400
     try:
-        s   = get_scraper()
         aid_int = int(aid)
+    except ValueError:
+        return jsonify({"error":"asset_id harus berupa angka"}),400
+
+    cache_key = f"catinfo_{aid_int}"
+    cached = cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    try:
+        s   = get_scraper()
         item = {}
 
         # Coba 3 endpoint berbeda
@@ -1299,7 +1344,7 @@ def catalog_info():
             bundle = _resolve_bundle(aid_int, s)
             if bundle:
                 thumb = _bundle_thumbnail(aid_int, s)
-                return jsonify({
+                result = {
                     "assetId": aid_int,
                     "isBundle": True,
                     "name": bundle["name"],
@@ -1310,7 +1355,9 @@ def catalog_info():
                     "thumbnailUrl": thumb,
                     "catalogUrl": f"https://www.roblox.com/bundles/{aid_int}",
                     "bundleItemCount": len(bundle["asset_ids"]),
-                })
+                }
+                cache_set(cache_key, result)
+                return jsonify(result)
             return jsonify({"error":f"Asset {aid} tidak ditemukan atau tidak dapat diakses"}),404
 
         # Thumbnail
@@ -1324,9 +1371,11 @@ def catalog_info():
         price   = item.get("price") or item.get("priceInRobux")
         atype   = item.get("assetType") or item.get("assetTypeId")
 
-        return jsonify({"assetId":aid_int,"name":name,"assetType":atype,
+        result = {"assetId":aid_int,"name":name,"assetType":atype,
             "creatorName":creator,"price":price,
-            "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"})
+            "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"}
+        cache_set(cache_key, result)
+        return jsonify(result)
     except Exception as e: return safe_error(e)
 
 @app.get("/api/catalog/download-full")
@@ -1334,6 +1383,8 @@ def catalog_download_full():
     aid = request.args.get("asset_id","")
     fmt = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
     if not aid: return jsonify({"error":"asset_id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
     try:
         s = get_scraper()
         r = s.post("https://catalog.roblox.com/v1/catalog/items/details", json={"items":[{"itemType":"Asset","id":int(aid)}]}, timeout=10)
@@ -1521,7 +1572,11 @@ def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
 def _resolve_item_name(file_id, s):
     """Robustly resolve an Asset's display name — mirrors catalog_info's multi-endpoint
     approach using cloudscraper (s), instead of a plain HTTP POST that Cloudflare tends
-    to silently block. Returns the name, or None if every attempt fails."""
+    to silently block. Cached for CACHE_TTL since names rarely change. Returns the name,
+    or None if every attempt fails."""
+    ck = f"itemname_{file_id}"
+    cached = cache_get(ck)
+    if cached: return cached
     endpoints = [
         f"https://catalog.roblox.com/v1/catalog/items/{file_id}/details?itemType=Asset",
         f"https://economy.roblox.com/v2/assets/{file_id}/details",
@@ -1532,14 +1587,14 @@ def _resolve_item_name(file_id, s):
             r = s.get(ep, timeout=10)
             if r.status_code == 200:
                 name = r.json().get("name") or r.json().get("displayName")
-                if name: return name
+                if name: cache_set(ck, name); return name
         except: continue
     try:
         r = s.post("https://catalog.roblox.com/v1/catalog/items/details",
                     json={"items":[{"itemType":"Asset","id":file_id}]}, timeout=10)
         if r.status_code == 200:
             name = (r.json().get("data") or [{}])[0].get("name")
-            if name: return name
+            if name: cache_set(ck, name); return name
     except: pass
     return None
 
@@ -1566,37 +1621,47 @@ def _fetch_asset_mesh(file_id, s, known_name=None):
     mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
     return item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls
 
-def _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=True, known_name=None):
-    """Fetch one Asset and write OBJ+MTL(+textures) into an open ZipFile. Returns (item_name, ok, error)."""
-    try:
-        item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
-        prefix = f"{folder}/" if folder else ""
-        zf.writestr(f"{prefix}{safe_name}.obj", obj_data)
-        zf.writestr(f"{prefix}{safe_name}.mtl", mtl_fixed)
-        if include_textures:
-            for i, tex_url in enumerate(tex_urls):
-                try:
-                    tb = s.get(tex_url, timeout=20)
-                    if tb.status_code == 200:
-                        zf.writestr(f"{prefix}{tex_names[i]}", tb.content)
-                except: pass
-        return item_name, True, None
-    except Exception as e:
-        return None, False, str(e)
+def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
+    """Like _fetch_asset_mesh, but also downloads texture bytes and returns everything
+    as plain in-memory data — (item_name, safe_name, files:[(filename, content), ...]).
+    Does NO zipfile I/O, so it's safe to call concurrently from a worker thread; the
+    caller writes the returned files into the ZIP afterwards on the main thread."""
+    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
+    files = [(f"{safe_name}.obj", obj_data), (f"{safe_name}.mtl", mtl_fixed)]
+    if include_textures:
+        for i, tex_url in enumerate(tex_urls):
+            try:
+                tb = s.get(tex_url, timeout=20)
+                if tb.status_code == 200:
+                    files.append((tex_names[i], tb.content))
+            except: pass
+    return item_name, safe_name, files
+
+def _write_package_to_zip(zf, folder, files):
+    prefix = f"{folder}/" if folder else ""
+    for fname, content in files:
+        zf.writestr(f"{prefix}{fname}", content)
 
 def _resolve_bundle(bundle_id, s):
-    """Return {'name','creatorName','price','asset_ids'} if bundle_id is a valid Bundle, else None."""
+    """Return {'name','creatorName','price','asset_ids'} if bundle_id is a valid Bundle, else None.
+    Cached for CACHE_TTL — bundle composition rarely changes."""
+    ck = f"bundle_{bundle_id}"
+    cached = cache_get(ck)
+    if cached is not None: return cached or None  # cache_set(ck, False) marks a confirmed non-bundle
     try:
         r = s.get(f"https://catalog.roblox.com/v1/bundles/{bundle_id}/details", timeout=10)
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            cache_set(ck, False); return None
         bd = r.json()
         asset_ids = [it.get("id") for it in bd.get("items", []) if it.get("type") == "Asset" and it.get("id")]
-        return {
+        result = {
             "name": bd.get("name") or f"Bundle {bundle_id}",
             "creatorName": (bd.get("creator") or {}).get("name",""),
             "price": bd.get("price"),
             "asset_ids": asset_ids,
         }
+        cache_set(ck, result)
+        return result
     except Exception:
         return None
 
@@ -1678,53 +1743,71 @@ def avatar_v2():
             headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
     except Exception as e: return handle_roblox_error(e, "avatar_download")
 
+BATCH_WORKERS = 6  # concurrent Roblox fetches per request — enough to cut wall time
+                    # meaningfully within Vercel's function timeout, low enough not to
+                    # look like abuse to Roblox's Cloudflare protection
+
 @app.get("/api/v2/item")
 def item_v2():
     """Item/Bundle download - cloudscraper + format OBJ/GLTF (Faizdzn method).
     If the ID isn't a plain Asset, falls back to resolving it as a Bundle and
-    packs every component asset into the same ZIP.
+    packs every component asset into the same ZIP — components are fetched
+    concurrently to stay well inside the serverless timeout window.
     Optional ?name= lets the frontend pass the name it already resolved
     (e.g. from /api/catalog/info) so it's guaranteed to match what the user saw."""
     aid = request.args.get("id","")
     fmt = request.args.get("format","gltf").lower()
     known_name = (request.args.get("name") or "").strip() or None
     if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
     try:
         file_id = int(aid)
         s = get_scraper()
+        is_bundle = False
+        bundle_results = []
+
+        try:
+            item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=(fmt=="gltf"))
+        except Exception as e:
+            err = str(e)
+            bundle = _resolve_bundle(file_id, s)
+            if not bundle:
+                return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
+            if not bundle["asset_ids"]:
+                return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
+
+            is_bundle = True
+            item_name = known_name or bundle["name"]
+            files = []
+            with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
+                futs = {ex.submit(_fetch_asset_package, cid, s, None, (fmt=="gltf")): cid for cid in bundle["asset_ids"]}
+                for fut in as_completed(futs):
+                    cid = futs[fut]
+                    try:
+                        cname, csafe, cfiles = fut.result()
+                        files.extend(cfiles)
+                        bundle_results.append((cname, True, None))
+                    except Exception as ce:
+                        bundle_results.append((f"Asset {cid}", False, str(ce)))
+            if not any(r[1] for r in bundle_results):
+                return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
+
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+        readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
+        if is_bundle:
+            readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
+                f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
+            ) + "\n"
+        readme += (
+            f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
+            f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
+        )
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            item_name, ok, err = _write_asset_to_zip(zf, s, file_id, folder=None, include_textures=(fmt=="gltf"), known_name=known_name)
-            is_bundle = False
-            bundle_results = []
-
-            if not ok:
-                bundle = _resolve_bundle(file_id, s)
-                if not bundle:
-                    return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
-                if not bundle["asset_ids"]:
-                    return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
-
-                is_bundle = True
-                item_name = known_name or bundle["name"]
-                for comp_id in bundle["asset_ids"]:
-                    cname, cok, cerr = _write_asset_to_zip(zf, s, comp_id, folder=None, include_textures=(fmt=="gltf"))
-                    bundle_results.append((cname or f"Asset {comp_id}", cok, cerr))
-                if not any(r[1] for r in bundle_results):
-                    return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
-
-            safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
-
-            readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
-            if is_bundle:
-                readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
-                    f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
-                ) + "\n"
-            readme += (
-                f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
-                f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
-            )
+            _write_package_to_zip(zf, None, files)
             zf.writestr("README.txt", readme)
 
         buf.seek(0)
@@ -1735,12 +1818,49 @@ def item_v2():
 
 MAX_BATCH_ITEMS = 25
 
+def _resolve_batch_entry(raw_id, known_name, s):
+    """Worker function — runs in a thread. Resolves one entry (asset or bundle)
+    entirely in memory (no zipfile I/O, which isn't thread-safe). Never raises;
+    always returns a result dict describing what happened."""
+    try:
+        file_id = int(raw_id)
+    except ValueError:
+        return {"raw_id": raw_id, "kind": "invalid", "error": "ID tidak valid"}
+
+    try:
+        item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=True)
+        return {"raw_id": raw_id, "kind": "asset", "id": file_id, "name": item_name, "safe_name": safe_name, "files": files}
+    except Exception as e:
+        asset_err = str(e)
+
+    bundle = _resolve_bundle(file_id, s)
+    if not bundle or not bundle["asset_ids"]:
+        return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": asset_err}
+
+    bundle_display_name = known_name or bundle["name"]
+    comp_results = []
+    # Bundles usually have only 2-5 components, so a small sequential loop within this
+    # already-parallel worker is fine — avoids nested thread pools.
+    for comp_id in bundle["asset_ids"]:
+        try:
+            cname, csafe, cfiles = _fetch_asset_package(comp_id, s, include_textures=True)
+            comp_results.append({"name": cname, "files": cfiles, "ok": True})
+        except Exception as ce:
+            comp_results.append({"name": f"Asset {comp_id}", "files": [], "ok": False, "error": str(ce)})
+    return {"raw_id": raw_id, "kind": "bundle", "id": file_id, "name": bundle_display_name, "components": comp_results}
+
 @app.route("/api/v2/item-batch", methods=["GET","POST"])
 def item_batch_v2():
     """Packed catalog download - multiple items (or bundles), ONE zip, each in its own folder.
     Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion.
     If an ID isn't a plain Asset, it's resolved as a Bundle and its components are packed
     into a subfolder together.
+
+    Entries are resolved CONCURRENTLY (up to BATCH_WORKERS at a time) since each one needs
+    several sequential Roblox round-trips — doing 25 of those one-at-a-time risks blowing
+    past the serverless function's timeout. ZIP writing itself stays single-threaded
+    (zipfile isn't safe for concurrent writes), so fetching and writing are split into
+    two phases: fetch-in-parallel, then write-in-order.
 
     Preferred: POST JSON {"items":[{"id":123,"name":"Exact Name","isBundle":false}, ...]}
     — names come from the frontend's earlier /api/catalog/info lookup (the Packed Catalog
@@ -1763,8 +1883,25 @@ def item_batch_v2():
     if len(entries) > MAX_BATCH_ITEMS:
         return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
 
+    rl = check_rate_limit("item-batch", limit=5, window_s=300)
+    if rl: return rl
+
     try:
         s = get_scraper()
+
+        # Phase 1: resolve every entry concurrently (network I/O only, no zip writes)
+        results_by_raw_id = {}
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+            futs = {ex.submit(_resolve_batch_entry, raw_id, known_name, s): raw_id for raw_id, known_name in entries}
+            for fut in as_completed(futs):
+                raw_id = futs[fut]
+                try:
+                    results_by_raw_id[raw_id] = fut.result()
+                except Exception as e:
+                    results_by_raw_id[raw_id] = {"raw_id": raw_id, "kind": "error", "error": str(e)}
+        ordered_results = [results_by_raw_id[raw_id] for raw_id, _ in entries]
+
+        # Phase 2: write everything into the ZIP in order, single-threaded
         buf = io.BytesIO()
         log_lines = []
         used_folders = set()
@@ -1776,46 +1913,31 @@ def item_batch_v2():
             return n
 
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-            for raw_id, known_name in entries:
-                try:
-                    file_id = int(raw_id)
-                except ValueError:
-                    log_lines.append(f"- {raw_id}: GAGAL - ID tidak valid")
-                    continue
-
-                try:
-                    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
-                    folder = unique_folder(f"{safe_name}_{file_id}")
-                    zf.writestr(f"{folder}/{safe_name}.obj", obj_data)
-                    zf.writestr(f"{folder}/{safe_name}.mtl", mtl_fixed)
-                    for i, tex_url in enumerate(tex_urls):
-                        try:
-                            tb = s.get(tex_url, timeout=20)
-                            if tb.status_code == 200:
-                                zf.writestr(f"{folder}/{tex_names[i]}", tb.content)
-                        except: pass
-                    log_lines.append(f"- {item_name} (ID {file_id}): OK -> {folder}/")
-                    continue
-                except Exception as e:
-                    asset_err = str(e)  # fall through to bundle resolution below
-
-                bundle = _resolve_bundle(file_id, s)
-                if not bundle or not bundle["asset_ids"]:
-                    log_lines.append(f"- ID {raw_id}: GAGAL - {asset_err}")
-                    continue
-
-                bundle_display_name = known_name or bundle["name"]
-                safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in bundle_display_name).strip() or str(file_id)
-                folder = unique_folder(f"{safe_bname}_{file_id}_BUNDLE")
-                comp_results = []
-                for comp_id in bundle["asset_ids"]:
-                    cname, cok, cerr = _write_asset_to_zip(zf, s, comp_id, folder=folder, include_textures=True)
-                    comp_results.append((cname or f"Asset {comp_id}", cok, cerr))
-                if any(r[1] for r in comp_results):
-                    names = ", ".join(n if ok2 else f"{n} (gagal)" for n, ok2, e2 in comp_results)
-                    log_lines.append(f"- {bundle_display_name} (Bundle ID {file_id}): OK -> {folder}/ [{names}]")
-                else:
-                    log_lines.append(f"- {bundle_display_name} (Bundle ID {file_id}): GAGAL - semua komponen gagal")
+            for res in ordered_results:
+                if res["kind"] == "invalid":
+                    log_lines.append(f"- {res['raw_id']}: GAGAL - {res['error']}")
+                elif res["kind"] == "error":
+                    log_lines.append(f"- ID {res['raw_id']}: GAGAL - {res['error']}")
+                elif res["kind"] == "asset":
+                    folder = unique_folder(f"{res['safe_name']}_{res['id']}")
+                    _write_package_to_zip(zf, folder, res["files"])
+                    log_lines.append(f"- {res['name']} (ID {res['id']}): OK -> {folder}/")
+                elif res["kind"] == "bundle":
+                    safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in res["name"]).strip() or str(res["id"])
+                    folder = unique_folder(f"{safe_bname}_{res['id']}_BUNDLE")
+                    any_ok = False
+                    names_summary = []
+                    for comp in res["components"]:
+                        if comp["ok"]:
+                            _write_package_to_zip(zf, folder, comp["files"])
+                            names_summary.append(comp["name"])
+                            any_ok = True
+                        else:
+                            names_summary.append(f"{comp['name']} (gagal)")
+                    if any_ok:
+                        log_lines.append(f"- {res['name']} (Bundle ID {res['id']}): OK -> {folder}/ [{', '.join(names_summary)}]")
+                    else:
+                        log_lines.append(f"- {res['name']} (Bundle ID {res['id']}): GAGAL - semua komponen gagal")
 
             zf.writestr("README.txt",
                 "CATALOG PACKED DOWNLOAD\n" + "=" * 30 + "\n\n" +
