@@ -1161,7 +1161,10 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
       <div class="card">
         <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-        <div class="dl-grid">
+        <div id="cat-anim-warning" style="display:none;background:rgba(255,80,80,.1);border:1px solid #f55;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f88">
+          ⚠️ <span data-t-id="Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF." data-t-en="This is an Animation Bundle — it only contains motion/keyframe data, no 3D mesh. It can't be downloaded as OBJ/GLTF.">Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.</span>
+        </div>
+        <div class="dl-grid" id="cat-dl-grid">
           <div class="dl-card ready">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
@@ -1960,7 +1963,11 @@ async function fetchCatalog(){
     prog('cat-prog',100);
     st('cat-status',`✓ Item "${data.name}" ditemukan.`,'ok');
     if(data.isBundle){
-      st('cat-status',`✓ Bundle "${data.name}" ditemukan (${data.bundleItemCount||0} item di dalamnya).`,'ok');
+      if(data.isAnimationBundle){
+        st('cat-status',`⚠️ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.`,'err');
+      } else {
+        st('cat-status',`✓ Bundle "${data.name}" ditemukan (${data.bundleItemCount||0} item di dalamnya).`,'ok');
+      }
     }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
@@ -1970,13 +1977,17 @@ async function fetchCatalog(){
 function fillCatalogInfo(d){
   document.getElementById('cat-name').textContent    = d.name||'—';
   document.getElementById('cat-id').textContent      = d.assetId||'—';
-  document.getElementById('cat-type').textContent    = d.isBundle ? `Bundle (${d.bundleItemCount||0} item)` : (d.assetType||'—');
+  document.getElementById('cat-type').textContent    = d.isBundle ? `${d.isAnimationBundle?'Animation Bundle':'Bundle'} (${d.bundleItemCount||0} item)` : (d.assetType||'—');
   document.getElementById('cat-creator').textContent = d.creatorName||'—';
   document.getElementById('cat-price').textContent   = d.price!=null ? `${d.price} Robux` : 'Gratis';
   document.getElementById('cat-link').href           = d.catalogUrl||'#';
   if(d.thumbnailUrl){
     document.getElementById('cat-thumb').innerHTML=`<img src="${d.thumbnailUrl}" alt="${d.name}">`;
   }
+
+  const isAnim = !!d.isAnimationBundle;
+  document.getElementById('cat-anim-warning').style.display = isAnim ? 'block' : 'none';
+  document.getElementById('cat-dl-grid').style.display = isAnim ? 'none' : 'grid';
 }
 
 async function downloadCatalog(format){
@@ -2031,6 +2042,10 @@ async function addPackedItem(){
     const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
     const data = await res.json();
+    if(data.isAnimationBundle){
+      st('pk-status',`✗ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa ditambahkan ke pack.`,'err');
+      return;
+    }
     packedItems.push({
       id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl,
       isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0
