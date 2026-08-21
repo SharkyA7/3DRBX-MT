@@ -1661,6 +1661,30 @@ def _resolve_item_name(file_id, s):
     except: pass
     return None
 
+@app.get("/api/debug/oc-check")
+def debug_oc_check():
+    """TEMPORARY — verify ROBLOX_API_KEY actually authenticates against a genuine
+    Open Cloud endpoint. Visit this URL directly in a browser (phone-friendly, no
+    terminal/curl needed) to see the raw result. Remove this route once confirmed
+    working — it's diagnostic only and shouldn't stay in production."""
+    if not API_KEY:
+        return jsonify({"ok": False, "reason": "ROBLOX_API_KEY tidak diset di environment variables."}), 200
+    aid = request.args.get("asset_id", "1028606")  # any public catalog asset works
+    try:
+        s = get_scraper()
+        url = f"https://apis.roblox.com/assets/v1/assets/{aid}"
+        r = s.get(url, headers=oc_headers(), timeout=10)
+        return jsonify({
+            "ok": r.status_code == 200,
+            "status_code": r.status_code,
+            "url_tested": url,
+            "api_key_present": True,
+            "api_key_preview": API_KEY[:4] + "..." + API_KEY[-4:] if len(API_KEY) > 8 else "(pendek)",
+            "response_body": r.json() if r.headers.get("content-type","").startswith("application/json") else r.text[:500],
+        }), 200
+    except Exception as e:
+        return jsonify({"ok": False, "reason": str(e)}), 200
+
 def _fetch_asset_image_bytes(file_id, s):
     """Get the best-available raw 2D image for a catalog asset — used for items that
     have no 3D mesh at all (e.g. the new Profile/Avatar Backgrounds, Decals, Images),
