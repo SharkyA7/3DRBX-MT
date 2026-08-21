@@ -80,7 +80,7 @@ Open browser: http://localhost:8000
 | `GET /api/v2/item?id=&format=&name=` | Download one item/bundle (real mesh, OBJ/GLTF) |
 | `POST /api/v2/item-batch` | Packed Catalog — many items/bundles into one ZIP (`{"items":[{"id":..,"name":..}]}`) |
 | `GET /api/catalog/raw?asset_id=` | Raw file without conversion |
-| `GET /docs` | Automatic Swagger UI |
+| `GET /api/catalog/image?asset_id=` | Raw 2D image (Background/Decal/Image — not a mesh) |
 
 ---
 
