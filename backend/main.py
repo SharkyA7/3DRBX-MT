@@ -392,6 +392,14 @@ def check_rate_limit(bucket_name, limit, window_s):
 API_KEY = os.getenv("ROBLOX_API_KEY","")
 TIMEOUT = 15
 
+def oc_headers():
+    """Headers for a genuine Open Cloud (apis.roblox.com) request. Per Roblox's own
+    published OpenAPI spec, endpoints like /assets/v1/assets/{id} only accept
+    x-api-key or OAuth2 — cookie auth is explicitly NOT a valid option for them,
+    unlike the classic legacy endpoints (catalog.roblox.com, users.roblox.com, etc.)
+    that the rest of this app calls. Without this header those calls silently 401."""
+    return {"x-api-key": API_KEY} if API_KEY else {}
+
 
 def parse_rbxmx(data):
     """Parse RBXMX (XML format) Roblox model file.
@@ -1326,7 +1334,10 @@ def catalog_info():
         ]
         for ep in endpoints:
             try:
-                r = s.get(ep, timeout=10)
+                # Open Cloud (apis.roblox.com) needs x-api-key — the cookie-based
+                # cloudscraper session alone isn't accepted for this one per Roblox's spec.
+                extra_headers = oc_headers() if "apis.roblox.com" in ep else {}
+                r = s.get(ep, headers=extra_headers, timeout=10)
                 if r.status_code == 200:
                     item = r.json(); break
             except: continue
@@ -1635,7 +1646,8 @@ def _resolve_item_name(file_id, s):
     ]
     for ep in endpoints:
         try:
-            r = s.get(ep, timeout=10)
+            extra_headers = oc_headers() if "apis.roblox.com" in ep else {}
+            r = s.get(ep, headers=extra_headers, timeout=10)
             if r.status_code == 200:
                 name = r.json().get("name") or r.json().get("displayName")
                 if name: cache_set(ck, name); return name
