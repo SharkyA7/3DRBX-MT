@@ -1347,14 +1347,38 @@ def catalog_info():
                 result = {
                     "assetId": aid_int,
                     "isBundle": True,
+                    "isAnimationBundle": bundle.get("isAnimationBundle", False),
                     "name": bundle["name"],
-                    "assetType": "Bundle",
+                    "assetType": "Animation Bundle" if bundle.get("isAnimationBundle") else "Bundle",
                     "assetTypeId": None,
                     "creatorName": bundle.get("creatorName",""),
                     "price": bundle.get("price"),
                     "thumbnailUrl": thumb,
                     "catalogUrl": f"https://www.roblox.com/bundles/{aid_int}",
                     "bundleItemCount": len(bundle["asset_ids"]),
+                }
+                cache_set(cache_key, result)
+                return jsonify(result)
+
+            # Bukan Bundle juga — coba anggap sebagai aset gambar datar (mis. Avatar
+            # Background) yang belum/tidak dikenali endpoint metadata klasik di atas.
+            # Kalau thumbnail-nya ada, item ini nyata — tawarkan sebagai download PNG.
+            try:
+                th2    = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid_int}&size=420x420&format=Png",timeout=10).json()
+                thumb2 = (th2.get("data") or [{}])[0].get("imageUrl")
+            except: thumb2 = None
+            if thumb2:
+                name2 = _resolve_item_name(aid_int, s) or f"Asset {aid_int}"
+                result = {
+                    "assetId": aid_int,
+                    "isBackground": True,
+                    "name": name2,
+                    "assetType": "Profile Background",
+                    "assetTypeId": ASSET_TYPE_AVATAR_BACKGROUND,
+                    "creatorName": "",
+                    "price": None,
+                    "thumbnailUrl": thumb2,
+                    "catalogUrl": f"https://www.roblox.com/catalog/{aid_int}",
                 }
                 cache_set(cache_key, result)
                 return jsonify(result)
@@ -1370,13 +1394,40 @@ def catalog_info():
         creator = item.get("creatorName") or item.get("creator",{}).get("name","")
         price   = item.get("price") or item.get("priceInRobux")
         atype   = item.get("assetType") or item.get("assetTypeId")
+        is_bg   = _is_background_item(item)
 
-        result = {"assetId":aid_int,"name":name,"assetType":atype,
+        result = {"assetId":aid_int,"name":name,
+            "assetType":"Profile Background" if is_bg else atype,
+            "isBackground": is_bg,
             "creatorName":creator,"price":price,
             "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"}
         cache_set(cache_key, result)
         return jsonify(result)
     except Exception as e: return safe_error(e)
+
+@app.get("/api/catalog/image")
+def catalog_image():
+    """Download the raw 2D image for a catalog asset — for items with no 3D mesh at
+    all (Profile/Avatar Backgrounds, Decals, plain Images), where OBJ export isn't
+    possible because there's no geometry, but the item is genuinely just a picture."""
+    aid = request.args.get("asset_id","")
+    known_name = (request.args.get("name") or "").strip() or None
+    if not aid: return jsonify({"error":"asset_id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"asset_id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        return Response(content, mimetype=ctype or "image/png",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh gambar: {e}"}), 502
 
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
@@ -1598,6 +1649,34 @@ def _resolve_item_name(file_id, s):
     except: pass
     return None
 
+def _fetch_asset_image_bytes(file_id, s):
+    """Get the best-available raw 2D image for a catalog asset — used for items that
+    have no 3D mesh at all (e.g. the new Profile/Avatar Backgrounds, Decals, Images),
+    where OBJ export isn't possible but the item IS just a picture.
+    Returns (content_bytes, content_type, extension). Raises if nothing works."""
+    # 1) Try raw asset delivery — for classic Decal/Image assets this serves the
+    #    actual original file bytes, not a re-rendered thumbnail.
+    try:
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=20)
+        ctype = r.headers.get("content-type","")
+        if r.status_code == 200 and ctype.startswith("image/"):
+            ext = "jpg" if "jpeg" in ctype else "png"
+            return r.content, ctype, ext
+    except: pass
+
+    # 2) Fallback — largest available rendered thumbnail from Roblox's CDN
+    for size in ["1200x1200","768x768","420x420"]:
+        try:
+            th = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={file_id}&size={size}&format=Png", timeout=15).json()
+            entry = (th.get("data") or [{}])[0]
+            if entry.get("state") == "Completed" and entry.get("imageUrl"):
+                ir = s.get(entry["imageUrl"], timeout=20)
+                if ir.status_code == 200:
+                    return ir.content, ir.headers.get("content-type","image/png"), "png"
+        except: continue
+
+    raise Exception("Tidak bisa mengambil gambar untuk item ini")
+
 def _fetch_asset_mesh(file_id, s, known_name=None):
     """Fetch one Asset's name + real OBJ/MTL/texture data. Raises on failure.
     Pass known_name (e.g. from the frontend's earlier /api/catalog/info lookup)
@@ -1643,8 +1722,14 @@ def _write_package_to_zip(zf, folder, files):
         zf.writestr(f"{prefix}{fname}", content)
 
 def _resolve_bundle(bundle_id, s):
-    """Return {'name','creatorName','price','asset_ids'} if bundle_id is a valid Bundle, else None.
-    Cached for CACHE_TTL — bundle composition rarely changes."""
+    """Return {'name','creatorName','price','asset_ids','bundleType','isAnimationBundle'}
+    if bundle_id is a valid Bundle, else None.
+    Cached for CACHE_TTL — bundle composition rarely changes.
+
+    bundleType comes straight from Roblox: known values are 'BodyParts' (real 3D
+    meshes — heads, body parts, etc.) and 'AvatarAnimations' (keyframe/motion data,
+    no mesh at all — playing it back on the catalog page shows a generic default
+    rig, which is NOT the actual animation and isn't worth exporting as OBJ)."""
     ck = f"bundle_{bundle_id}"
     cached = cache_get(ck)
     if cached is not None: return cached or None  # cache_set(ck, False) marks a confirmed non-bundle
@@ -1654,11 +1739,14 @@ def _resolve_bundle(bundle_id, s):
             cache_set(ck, False); return None
         bd = r.json()
         asset_ids = [it.get("id") for it in bd.get("items", []) if it.get("type") == "Asset" and it.get("id")]
+        bundle_type = bd.get("bundleType")
         result = {
             "name": bd.get("name") or f"Bundle {bundle_id}",
             "creatorName": (bd.get("creator") or {}).get("name",""),
             "price": bd.get("price"),
             "asset_ids": asset_ids,
+            "bundleType": bundle_type,
+            "isAnimationBundle": bundle_type == "AvatarAnimations",
         }
         cache_set(ck, result)
         return result
@@ -1671,6 +1759,24 @@ def _bundle_thumbnail(bundle_id, s):
         return (th.get("data") or [{}])[0].get("imageUrl")
     except Exception:
         return None
+
+# ── Flat 2D assets (e.g. Profile/Avatar Backgrounds) ────────────────
+# Roblox added AssetType.AvatarBackground (numeric ID 92) in mid-2026 for the new
+# Avatar Backgrounds / profile personalization feature. These are flat images shown
+# behind the 3D avatar on a profile page — there is no mesh, no UV, nothing to export
+# as OBJ. Source: Roblox engine API history (AssetType.AvatarBackground : 92).
+ASSET_TYPE_AVATAR_BACKGROUND = 92
+
+def _is_background_item(item):
+    """Best-effort check of a catalog item-details response for AvatarBackground.
+    Different Roblox endpoints shape this field differently (assetType / assetTypeId /
+    AssetTypeId, numeric or string), so check every plausible key."""
+    for k in ("assetType", "assetTypeId", "AssetTypeId", "assetTypeName"):
+        v = item.get(k)
+        if v is None: continue
+        if str(v) == str(ASSET_TYPE_AVATAR_BACKGROUND): return True
+        if "avatarbackground" in str(v).lower().replace(" ", ""): return True
+    return False
 
 @app.get("/api/v2/avatar")
 def avatar_v2():
@@ -1765,6 +1871,7 @@ def item_v2():
         file_id = int(aid)
         s = get_scraper()
         is_bundle = False
+        is_image = False
         bundle_results = []
 
         try:
@@ -1773,37 +1880,55 @@ def item_v2():
             err = str(e)
             bundle = _resolve_bundle(file_id, s)
             if not bundle:
-                return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
-            if not bundle["asset_ids"]:
+                # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
+                try:
+                    img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+                    item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+                    safe_name_img = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+                    files = [(f"{safe_name_img}.{img_ext}", img_bytes)]
+                    is_image = True
+                except Exception:
+                    return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
+            elif bundle.get("isAnimationBundle"):
+                return jsonify({"error": f"'{bundle['name']}' adalah Animation Bundle (paket animasi), bukan mesh 3D. Animasi hanya berisi data gerakan/keyframe, tidak ada geometri untuk diekspor sebagai OBJ — jadi tidak bisa diunduh lewat fitur ini."}), 422
+            elif not bundle["asset_ids"]:
                 return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
-
-            is_bundle = True
-            item_name = known_name or bundle["name"]
-            files = []
-            with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
-                futs = {ex.submit(_fetch_asset_package, cid, s, None, (fmt=="gltf")): cid for cid in bundle["asset_ids"]}
-                for fut in as_completed(futs):
-                    cid = futs[fut]
-                    try:
-                        cname, csafe, cfiles = fut.result()
-                        files.extend(cfiles)
-                        bundle_results.append((cname, True, None))
-                    except Exception as ce:
-                        bundle_results.append((f"Asset {cid}", False, str(ce)))
-            if not any(r[1] for r in bundle_results):
-                return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
+            else:
+                is_bundle = True
+                item_name = known_name or bundle["name"]
+                files = []
+                with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
+                    futs = {ex.submit(_fetch_asset_package, cid, s, None, (fmt=="gltf")): cid for cid in bundle["asset_ids"]}
+                    for fut in as_completed(futs):
+                        cid = futs[fut]
+                        try:
+                            cname, csafe, cfiles = fut.result()
+                            files.extend(cfiles)
+                            bundle_results.append((cname, True, None))
+                        except Exception as ce:
+                            bundle_results.append((f"Asset {cid}", False, str(ce)))
+                if not any(r[1] for r in bundle_results):
+                    return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
 
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
 
-        readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
-        if is_bundle:
-            readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
-                f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
-            ) + "\n"
-        readme += (
-            f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
-            f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
-        )
+        if is_image:
+            readme = (
+                f"Item  : {item_name}\n"
+                f"Tipe  : Aset gambar datar (mis. Avatar/Profile Background) — BUKAN mesh 3D.\n"
+                f"Ini adalah gambar PNG biasa, bukan sesuatu yang bisa diimport sebagai OBJ ke\n"
+                f"Nomad Sculpt/Prisma 3D/Blender. Buka saja file .png-nya langsung."
+            )
+        else:
+            readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
+            if is_bundle:
+                readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
+                    f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
+                ) + "\n"
+            readme += (
+                f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
+                f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
+            )
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
@@ -1811,7 +1936,7 @@ def item_v2():
             zf.writestr("README.txt", readme)
 
         buf.seek(0)
-        fname = f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
+        fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
             headers={"Content-Disposition":f'attachment; filename="{fname}"'})
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
@@ -1835,9 +1960,21 @@ def _resolve_batch_entry(raw_id, known_name, s):
 
     bundle = _resolve_bundle(file_id, s)
     if not bundle or not bundle["asset_ids"]:
-        return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": asset_err}
+        # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
+        try:
+            img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+            item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+            safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+            return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
+                    "safe_name": safe_name, "files": [(f"{safe_name}.{img_ext}", img_bytes)]}
+        except Exception:
+            return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": asset_err}
 
     bundle_display_name = known_name or bundle["name"]
+    if bundle.get("isAnimationBundle"):
+        return {"raw_id": raw_id, "kind": "error", "id": file_id,
+                "error": f"'{bundle_display_name}' adalah Animation Bundle (paket animasi) — tidak punya mesh 3D, hanya data gerakan/keyframe. Tidak bisa diekspor sebagai OBJ."}
+
     comp_results = []
     # Bundles usually have only 2-5 components, so a small sequential loop within this
     # already-parallel worker is fine — avoids nested thread pools.
@@ -1922,6 +2059,10 @@ def item_batch_v2():
                     folder = unique_folder(f"{res['safe_name']}_{res['id']}")
                     _write_package_to_zip(zf, folder, res["files"])
                     log_lines.append(f"- {res['name']} (ID {res['id']}): OK -> {folder}/")
+                elif res["kind"] == "image":
+                    folder = unique_folder(f"{res['safe_name']}_{res['id']}_IMAGE")
+                    _write_package_to_zip(zf, folder, res["files"])
+                    log_lines.append(f"- {res['name']} (ID {res['id']}, gambar datar/Background — bukan mesh): OK -> {folder}/")
                 elif res["kind"] == "bundle":
                     safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in res["name"]).strip() or str(res["id"])
                     folder = unique_folder(f"{safe_bname}_{res['id']}_BUNDLE")
