@@ -1165,15 +1165,20 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           ⚠️ <span data-t-id="Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF." data-t-en="This is an Animation Bundle — it only contains motion/keyframe data, no 3D mesh. It can't be downloaded as OBJ/GLTF.">Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.</span>
         </div>
         <div class="dl-grid" id="cat-dl-grid">
-          <div class="dl-card ready">
+          <div class="dl-card ready" id="cat-dl-obj-card">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
             <button class="btn btn-green" onclick="downloadCatalog('obj')">⬇ OBJ ZIP</button>
           </div>
-          <div class="dl-card ready">
+          <div class="dl-card ready" id="cat-dl-gltf-card">
             <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-ok">SIAP</span></div>
             <div class="dl-desc">Dikonversi ke GLTF 2.0 dengan embedded buffer.</div>
             <button class="btn btn-amber" onclick="downloadCatalog('gltf')">⬇ GLTF ZIP</button>
+          </div>
+          <div class="dl-card ready" id="cat-dl-image-card" style="display:none">
+            <div class="dl-title"><span style="color:#8f8">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh).</span></div>
+            <button class="btn" style="background:#2a4;color:#fff" id="cat-dl-image-btn" onclick="downloadCatalogImage()">⬇ IMAGE (PNG)</button>
           </div>
         </div>
       </div>
@@ -1968,6 +1973,8 @@ async function fetchCatalog(){
       } else {
         st('cat-status',`✓ Bundle "${data.name}" ditemukan (${data.bundleItemCount||0} item di dalamnya).`,'ok');
       }
+    } else if(data.isBackground){
+      st('cat-status',`ℹ️ "${data.name}" adalah Profile Background (gambar 2D, bukan mesh) — download sebagai gambar tersedia di bawah.`,'ok');
     }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
@@ -1986,8 +1993,16 @@ function fillCatalogInfo(d){
   }
 
   const isAnim = !!d.isAnimationBundle;
+  const isBg = !!d.isBackground;
   document.getElementById('cat-anim-warning').style.display = isAnim ? 'block' : 'none';
+  // cat-dl-obj-card / cat-dl-gltf-card / cat-dl-image-card are siblings inside
+  // cat-dl-grid, so the grid itself only needs hiding entirely for Animation
+  // Bundles (nothing downloadable at all); for Backgrounds we keep the grid
+  // visible but swap which individual card shows.
   document.getElementById('cat-dl-grid').style.display = isAnim ? 'none' : 'grid';
+  document.getElementById('cat-dl-obj-card').style.display = isBg ? 'none' : '';
+  document.getElementById('cat-dl-gltf-card').style.display = isBg ? 'none' : '';
+  document.getElementById('cat-dl-image-card').style.display = isBg ? 'block' : 'none';
 }
 
 async function downloadCatalog(format){
@@ -2014,6 +2029,28 @@ async function downloadCatalog(format){
       st('cat-status',`✓ Download selesai!`,'ok');
     }
   }catch(e){ showApiError('cat-status', e.error?e:{message:e.message}); }
+}
+
+async function downloadCatalogImage(){
+  if(!currentAssetId) return;
+  const btn = document.getElementById('cat-dl-image-btn');
+  btn.disabled = true;
+  st('cat-status',`⏳ Mengunduh gambar...`,'loading');
+  try{
+    const name=document.getElementById('cat-name').textContent||currentAssetId;
+    const res=await fetch(`${BASE}/api/catalog/image?asset_id=${currentAssetId}&name=${encodeURIComponent(name)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
+    const blob=await res.blob();
+    const ext = blob.type.includes('jpeg') ? 'jpg' : 'png';
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:`${name}.${ext}`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('cat-status',`✓ Download gambar selesai!`,'ok');
+  }catch(e){
+    st('cat-status','✗ '+e.message,'err');
+  }finally{ btn.disabled=false; }
 }
 
 // ── KATALOG PACKED (BATCH) ──────────────────────────────────────────
@@ -2048,11 +2085,12 @@ async function addPackedItem(){
     }
     packedItems.push({
       id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl,
-      isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0
+      isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0,
+      isBackground: !!data.isBackground
     });
     renderPackedGrid();
     input.value=''; input.focus();
-    const tag = data.isBundle ? ` (Bundle, ${data.bundleItemCount||0} item)` : '';
+    const tag = data.isBundle ? ` (Bundle, ${data.bundleItemCount||0} item)` : (data.isBackground ? ` (Background)` : '');
     st('pk-status',`✓ "${data.name}"${tag} ditambahkan. (${packedItems.length} item)`,'ok');
   }catch(e){
     st('pk-status','✗ '+e.message,'err');
@@ -2085,6 +2123,7 @@ function renderPackedGrid(){
       <button class="packed-remove" onclick="removePackedItem(${it.id})" title="Hapus">×</button>
       <div class="packed-thumb">${it.thumbnailUrl?`<img src="${it.thumbnailUrl}" alt="${it.name.replace(/"/g,'')}">`:'🧢'}</div>
       ${it.isBundle?`<div style="font-size:8px;color:var(--amber);font-weight:700;letter-spacing:.04em;margin-bottom:2px">📦 BUNDLE · ${it.bundleItemCount}</div>`:''}
+      ${it.isBackground?`<div style="font-size:8px;color:#8f8;font-weight:700;letter-spacing:.04em;margin-bottom:2px">🖼️ IMAGE</div>`:''}
       <div class="packed-name">${it.name}</div>
       <div class="packed-id">#${it.id}</div>
     </div>
@@ -2131,6 +2170,7 @@ const ROUTES=[
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
   ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
+  ['GET','GET /api/catalog/image?asset_id=','Gambar 2D asli item (Background/Decal/Image — bukan mesh)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
