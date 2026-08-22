@@ -400,6 +400,26 @@ def oc_headers():
     that the rest of this app calls. Without this header those calls silently 401."""
     return {"x-api-key": API_KEY} if API_KEY else {}
 
+def fetch_asset_raw_bytes(asset_id, s, timeout=25):
+    """Fetch a Roblox asset's raw file content (.rbxm/.mesh/.png/etc — whatever that
+    asset ID actually is). Tries the newer, officially-supported Open Cloud Asset
+    Delivery API first (apis.roblox.com/asset-delivery-api — needs ROBLOX_API_KEY
+    scoped with legacy-asset:manage), then falls back to the older cookie-authenticated
+    assetdelivery.roblox.com domain — so this keeps working even if the key isn't
+    configured, just without the extra resilience the Open Cloud path provides.
+    Raises on total failure (both paths exhausted)."""
+    if API_KEY:
+        try:
+            r = s.get(f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}",
+                       headers=oc_headers(), timeout=timeout)
+            if r.status_code == 200 and r.content:
+                return r.content
+        except Exception:
+            pass
+    r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=timeout)
+    r.raise_for_status()
+    return r.content
+
 
 def parse_rbxmx(data):
     """Parse RBXMX (XML format) Roblox model file.
@@ -2252,11 +2272,10 @@ def model_info():
     try:
         file_id = int(aid)
         s = get_scraper()
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=25)
-        if r.status_code != 200:
-            return jsonify({"error": f"Gagal download asset (HTTP {r.status_code})", "supported": False}), 502
-
-        data = r.content
+        try:
+            data = fetch_asset_raw_bytes(file_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download asset ({e})", "supported": False}), 502
 
         # Detect format: XML (rbxmx) vs Binary (rbxm)
         is_xml = data[:20].lstrip().startswith(b'<roblox') and not data[:8] == b'<roblox!'
@@ -2439,11 +2458,11 @@ def model_mesh():
 
     try:
         s = get_scraper()
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={mesh_asset_id}", timeout=25)
-        if r.status_code != 200:
-            return jsonify({"error": f"Gagal download mesh (HTTP {r.status_code})"}), 502
+        try:
+            raw = fetch_asset_raw_bytes(mesh_asset_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download mesh ({e})"}), 502
 
-        raw = r.content
         if not raw.startswith(b"version"):
             return jsonify({"error": "Bukan format .mesh yang dikenali"}), 422
 
@@ -2474,11 +2493,11 @@ def model_texture():
 
     try:
         s = get_scraper()
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={tex_asset_id}", timeout=20)
-        if r.status_code != 200:
-            return jsonify({"error": f"Gagal download texture (HTTP {r.status_code})"}), 502
+        try:
+            content = fetch_asset_raw_bytes(tex_asset_id, s, timeout=20)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download texture ({e})"}), 502
 
-        content = r.content
         ctype = "image/png"
         if content[:2] == b"\xff\xd8":
             ctype = "image/jpeg"
@@ -2504,11 +2523,11 @@ def model_download():
 
     try:
         s = get_scraper()
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=30)
-        if r.status_code != 200:
-            return jsonify({"error": f"Gagal download asset (HTTP {r.status_code})"}), 502
+        try:
+            content = fetch_asset_raw_bytes(asset_id, s, timeout=30)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download asset ({e})"}), 502
 
-        content = r.content
         if not content:
             return jsonify({"error": "File kosong"}), 502
 
@@ -2728,11 +2747,10 @@ def model_mesh_union():
     try:
         s = get_scraper()
         # Fetch nested RBXM (PartOperationAsset)
-        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=25)
-        if r.status_code != 200:
-            return jsonify({"error": f"Gagal fetch Union asset (HTTP {r.status_code})"}), 502
-
-        rbxm_data = r.content
+        try:
+            rbxm_data = fetch_asset_raw_bytes(asset_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal fetch Union asset ({e})"}), 502
 
         # Parse nested RBXM
         try:
