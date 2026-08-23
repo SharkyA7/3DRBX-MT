@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request, Response, redirect
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def safe_filename(name):
@@ -419,6 +419,154 @@ def fetch_asset_raw_bytes(asset_id, s, timeout=25):
     r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=timeout)
     r.raise_for_status()
     return r.content
+
+# ── FONTS ─────────────────────────────────────────────────────────
+# A Roblox Font asset ID points to a "Family" JSON manifest listing every
+# weight/style ("Face"), each of which references ANOTHER asset ID — the actual
+# font binary (.ttf/.otf). Field casing isn't 100% consistent across sources, so
+# every lookup below checks multiple plausible key names defensively.
+def _extract_font_faces(family_json):
+    """Return [{'name','weight','style','asset_id'}] from a parsed Family JSON dict.
+    Returns [] if this doesn't look like a font family at all."""
+    faces_raw = family_json.get("faces") or family_json.get("Faces") or []
+    if not isinstance(faces_raw, list): return []
+    out = []
+    for f in faces_raw:
+        if not isinstance(f, dict): continue
+        aid_raw = f.get("assetId") or f.get("AssetId") or f.get("asset_id")
+        if not aid_raw: continue
+        m = re.search(r"(\d+)", str(aid_raw))
+        if not m: continue
+        out.append({
+            "name": f.get("name") or f.get("Name") or "Face",
+            "weight": f.get("weight") or f.get("Weight") or "",
+            "style": f.get("style") or f.get("Style") or "",
+            "asset_id": int(m.group(1)),
+        })
+    return out
+
+def fetch_font_package(file_id, s):
+    """Fetch a Font Family asset: the manifest JSON + every referenced Face's actual
+    font file. Returns (family_name, files:[(filename, bytes), ...]). Raises if this
+    asset ID isn't a font family at all (so callers can try something else)."""
+    raw = fetch_asset_raw_bytes(file_id, s, timeout=20)
+    try:
+        family = json.loads(raw)
+    except Exception:
+        raise Exception("Bukan Font Family JSON yang valid")
+    faces = _extract_font_faces(family)
+    if not faces:
+        raise Exception("Tidak ada Face ditemukan di Font Family ini")
+
+    family_name = family.get("name") or family.get("Name") or f"Font_{file_id}"
+    safe_family = "".join(c if c.isalnum() or c in " _-" else "_" for c in family_name).strip() or str(file_id)
+    files = [(f"{safe_family}_family.json", raw)]
+
+    for face in faces:
+        try:
+            font_bytes = fetch_asset_raw_bytes(face["asset_id"], s, timeout=20)
+        except Exception:
+            continue
+        # Sniff TTF/OTF/TTC by magic bytes rather than trusting any extension hint
+        if font_bytes[:4] in (b"OTTO",):
+            ext = "otf"
+        elif font_bytes[:4] in (b"\x00\x01\x00\x00", b"true", b"ttcf"):
+            ext = "ttf"
+        else:
+            ext = "ttf"  # most Roblox faces are TTF; safe default if sniff is inconclusive
+        style_part = "_".join(x for x in (face["weight"], face["style"]) if x) or face["name"]
+        safe_style = "".join(c if c.isalnum() or c in " _-" else "_" for c in style_part).strip()
+        files.append((f"{safe_family}_{safe_style}_{face['asset_id']}.{ext}", font_bytes))
+
+    if len(files) < 2:
+        raise Exception("Semua Face gagal diunduh")
+    return family_name, files
+
+# ── VIDEOS ────────────────────────────────────────────────────────
+# A Roblox Video asset ID resolves to an HLS manifest (.m3u8), not a playable file
+# directly — there's a master playlist listing quality variants, each pointing to a
+# media playlist that lists the actual .ts segment URLs. We pick the highest-bitrate
+# variant, download every segment, and concatenate them in order (MPEG-TS is designed
+# to be concatenation-safe). The result plays in VLC/ffmpeg-based players, but isn't a
+# polished single .mp4 — that would need an actual ffmpeg remux, which isn't something
+# to bundle into a lightweight Vercel Python function.
+MAX_VIDEO_SEGMENTS = 400     # safety cap so a huge video can't blow the function's time/memory budget
+MAX_VIDEO_BYTES = 180 * 1024 * 1024  # ~180MB cap, well under typical serverless response limits
+
+def _parse_m3u8(text, base_url):
+    """Return list of absolute URIs for every non-comment line in an m3u8 playlist,
+    resolving relative URIs against base_url."""
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"): continue
+        out.append(line if line.startswith("http") else urljoin(base_url, line))
+    return out
+
+def fetch_video_ts(file_id, s):
+    """Fetch a Video asset, resolve its HLS manifest chain, download and concatenate
+    every segment. Returns (raw_ts_bytes, segment_count). Raises on failure or if the
+    asset isn't actually an HLS manifest at all."""
+    manifest_url = None
+    manifest_text = None
+    if API_KEY:
+        try:
+            oc_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{file_id}"
+            r = s.get(oc_url, headers=oc_headers(), timeout=20)
+            if r.status_code == 200 and r.text.lstrip().startswith("#EXTM3U"):
+                manifest_url, manifest_text = oc_url, r.text
+        except Exception: pass
+    if manifest_text is None:
+        legacy_url = f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}"
+        r = s.get(legacy_url, timeout=20)
+        r.raise_for_status()
+        if not r.text.lstrip().startswith("#EXTM3U"):
+            raise Exception("Bukan Video (HLS manifest tidak ditemukan)")
+        manifest_url, manifest_text = legacy_url, r.text
+
+    # Master playlist? (lists quality variants, each itself an .m3u8) — pick the
+    # highest-bandwidth one. A media playlist (segments directly) has no
+    # #EXT-X-STREAM-INF lines, so this loop just won't find any and we fall through.
+    variant_url, best_bw = None, -1
+    lines = manifest_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("#EXT-X-STREAM-INF"):
+            m = re.search(r"BANDWIDTH=(\d+)", line)
+            bw = int(m.group(1)) if m else 0
+            if i + 1 < len(lines) and bw > best_bw:
+                nxt = lines[i+1].strip()
+                if nxt and not nxt.startswith("#"):
+                    variant_url = nxt if nxt.startswith("http") else urljoin(manifest_url, nxt)
+                    best_bw = bw
+    if variant_url:
+        r = s.get(variant_url, timeout=20)
+        r.raise_for_status()
+        manifest_url, manifest_text = variant_url, r.text
+
+    segment_urls = _parse_m3u8(manifest_text, manifest_url)
+    if not segment_urls:
+        raise Exception("Manifest video kosong — tidak ada segment ditemukan")
+    if len(segment_urls) > MAX_VIDEO_SEGMENTS:
+        raise Exception(f"Video terlalu panjang untuk diproses (>{MAX_VIDEO_SEGMENTS} segment).")
+
+    segments = [None] * len(segment_urls)
+    total_bytes = [0]
+    def _dl(i, url):
+        r = s.get(url, timeout=20)
+        r.raise_for_status()
+        return i, r.content
+    with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+        futs = [ex.submit(_dl, i, u) for i, u in enumerate(segment_urls)]
+        for fut in as_completed(futs):
+            i, content = fut.result()
+            segments[i] = content
+            total_bytes[0] += len(content)
+            if total_bytes[0] > MAX_VIDEO_BYTES:
+                raise Exception("Video terlalu besar untuk diproses di server ini.")
+
+    if any(seg is None for seg in segments):
+        raise Exception("Sebagian segment video gagal diunduh")
+    return b"".join(segments), len(segments)
 
 
 def parse_rbxmx(data):
@@ -1459,6 +1607,64 @@ def catalog_image():
             headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'})
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh gambar: {e}"}), 502
+
+@app.get("/api/2d/font")
+def api_2d_font():
+    """Download a Font Family asset — the manifest JSON plus every referenced Face's
+    actual font file (.ttf/.otf), packed into one ZIP."""
+    aid = request.args.get("id","")
+    if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        family_name, files = fetch_font_package(file_id, s)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in family_name).strip() or str(file_id)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            _write_package_to_zip(zf, None, files)
+            zf.writestr("README.txt",
+                f"Font Family: {family_name}\n"
+                f"Berisi {len(files)-1} Face (weight/style) + manifest JSON aslinya.\n\n"
+                "Import .ttf/.otf ke aplikasi font manapun, atau pakai langsung di\n"
+                "Roblox Studio lewat Font.fromId() dengan ID Family ini."
+            )
+        buf.seek(0)
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}_font.zip"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh font: {e}"}), 502
+
+@app.get("/api/2d/video")
+def api_2d_video():
+    """Download a Video asset. Roblox serves videos as an HLS manifest, not a single
+    file — this resolves the manifest chain, downloads every segment, and concatenates
+    them into one .ts file (MPEG-TS is concatenation-safe by design). Plays in VLC and
+    most ffmpeg-based players. NOT a polished re-muxed .mp4 — that needs an actual
+    ffmpeg pass, which this lightweight endpoint deliberately doesn't attempt."""
+    aid = request.args.get("id","")
+    known_name = (request.args.get("name") or "").strip() or None
+    if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=10, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, seg_count = fetch_video_ts(file_id, s)
+        return Response(content, mimetype="video/mp2t",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.ts"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh video: {e}"}), 502
 
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
