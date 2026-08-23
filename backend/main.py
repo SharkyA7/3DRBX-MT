@@ -2129,6 +2129,91 @@ def item_batch_v2():
             headers={"Content-Disposition":f'attachment; filename="{fname}"'})
     except Exception as e: return handle_roblox_error(e, "catalog_item_batch_download")
 
+def _resolve_image_batch_entry(raw_id, known_name, s):
+    """Worker for the 2D Assets batch — fetches ONE flat image asset (Decal, Image,
+    Face, GUI, Background, Texture) entirely in memory. No mesh/bundle fallback chain
+    at all, unlike the Catalog batch — the whole point of this endpoint is the caller
+    already knows it wants an image, so we skip straight to the image fetch."""
+    try:
+        file_id = int(raw_id)
+    except ValueError:
+        return {"raw_id": raw_id, "kind": "invalid", "error": "ID tidak valid"}
+    try:
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
+                "files": [(f"{safe_name}.{ext}", content)]}
+    except Exception as e:
+        return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": str(e)}
+
+@app.route("/api/v2/image-batch", methods=["POST"])
+def image_batch_v2():
+    """Packed 2D Assets download — many flat images (Decal/Image/Face/GUI/Background/
+    Texture, any mix) fetched concurrently, packed into ONE zip. No mesh/bundle
+    handling at all — for that, use /api/v2/item-batch instead.
+    Body: {"items":[{"id":123,"name":"Exact Name"}, ...]}"""
+    body = request.get_json(silent=True) or {}
+    entries = []
+    for it in (body.get("items") or []):
+        iid = it.get("id")
+        if iid is None: continue
+        entries.append((str(iid), (it.get("name") or "").strip() or None))
+
+    if not entries: return jsonify({"error":"items required"}),400
+    if len(entries) > MAX_BATCH_ITEMS:
+        return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
+
+    rl = check_rate_limit("item-batch", limit=5, window_s=300)
+    if rl: return rl
+
+    try:
+        s = get_scraper()
+        results_by_raw_id = {}
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+            futs = {ex.submit(_resolve_image_batch_entry, raw_id, known_name, s): raw_id for raw_id, known_name in entries}
+            for fut in as_completed(futs):
+                raw_id = futs[fut]
+                try:
+                    results_by_raw_id[raw_id] = fut.result()
+                except Exception as e:
+                    results_by_raw_id[raw_id] = {"raw_id": raw_id, "kind": "error", "error": str(e)}
+        ordered_results = [results_by_raw_id[raw_id] for raw_id, _ in entries]
+
+        buf = io.BytesIO()
+        log_lines = []
+        used_names = set()
+
+        def unique_name(base):
+            n = base; i = 2
+            while n in used_names: n = f"{base}_{i}"; i += 1
+            used_names.add(n)
+            return n
+
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            for res in ordered_results:
+                if res["kind"] in ("invalid","error"):
+                    log_lines.append(f"- ID {res['raw_id']}: GAGAL - {res.get('error','?')}")
+                    continue
+                fname, content = res["files"][0]
+                stem, _, extpart = fname.rpartition(".")
+                final = unique_name(f"{stem}_{res['id']}") + "." + extpart
+                zf.writestr(final, content)
+                log_lines.append(f"- {res['name']} (ID {res['id']}): OK -> {final}")
+
+            zf.writestr("README.txt",
+                "PACKED 2D ASSETS DOWNLOAD\n" + "=" * 30 + "\n\n" + "\n".join(log_lines)
+            )
+
+        if not used_names:
+            return jsonify({"error":"Semua item gagal diproses."}),502
+
+        buf.seek(0)
+        fname = f"image2d_packed_{len(used_names)}items.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return handle_roblox_error(e, "image_batch_download")
+
 @app.get("/api/proxy/avatar-3d")
 def proxy_avatar_3d():
     """Proxy endpoint - browser call ini, server fetch ke Roblox pakai cookie"""
