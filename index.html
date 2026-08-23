@@ -1217,10 +1217,23 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 
     <div class="card" id="img2d-dl-card" style="display:none">
       <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-      <div class="dl-card ready">
-        <div class="dl-title"><span style="color:#4af">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-        <div class="dl-desc"><span data-t-id="Gambar asli asset (PNG/JPEG), kualitas terbaik yang tersedia." data-t-en="The asset's original image (PNG/JPEG), best quality available.">Gambar asli asset (PNG/JPEG), kualitas terbaik yang tersedia.</span></div>
-        <button class="btn" style="background:#2a4;color:#fff" id="img2d-dl-btn" onclick="downloadImage2D()">⬇ <span data-t-id="DOWNLOAD IMAGE" data-t-en="DOWNLOAD IMAGE">DOWNLOAD IMAGE</span></button>
+      <p class="hint" style="margin-bottom:10px"><span data-t-id="Pilih tombol sesuai jenis aset — Decal/Image pakai IMAGE, font pakai FONT, video pakai VIDEO." data-t-en="Pick the button matching the asset's actual type — Decal/Image uses IMAGE, fonts use FONT, videos use VIDEO.">Pilih tombol sesuai jenis aset — Decal/Image pakai IMAGE, font pakai FONT, video pakai VIDEO.</span></p>
+      <div class="dl-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="dl-card ready">
+          <div class="dl-title"><span style="color:#4af">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+          <div class="dl-desc"><span data-t-id="Decal, Image, Face, GUI, Background." data-t-en="Decal, Image, Face, GUI, Background.">Decal, Image, Face, GUI, Background.</span></div>
+          <button class="btn" style="background:#2a4;color:#fff" id="img2d-dl-btn" onclick="downloadImage2D()">⬇ <span data-t-id="IMAGE" data-t-en="IMAGE">IMAGE</span></button>
+        </div>
+        <div class="dl-card ready">
+          <div class="dl-title"><span style="color:#c8f">FONT</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+          <div class="dl-desc"><span data-t-id="ZIP: manifest + semua file .ttf/.otf per weight/style." data-t-en="ZIP: manifest + every .ttf/.otf per weight/style.">ZIP: manifest + semua file .ttf/.otf per weight/style.</span></div>
+          <button class="btn" style="background:#84f;color:#fff" id="img2d-dl-font-btn" onclick="downloadFont2D()">⬇ <span data-t-id="FONT" data-t-en="FONT">FONT</span></button>
+        </div>
+        <div class="dl-card ready">
+          <div class="dl-title"><span style="color:#fa4">VIDEO</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+          <div class="dl-desc"><span data-t-id="File .ts (bukan .mp4) — bisa diputar di VLC." data-t-en=".ts file (not .mp4) — plays in VLC.">File .ts (bukan .mp4) — bisa diputar di VLC.</span></div>
+          <button class="btn btn-amber" id="img2d-dl-video-btn" onclick="downloadVideo2D()">⬇ <span data-t-id="VIDEO" data-t-en="VIDEO">VIDEO</span></button>
+        </div>
       </div>
     </div>
 
@@ -2291,6 +2304,46 @@ async function downloadImage2D(){
   }finally{ btn.disabled=false; }
 }
 
+async function downloadFont2D(){
+  if(!currentImage2DId) return;
+  const btn = document.getElementById('img2d-dl-font-btn');
+  btn.disabled = true;
+  st('img2d-status','⏳ Mengunduh font (manifest + semua face)…','loading');
+  try{
+    const res = await fetch(`${BASE}/api/2d/font?id=${currentImage2DId}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh font'); }
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `${currentImage2DName}_font.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('img2d-status',`✓ Download font selesai!`,'ok');
+  }catch(e){
+    st('img2d-status','✗ '+e.message+' (item ini mungkin bukan Font)','err');
+  }finally{ btn.disabled=false; }
+}
+
+async function downloadVideo2D(){
+  if(!currentImage2DId) return;
+  const btn = document.getElementById('img2d-dl-video-btn');
+  btn.disabled = true;
+  st('img2d-status','⏳ Mengunduh & menggabungkan segment video… (bisa agak lama)','loading');
+  try{
+    const res = await fetch(`${BASE}/api/2d/video?id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh video'); }
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `${currentImage2DName}.ts`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('img2d-status',`✓ Download selesai! File .ts — buka dengan VLC (bukan .mp4 biasa).`,'ok');
+  }catch(e){
+    st('img2d-status','✗ '+e.message+' (item ini mungkin bukan Video)','err');
+  }finally{ btn.disabled=false; }
+}
+
 document.getElementById('img2d-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchImage2D(); });
 
 // ── PACKED 2D ASSETS (BATCH) ────────────────────────────────────────
@@ -2399,6 +2452,8 @@ const ROUTES=[
   ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
   ['GET','GET /api/catalog/image?asset_id=','Gambar 2D asli item (Background/Decal/Image — bukan mesh)'],
   ['POST','POST /api/v2/image-batch','ZIP berisi banyak gambar 2D sekaligus (Decal/Image/Face/GUI/Background)'],
+  ['GET','GET /api/2d/font?id=','ZIP: Font Family manifest + semua file .ttf/.otf per Face'],
+  ['GET','GET /api/2d/video?id=','File .ts hasil gabungan semua segment HLS video (bukan .mp4)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
