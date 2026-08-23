@@ -1016,6 +1016,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <a class="dropdown-item" href="/Flipbook" style="text-decoration:none"><img class="nav-icon" src="/icons/FLIPBOOK.svg" alt=""> <span data-t-id="FLIPBOOK" data-t-en="FLIPBOOK">FLIPBOOK</span></a>
         <div class="dropdown-item" onclick="openDiscordModal();document.getElementById('dropdown-menu').style.display='none'">🎮 <span data-t-id="GABUNG DISCORD" data-t-en="JOIN DISCORD">JOIN DISCORD</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
+        <div class="dropdown-item" onclick="switchTab('image2d');document.getElementById('dropdown-menu').style.display='none'">🖼️ <span data-t-id="2D ASSETS" data-t-en="2D ASSETS">2D ASSETS</span></div>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
@@ -1181,6 +1182,75 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
             <button class="btn" style="background:#2a4;color:#fff" id="cat-dl-image-btn" onclick="downloadCatalogImage()">⬇ IMAGE (PNG)</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2D ASSETS PANEL ── -->
+  <div class="panel" id="panel-image2d">
+    <div class="card">
+      <div class="label"><span data-t-id="CARI 2D ASSET" data-t-en="SEARCH 2D ASSET">CARI 2D ASSET</span></div>
+      <div class="row">
+        <div style="flex:1;min-width:180px">
+          <input type="number" id="img2d-input" data-t-ph-id="Asset ID (Decal/Image/Face/GUI/Background)" data-t-ph-en="Asset ID (Decal/Image/Face/GUI/Background)" placeholder="Asset ID (Decal/Image/Face/GUI/Background)">
+          <p class="hint"><span data-t-id="Untuk aset 2D apapun: Decal, Image, Face, GUI, Texture, Background — bukan mesh 3D." data-t-en="For any 2D asset: Decal, Image, Face, GUI, Texture, Background — not a 3D mesh.">Untuk aset 2D apapun: Decal, Image, Face, GUI, Texture, Background — bukan mesh 3D.</span></p>
+        </div>
+        <button class="btn" id="img2d-btn" onclick="fetchImage2D()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
+      </div>
+      <div class="status-box idle" id="img2d-status"><div class="dot"></div><span id="img2d-msg"><span data-t-id="Siap." data-t-en="Ready.">Siap.</span></span></div>
+      <div class="prog"><div class="prog-fill" id="img2d-prog"></div></div>
+    </div>
+
+    <div class="card" id="img2d-result" style="display:none">
+      <div class="row" style="align-items:flex-start;gap:16px">
+        <div class="av-img" id="img2d-thumb" style="width:100px;flex-shrink:0">🖼️</div>
+        <div style="flex:1;min-width:160px">
+          <div class="irow"><span class="ikey"><span data-t-id="NAMA" data-t-en="NAME">NAMA</span></span><span class="ival" id="img2d-name">—</span></div>
+          <div class="irow" style="margin-top:8px"><span class="ikey">ID</span><span class="ival" id="img2d-id">—</span></div>
+          <div class="irow" style="margin-top:8px"><span class="ikey"><span data-t-id="TIPE" data-t-en="TYPE">TIPE</span></span><span class="ival" id="img2d-type">—</span></div>
+          <div class="irow" style="margin-top:8px"><span class="ikey">CREATOR</span><span class="ival" id="img2d-creator">—</span></div>
+          <div class="irow" style="margin-top:8px"><span class="ikey"><span data-t-id="HARGA" data-t-en="PRICE">HARGA</span></span><span class="ival" id="img2d-price">—</span></div>
+          <a id="img2d-link" href="#" target="_blank" rel="noopener" class="hint" style="display:block;margin-top:8px"><span data-t-id="Lihat di Roblox →" data-t-en="View on Roblox →">Lihat di Roblox →</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="img2d-dl-card" style="display:none">
+      <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
+      <div class="dl-card ready">
+        <div class="dl-title"><span style="color:#4af">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+        <div class="dl-desc"><span data-t-id="Gambar asli asset (PNG/JPEG), kualitas terbaik yang tersedia." data-t-en="The asset's original image (PNG/JPEG), best quality available.">Gambar asli asset (PNG/JPEG), kualitas terbaik yang tersedia.</span></div>
+        <button class="btn" style="background:#2a4;color:#fff" id="img2d-dl-btn" onclick="downloadImage2D()">⬇ <span data-t-id="DOWNLOAD IMAGE" data-t-en="DOWNLOAD IMAGE">DOWNLOAD IMAGE</span></button>
+      </div>
+    </div>
+
+    <button class="btn btn-amber" id="img2d-pk-toggle-btn" style="margin-top:14px" onclick="toggleImage2DPacked()">📦 <span data-t-id="PACKED 2D ASSETS" data-t-en="PACKED 2D ASSETS">PACKED 2D ASSETS</span></button>
+
+    <div id="img2d-packed" style="display:none">
+      <div class="card">
+        <div class="label"><span data-t-id="TAMBAH 2D ASSET KE PACK" data-t-en="ADD 2D ASSET TO PACK">TAMBAH 2D ASSET KE PACK</span></div>
+        <div class="row">
+          <div style="flex:1;min-width:180px">
+            <input type="number" id="img2d-pk-input" data-t-ph-id="Asset ID" data-t-ph-en="Asset ID" placeholder="Asset ID">
+          </div>
+          <button class="btn" id="img2d-pk-add-btn" onclick="addPacked2DItem()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
+        </div>
+        <div class="status-box idle" id="img2d-pk-status"><div class="dot"></div><span id="img2d-pk-msg"><span data-t-id="Belum ada item." data-t-en="No items yet.">Belum ada item.</span></span></div>
+      </div>
+
+      <div class="card" id="img2d-pk-preview-card" style="display:none">
+        <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span> (<span id="img2d-pk-count">0</span>)</div>
+        <div class="packed-grid" id="img2d-pk-grid"></div>
+      </div>
+
+      <div class="card" id="img2d-pk-download-card" style="display:none">
+        <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
+        <div class="dl-card ready">
+          <div class="dl-title"><span style="color:#2a4">IMAGES</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+          <div class="dl-desc"><span data-t-id="Semua gambar dibungkus jadi satu ZIP." data-t-en="All images packed into one ZIP.">Semua gambar dibungkus jadi satu ZIP.</span></div>
+          <button class="btn" style="background:#2a4;color:#fff" id="img2d-pk-download-btn" onclick="downloadPacked2DImages()">⬇ <span data-t-id="DOWNLOAD PACKED IMAGES ZIP" data-t-en="DOWNLOAD PACKED IMAGES ZIP">DOWNLOAD PACKED IMAGES ZIP</span></button>
+        </div>
+        <div class="prog"><div class="prog-fill" id="img2d-pk-prog"></div></div>
       </div>
     </div>
   </div>
@@ -2160,6 +2230,163 @@ async function downloadPackedCatalog(){
   }finally{ btn.disabled=false; }
 }
 
+// ── 2D ASSETS ────────────────────────────────────────────────────────
+let currentImage2DId = null;
+let currentImage2DName = null;
+
+async function fetchImage2D(){
+  const input = document.getElementById('img2d-input');
+  const id = parseInt(input.value);
+  if(!id||isNaN(id)){ st('img2d-status','Masukkan Asset ID yang valid.','err'); return; }
+
+  const btn = document.getElementById('img2d-btn');
+  btn.disabled = true;
+  st('img2d-status','Mengambil info…','loading'); prog('img2d-prog',30);
+  document.getElementById('img2d-result').style.display='none';
+  document.getElementById('img2d-dl-card').style.display='none';
+  try{
+    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
+    const data = await res.json();
+    prog('img2d-prog',100);
+    currentImage2DId = id;
+    currentImage2DName = data.name || String(id);
+
+    document.getElementById('img2d-name').textContent = data.name||'—';
+    document.getElementById('img2d-id').textContent = data.assetId||id;
+    document.getElementById('img2d-type').textContent = data.isBundle
+      ? `${data.isAnimationBundle?'Animation Bundle':'Bundle'} (${data.bundleItemCount||0} item)`
+      : (data.assetType||'—');
+    document.getElementById('img2d-creator').textContent = data.creatorName||'—';
+    document.getElementById('img2d-price').textContent = data.price!=null ? `${data.price} Robux` : 'Gratis';
+    document.getElementById('img2d-link').href = data.catalogUrl||'#';
+    document.getElementById('img2d-thumb').innerHTML = data.thumbnailUrl
+      ? `<img src="${data.thumbnailUrl}" alt="${data.name}">` : '🖼️';
+    document.getElementById('img2d-result').style.display='block';
+    document.getElementById('img2d-dl-card').style.display='block';
+
+    st('img2d-status',`✓ "${data.name}" ditemukan. Tekan DOWNLOAD IMAGE untuk mengambil gambar aslinya.`,'ok');
+  }catch(e){
+    st('img2d-status','✗ '+e.message,'err'); prog('img2d-prog',0);
+  }finally{ btn.disabled=false; }
+}
+
+async function downloadImage2D(){
+  if(!currentImage2DId) return;
+  const btn = document.getElementById('img2d-dl-btn');
+  btn.disabled = true;
+  st('img2d-status','⏳ Mengunduh gambar…','loading');
+  try{
+    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition')||'';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const fname = m ? m[1] : `${currentImage2DName}.png`;
+    const a = Object.assign(document.createElement('a'),{ href: URL.createObjectURL(blob), download: fname });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('img2d-status',`✓ Download selesai!`,'ok');
+  }catch(e){
+    st('img2d-status','✗ '+e.message,'err');
+  }finally{ btn.disabled=false; }
+}
+
+document.getElementById('img2d-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchImage2D(); });
+
+// ── PACKED 2D ASSETS (BATCH) ────────────────────────────────────────
+let packed2DItems = []; // { id, name, thumbnailUrl }
+
+function toggleImage2DPacked(){
+  const el = document.getElementById('img2d-packed');
+  const show = el.style.display === 'none';
+  el.style.display = show ? 'block' : 'none';
+  document.getElementById('img2d-pk-toggle-btn').innerHTML = show
+    ? '✕ <span>TUTUP PACKED</span>'
+    : '📦 <span data-t-id="PACKED 2D ASSETS" data-t-en="PACKED 2D ASSETS">PACKED 2D ASSETS</span>';
+  if(show) document.getElementById('img2d-pk-input').focus();
+}
+
+async function addPacked2DItem(){
+  const input = document.getElementById('img2d-pk-input');
+  const id = parseInt(input.value);
+  if(!id||isNaN(id)){ st('img2d-pk-status','Masukkan Asset ID yang valid.','err'); return; }
+  if(packed2DItems.some(it=>it.id===id)){ st('img2d-pk-status','Item sudah ada di daftar.','err'); return; }
+
+  const btn = document.getElementById('img2d-pk-add-btn');
+  btn.disabled = true;
+  st('img2d-pk-status','Mengambil detail item…','loading');
+  try{
+    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
+    const data = await res.json();
+    packed2DItems.push({ id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl });
+    renderPacked2DGrid();
+    input.value=''; input.focus();
+    st('img2d-pk-status',`✓ "${data.name}" ditambahkan. (${packed2DItems.length} item)`,'ok');
+  }catch(e){
+    st('img2d-pk-status','✗ '+e.message,'err');
+  }finally{ btn.disabled=false; }
+}
+
+function removePacked2DItem(id){
+  packed2DItems = packed2DItems.filter(it=>it.id!==id);
+  renderPacked2DGrid();
+  st('img2d-pk-status', packed2DItems.length ? `${packed2DItems.length} item di daftar.` : 'Belum ada item.', 'idle');
+}
+
+function renderPacked2DGrid(){
+  const grid = document.getElementById('img2d-pk-grid');
+  const previewCard = document.getElementById('img2d-pk-preview-card');
+  const dlCard = document.getElementById('img2d-pk-download-card');
+  document.getElementById('img2d-pk-count').textContent = packed2DItems.length;
+
+  if(packed2DItems.length===0){
+    previewCard.style.display='none';
+    dlCard.style.display='none';
+    grid.innerHTML='';
+    return;
+  }
+  previewCard.style.display='block';
+  dlCard.style.display='block';
+
+  grid.innerHTML = packed2DItems.map(it=>`
+    <div class="packed-item">
+      <button class="packed-remove" onclick="removePacked2DItem(${it.id})" title="Hapus">×</button>
+      <div class="packed-thumb">${it.thumbnailUrl?`<img src="${it.thumbnailUrl}" alt="${it.name.replace(/"/g,'')}">`:'🖼️'}</div>
+      <div class="packed-name">${it.name}</div>
+      <div class="packed-id">#${it.id}</div>
+    </div>
+  `).join('');
+}
+
+async function downloadPacked2DImages(){
+  if(packed2DItems.length===0) return;
+  const btn = document.getElementById('img2d-pk-download-btn');
+  btn.disabled = true;
+  prog('img2d-pk-prog', 15);
+  st('img2d-pk-status', `⏳ Membungkus ${packed2DItems.length} gambar…`,'loading');
+  try{
+    const items = packed2DItems.map(it=>({ id: it.id, name: it.name }));
+    const res = await fetch(`${BASE}/api/v2/image-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal membuat ZIP'); }
+    prog('img2d-pk-prog', 90);
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `image2d_packed_${packed2DItems.length}items.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    prog('img2d-pk-prog', 100);
+    st('img2d-pk-status', `✓ Download selesai! ${packed2DItems.length} gambar dalam satu ZIP.`,'ok');
+  }catch(e){
+    st('img2d-pk-status', '✗ '+e.message, 'err'); prog('img2d-pk-prog',0);
+  }finally{ btn.disabled=false; }
+}
+
 // ── API TABLE ─────────────────────────────────────────────────────
 const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
@@ -2171,6 +2398,7 @@ const ROUTES=[
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
   ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
   ['GET','GET /api/catalog/image?asset_id=','Gambar 2D asli item (Background/Decal/Image — bukan mesh)'],
+  ['POST','POST /api/v2/image-batch','ZIP berisi banyak gambar 2D sekaligus (Decal/Image/Face/GUI/Background)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
@@ -3641,7 +3869,7 @@ function closeNudge(){
 
 // Wrap existing fetch/download functions to track usage
 document.addEventListener('DOMContentLoaded', () => {
-  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar','addPackedItem'];
+  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar','addPackedItem','fetchImage2D'];
   fnNames.forEach(name => {
     if(typeof window[name] === 'function'){
       const original = window[name];
