@@ -1,0 +1,30 @@
+[package]
+name = "3drbx-rust-functions"
+version = "0.1.0"
+edition = "2021"
+# NOTE: this project's build system is Vercel's official Rust runtime, which builds
+# each [[bin]] under api/ as its own serverless function. See:
+# https://vercel.com/docs/functions/runtimes/rust
+# This file was written without the ability to `cargo build`/`cargo check` against
+# the real crates (no network access in the authoring environment) — the crate
+# versions below are best-effort pins based on their published docs at authoring
+# time. Run `cargo build` locally before deploying; version numbers or a field name
+# here or there may need a small adjustment.
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+vercel_runtime = { version = "2" }       # Vercel's function bridge
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# rbx-dom — the Rojo project's Roblox model (de)serializer. This is the actual
+# reason for using Rust here: it correctly handles ALL Roblox property types,
+# including SurfaceAppearance (the modern PBR material system), which the
+# project's existing hand-rolled Python parser does not.
+rbx_binary = "0.7"   # .rbxm / .rbxl (binary format)
+rbx_xml = "0.13"     # .rbxmx / .rbxlx (XML format)
+rbx_dom_weak = "2.9" # shared Instance/WeakDom types used by both of the above
+
+[[bin]]
+name = "parse_model"
+path = "api/parse_model.rs"
