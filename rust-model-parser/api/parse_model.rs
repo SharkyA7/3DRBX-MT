@@ -13,16 +13,16 @@
 // understand SurfaceAppearance / modern PBR materials, among other gaps).
 //
 // AUTHORING NOTE: written without the ability to `cargo build`/`cargo check`
-// against the real crates. First build attempt failed on vercel_runtime usage
-// (fixed: this now uses the confirmed-correct `service_fn(handler)` + `Result<Value,
-// Error>` pattern from Vercel's own current official example, vs. the wrong
-// Response<Body>-based pattern from an outdated/community example I'd followed
-// initially). Remaining highest-risk spots, each marked `// VERIFY` below:
-//   1. How `Request::body()` exposes raw bytes (Body enum variants assumed)
-//   2. rbx_xml's exact entry-point function name
-//   3. Whether `instance.properties` iterates directly as shown
+// against the real crates. Build attempt #1 failed on vercel_runtime usage (fixed:
+// switched from an outdated 1.x-era Response<Body> pattern to the confirmed-current
+// `service_fn(handler)` + `Result<Value, Error>` pattern). Build attempt #2 failed
+// because `Request::body()` doesn't return an enum like I'd guessed — fixed by
+// checking docs.rs directly: `Request = http::Request<hyper::body::Incoming>`,
+// read via `req.into_body().collect().await?.to_bytes()` (http_body_util::BodyExt).
+// Remaining unverified spot, marked `// VERIFY` below:
+//   - rbx_xml's exact entry-point function name
 // The rbx-dom parsing logic itself (variant_to_json, parse_dom) is independent of
-// all three and shouldn't need changes even if those need adjusting.
+// that and shouldn't need changes even if it needs adjusting.
 
 use rbx_dom_weak::{WeakDom};
 use rbx_dom_weak::types::{Ref, Variant};
@@ -30,6 +30,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use vercel_runtime::{run, service_fn, Error, Request};
+use http_body_util::BodyExt;
 
 #[derive(Serialize)]
 struct FlatInstance {
@@ -118,20 +119,12 @@ fn parse_dom(dom: &WeakDom) -> Vec<FlatInstance> {
 }
 
 async fn handler(req: Request) -> Result<Value, Error> {
-    // VERIFY: body-extraction is the one part of this rewrite I couldn't confirm
-    // against an official example (the docs snippet I have access to doesn't show
-    // a body-reading handler, only a no-args "hello world" one). `Request` here
-    // comes from the vercel_runtime crate, which is lambda_http-derived — in that
-    // ecosystem `req.body()` returns a `&Body` enum (Empty/Text(String)/
-    // Binary(Vec<u8>)), which is what the match below assumes. If this doesn't
-    // compile, check vercel_runtime::Body's actual variants on docs.rs and adjust
-    // this match accordingly — everything below this point (the actual rbx-dom
-    // parsing) does not depend on exactly how this part resolves.
-    let body_bytes: Vec<u8> = match req.body() {
-        vercel_runtime::Body::Empty => Vec::new(),
-        vercel_runtime::Body::Text(s) => s.clone().into_bytes(),
-        vercel_runtime::Body::Binary(b) => b.clone(),
-    };
+    // CONFIRMED (docs.rs, vercel_runtime 2.1.1): Request = http::Request<hyper::
+    // body::Incoming> — a streaming body, not a simple enum. collect() reads it
+    // fully into memory (fine here; .rbxm files are small enough this isn't a
+    // streaming-processing situation).
+    let collected = req.into_body().collect().await?;
+    let body_bytes: Vec<u8> = collected.to_bytes().to_vec();
 
     if body_bytes.is_empty() {
         return Ok(json!({"error": "empty body — POST raw .rbxm/.rbxmx bytes"}));
