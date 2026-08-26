@@ -25,6 +25,11 @@ rbx_binary = "0.7"   # .rbxm / .rbxl (binary format)
 rbx_xml = "0.13"     # .rbxmx / .rbxlx (XML format)
 rbx_dom_weak = "2.9" # shared Instance/WeakDom types used by both of the above
 
+# Needed to read the request body: vercel_runtime::Request is a type alias for
+# http::Request<hyper::body::Incoming> (confirmed via docs.rs) — Incoming is a
+# streaming body, and BodyExt::collect() is what turns it into actual bytes.
+http-body-util = "0.1"
+
 [[bin]]
 name = "parse_model"
 path = "api/parse_model.rs"
