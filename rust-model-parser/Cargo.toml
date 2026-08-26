@@ -1,5 +1,5 @@
 [package]
-name = "3drbx-rust-functions"
+name = "rbx-rust-functions"
 version = "0.1.0"
 edition = "2021"
 # NOTE: this project's build system is Vercel's official Rust runtime, which builds
