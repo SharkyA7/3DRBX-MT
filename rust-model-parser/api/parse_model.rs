@@ -13,18 +13,23 @@
 // understand SurfaceAppearance / modern PBR materials, among other gaps).
 //
 // AUTHORING NOTE: written without the ability to `cargo build`/`cargo check`
-// against the real rbx-dom crates (no network access in the authoring sandbox).
-// The rbx_binary::from_reader / dom.root() / dom.get_by_ref() shapes below are
-// confirmed from the crate's own published usage example, but exact field names on
-// `Instance` (e.g. whether the properties map key type is `Ustr` vs `String`) are
-// the most likely spot to need a small fix after a real `cargo build`.
+// against the real crates. First build attempt failed on vercel_runtime usage
+// (fixed: this now uses the confirmed-correct `service_fn(handler)` + `Result<Value,
+// Error>` pattern from Vercel's own current official example, vs. the wrong
+// Response<Body>-based pattern from an outdated/community example I'd followed
+// initially). Remaining highest-risk spots, each marked `// VERIFY` below:
+//   1. How `Request::body()` exposes raw bytes (Body enum variants assumed)
+//   2. rbx_xml's exact entry-point function name
+//   3. Whether `instance.properties` iterates directly as shown
+// The rbx-dom parsing logic itself (variant_to_json, parse_dom) is independent of
+// all three and shouldn't need changes even if those need adjusting.
 
 use rbx_dom_weak::{WeakDom};
 use rbx_dom_weak::types::{Ref, Variant};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::HashMap;
-use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
+use vercel_runtime::{run, service_fn, Error, Request};
 
 #[derive(Serialize)]
 struct FlatInstance {
@@ -112,13 +117,24 @@ fn parse_dom(dom: &WeakDom) -> Vec<FlatInstance> {
     out
 }
 
-async fn handler(req: Request) -> Result<Response<Body>, Error> {
-    let body_bytes: &[u8] = req.body();
+async fn handler(req: Request) -> Result<Value, Error> {
+    // VERIFY: body-extraction is the one part of this rewrite I couldn't confirm
+    // against an official example (the docs snippet I have access to doesn't show
+    // a body-reading handler, only a no-args "hello world" one). `Request` here
+    // comes from the vercel_runtime crate, which is lambda_http-derived — in that
+    // ecosystem `req.body()` returns a `&Body` enum (Empty/Text(String)/
+    // Binary(Vec<u8>)), which is what the match below assumes. If this doesn't
+    // compile, check vercel_runtime::Body's actual variants on docs.rs and adjust
+    // this match accordingly — everything below this point (the actual rbx-dom
+    // parsing) does not depend on exactly how this part resolves.
+    let body_bytes: Vec<u8> = match req.body() {
+        vercel_runtime::Body::Empty => Vec::new(),
+        vercel_runtime::Body::Text(s) => s.clone().into_bytes(),
+        vercel_runtime::Body::Binary(b) => b.clone(),
+    };
+
     if body_bytes.is_empty() {
-        return Ok(Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header("content-type", "application/json")
-            .body(json!({"error": "empty body — POST raw .rbxm/.rbxmx bytes"}).to_string().into())?);
+        return Ok(json!({"error": "empty body — POST raw .rbxm/.rbxmx bytes"}));
     }
 
     // Detect binary (.rbxm, starts with the magic header) vs XML (.rbxmx, starts
@@ -128,38 +144,35 @@ async fn handler(req: Request) -> Result<Response<Body>, Error> {
             .iter()
             .position(|&b| !b.is_ascii_whitespace())
             .map(|i| &body_bytes[i..])
-            .unwrap_or(body_bytes);
+            .unwrap_or(&body_bytes[..]);
         trimmed.starts_with(b"<roblox")
     };
 
-    let parse_result = if is_xml {
+    // Both branches are normalized to Result<WeakDom, String> (via .map_err) since
+    // rbx_xml::DecodeError and rbx_binary::DecodeError are different types — an
+    // if/else needs both arms to produce the same type.
+    let parse_result: Result<WeakDom, String> = if is_xml {
         // VERIFY: exact function name — rbx_xml's entry point may be named
         // differently (e.g. `from_reader` with a DecodeOptions arg instead of a
         // `_default` variant). Check rbx_xml's docs.rs page if this line errors.
-        rbx_xml::from_reader_default(body_bytes)
+        rbx_xml::from_reader_default(&body_bytes[..]).map_err(|e| e.to_string())
     } else {
-        rbx_binary::from_reader(body_bytes)
+        rbx_binary::from_reader(&body_bytes[..]).map_err(|e| e.to_string())
     };
 
     let dom = match parse_result {
         Ok(d) => d,
         Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::UNPROCESSABLE_ENTITY)
-                .header("content-type", "application/json")
-                .body(json!({"error": format!("Gagal parse RBXM/RBXMX: {}", e), "supported": false}).to_string().into())?);
+            return Ok(json!({"error": format!("Gagal parse RBXM/RBXMX: {}", e), "supported": false}));
         }
     };
 
     let instances = parse_dom(&dom);
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(json!({ "instances": instances, "count": instances.len() }).to_string().into())?)
+    Ok(json!({ "instances": instances, "count": instances.len() }))
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    run(handler).await
+    let service = service_fn(handler);
+    run(service).await
 }
