@@ -390,6 +390,13 @@ def check_rate_limit(bucket_name, limit, window_s):
     return None
 
 API_KEY = os.getenv("ROBLOX_API_KEY","")
+# Optional standalone Rust parsing service (see /rust-model-parser) — a real
+# rbx-dom-based .rbxm/.rbxmx parser that correctly handles SurfaceAppearance/PBR
+# materials, unlike the hand-rolled Python parser below. Purely additive: if this
+# isn't set, or the service errors, model_info() falls back to the Python parser
+# unchanged. Set to the deployed URL of that separate Vercel project, e.g.
+# "https://your-parser-name.vercel.app" (no trailing slash).
+MODEL_PARSER_URL = os.getenv("ROBLOX_MODEL_PARSER_URL","").rstrip("/")
 TIMEOUT = 15
 
 def oc_headers():
@@ -2552,11 +2559,215 @@ application = app
 def audio_test():
     return jsonify({"status":"audio ok"})
 
+# ── Rust-based model parser integration (optional, additive) ───────
+def _extract_asset_id_str(value):
+    """Pull a numeric Roblox asset ID out of whatever string shape a Content/Ref
+    property came through as from the Rust parser (e.g. 'rbxassetid://123',
+    or a Rust Debug-formatted struct string) — same defensive regex approach
+    already used elsewhere in this file for exactly this kind of inconsistency."""
+    if not value: return None
+    m = re.search(r"(\d{4,})", str(value))
+    return m.group(1) if m else None
+
+_PART_TYPE_BY_ENUM = {0: "Ball", 1: "Block", 2: "Cylinder"}  # Enum.PartType
+
+def _parse_model_via_rust_service(raw_bytes):
+    """POST raw .rbxm/.rbxmx bytes to the standalone Rust parser service and
+    return its 'instances' list. Raises if the service isn't configured, is
+    unreachable, or returns an error — callers should catch and fall back to
+    the Python parser below."""
+    if not MODEL_PARSER_URL:
+        raise Exception("ROBLOX_MODEL_PARSER_URL tidak diset")
+    r = requests.post(f"{MODEL_PARSER_URL}/api/parse_model", data=raw_bytes, timeout=25)
+    r.raise_for_status()
+    body = r.json()
+    if "instances" not in body:
+        raise Exception(body.get("error", "Response tidak valid dari parser service"))
+    return body["instances"]
+
+@app.get("/api/debug/model-parser-check")
+def debug_model_parser_check():
+    """TEMPORARY — verify the standalone Rust parser service is actually being
+    reached and working, since model_info() silently falls back to the old Python
+    parser on ANY failure here — meaning a 422 in the app could be coming from
+    either path with no way to tell from the outside. Visit this URL directly in a
+    browser (phone-friendly) with ?id=<assetId>. Remove once confirmed working."""
+    aid = request.args.get("id", "4446576906")  # defaults to the Noob NPC model we've been testing
+    result = {"MODEL_PARSER_URL_configured": bool(MODEL_PARSER_URL), "MODEL_PARSER_URL": MODEL_PARSER_URL or None}
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({**result, "ok": False, "reason": "id harus angka"}), 200
+    try:
+        s = get_scraper()
+        try:
+            raw = fetch_asset_raw_bytes(file_id, s, timeout=25)
+            result["asset_fetch_ok"] = True
+            result["asset_bytes"] = len(raw)
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "fetch_asset", "reason": str(e)}), 200
+
+        try:
+            rust_url = f"{MODEL_PARSER_URL}/api/parse_model"
+            r = requests.post(rust_url, data=raw, timeout=25)
+            result["rust_http_status"] = r.status_code
+            result["rust_url_tested"] = rust_url
+            try:
+                body = r.json()
+            except Exception:
+                return jsonify({**result, "ok": False, "stage": "rust_response_not_json", "raw_response_preview": r.text[:500]}), 200
+            if "instances" not in body:
+                return jsonify({**result, "ok": False, "stage": "rust_returned_error", "rust_body": body}), 200
+            result["instance_count"] = len(body["instances"])
+            result["sample_instance"] = body["instances"][0] if body["instances"] else None
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "rust_service_unreachable", "reason": str(e)}), 200
+
+        try:
+            manifest = _manifest_from_rust_instances(body["instances"], file_id)
+            result["manifest_supported"] = manifest.get("supported")
+            result["manifest_reasons"] = manifest.get("reasons")
+            result["manifest_total_parts"] = manifest.get("totalParts")
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "manifest_conversion", "reason": str(e)}), 200
+
+        return jsonify({**result, "ok": True}), 200
+    except Exception as e:
+        return jsonify({**result, "ok": False, "stage": "unexpected", "reason": str(e)}), 200
+
+_ANIMATION_CLASSES = {"Animation", "AnimationController", "Humanoid", "Motor6D", "Motor", "AnimationTrack"}
+
+def _manifest_from_rust_instances(instances, file_id):
+    """Convert the Rust parser's flat instance list into the SAME manifest shape
+    model_info() has always returned, so the frontend needs zero changes. This is
+    also where the actual SurfaceAppearance fix lives: a MeshPart's texture now
+    prefers its SurfaceAppearance child's ColorMap (the modern PBR material Roblox
+    uses instead of a flat TextureID) when present, falling back to legacy
+    TextureID otherwise — this is exactly the gap that caused the "blocky, no
+    texture" results reported earlier."""
+    by_referent = {inst["referent"]: inst for inst in instances}
+    children_by_parent = {}
+    for inst in instances:
+        children_by_parent.setdefault(inst.get("parent_referent"), []).append(inst)
+
+    def surface_appearance_texture(mesh_referent):
+        for child in children_by_parent.get(mesh_referent, []):
+            if child["class_name"] == "SurfaceAppearance":
+                props = child["properties"]
+                for key in ("ColorMap", "NormalMap", "MetalnessMap", "RoughnessMap"):
+                    aid = _extract_asset_id_str(props.get(key))
+                    if aid: return aid, "SurfaceAppearance." + key
+        return None, None
+
+    def special_mesh(part_referent):
+        for child in children_by_parent.get(part_referent, []):
+            if child["class_name"] in ("SpecialMesh", "FileMesh"):
+                props = child["properties"]
+                return {
+                    "meshId": _extract_asset_id_str(props.get("MeshId")),
+                    "textureId": _extract_asset_id_str(props.get("TextureId")),
+                }
+        return None
+
+    animation_classes_found = sorted({
+        inst["class_name"] for inst in instances if inst["class_name"] in _ANIMATION_CLASSES
+    })
+
+    parts = []
+    meshpart_count = part_count = union_count = 0
+    for inst in instances:
+        cn = inst["class_name"]
+        props = inst["properties"]
+        if cn not in ("MeshPart", "Part", "UnionOperation"):
+            continue
+
+        size = props.get("Size") or [1.0, 1.0, 1.0]
+        cframe = props.get("CFrame")
+        if isinstance(cframe, dict) and "position" in cframe:
+            position = cframe["position"]
+            orientation = cframe.get("orientation") or [[1,0,0],[0,1,0],[0,0,1]]
+            rot_flat = [v for row in orientation for v in row]
+            rotation = {"status": "decoded", "value": rot_flat, "rawRotationId": None}
+        else:
+            position = [0.0, 0.0, 0.0]
+            rotation = {"status": "identity-fallback", "value": [1,0,0,0,1,0,0,0,1], "rawRotationId": None}
+
+        color = props.get("Color3uint8") or props.get("Color3") or [163, 162, 165]
+        if all(isinstance(c, float) and c <= 1.0 for c in color):
+            color = [round(c * 255) for c in color]  # Color3 (0-1 float) -> 0-255
+
+        part_dict = {
+            "name": inst.get("name") or cn,
+            "className": cn,
+            "position": {"status": "decoded", "value": [round(float(v), 4) for v in position]},
+            "size": {"status": "decoded", "value": [round(float(v), 4) for v in size]},
+            "rotation": rotation,
+            "color": {"status": "best-effort", "value": list(color)},
+        }
+
+        if cn == "MeshPart":
+            meshpart_count += 1
+            mesh_id = _extract_asset_id_str(props.get("MeshId"))
+            tex_id, tex_source = surface_appearance_texture(inst["referent"])
+            if not tex_id:
+                tex_id = _extract_asset_id_str(props.get("TextureID"))
+                tex_source = "TextureID" if tex_id else None
+            part_dict["meshId"] = mesh_id
+            part_dict["textureId"] = tex_id
+            part_dict["textureIdType"] = tex_source
+        elif cn == "Part":
+            part_count += 1
+            shape_enum = props.get("Shape")
+            part_dict["shape"] = _PART_TYPE_BY_ENUM.get(shape_enum, "Block") if isinstance(shape_enum, int) else "Block"
+            part_dict["meshId"] = None
+            part_dict["textureId"] = _extract_asset_id_str(props.get("TextureID"))
+            part_dict["textureIdType"] = "TextureID" if part_dict["textureId"] else None
+            part_dict["specialMesh"] = special_mesh(inst["referent"])
+        elif cn == "UnionOperation":
+            union_count += 1
+            part_dict["meshId"] = None
+            part_dict["textureId"] = None
+            part_dict["unionAssetId"] = _extract_asset_id_str(props.get("AssetId"))
+
+        parts.append(part_dict)
+
+    total_parts_all = meshpart_count + part_count + union_count
+    reasons = []
+    if animation_classes_found:
+        reasons.append(
+            f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+            "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+            "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+            "If this is a character, try the Avatar feature instead."
+        )
+    if total_parts_all > 500:
+        reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 500)")
+    if total_parts_all == 0 and not animation_classes_found:
+        reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
+    supported = (0 < total_parts_all <= 500) and not animation_classes_found
+
+    return {
+        "assetId": file_id,
+        "supported": supported,
+        "reasons": reasons,
+        "meshPartCount": meshpart_count,
+        "partCount": part_count,
+        "unionCount": union_count,
+        "totalParts": total_parts_all,
+        "parts": parts,
+        "isAnimationAsset": bool(animation_classes_found),
+        "animationClassesFound": animation_classes_found,
+        "parserUsed": "rust-rbx-dom",
+    }
+
 @app.get("/api/v2/model/info")
 def model_info():
-    """MVP: parse RBXM (Model assets from create.roblox.com), return manifest.
-    Supports only MeshPart+Part, no UnionOperation, <=30 parts.
-    Rotation is identity-fallback (not yet decoded)."""
+    """Parse RBXM (Model assets from create.roblox.com), return manifest.
+    Tries the standalone Rust/rbx-dom parser service first (proper SurfaceAppearance/
+    PBR support — see /rust-model-parser) if ROBLOX_MODEL_PARSER_URL is configured;
+    falls back to the Python parser below (which doesn't understand SurfaceAppearance)
+    if that's not set up or fails for any reason. Either way the response shape is
+    identical, so the frontend doesn't need to know which one ran."""
     aid = request.args.get("id", "")
     if not aid: return jsonify({"error": "id required"}), 400
 
@@ -2567,6 +2778,13 @@ def model_info():
             data = fetch_asset_raw_bytes(file_id, s, timeout=25)
         except Exception as e:
             return jsonify({"error": f"Gagal download asset ({e})", "supported": False}), 502
+
+        if MODEL_PARSER_URL:
+            try:
+                rust_instances = _parse_model_via_rust_service(data)
+                return jsonify(_manifest_from_rust_instances(rust_instances, file_id))
+            except Exception:
+                pass  # fall through to the Python parser below
 
         # Detect format: XML (rbxmx) vs Binary (rbxm)
         is_xml = data[:20].lstrip().startswith(b'<roblox') and not data[:8] == b'<roblox!'
