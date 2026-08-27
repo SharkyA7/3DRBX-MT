@@ -19,10 +19,14 @@
 // because `Request::body()` doesn't return an enum like I'd guessed — fixed by
 // checking docs.rs directly: `Request = http::Request<hyper::body::Incoming>`,
 // read via `req.into_body().collect().await?.to_bytes()` (http_body_util::BodyExt).
-// Remaining unverified spot, marked `// VERIFY` below:
-//   - rbx_xml's exact entry-point function name
-// The rbx-dom parsing logic itself (variant_to_json, parse_dom) is independent of
-// that and shouldn't need changes even if it needs adjusting.
+// It compiled and deployed successfully after that. First live test then returned
+// "Invalid file header" — a real bug, not a guess: the binary/XML format detection
+// only checked for the "<roblox" prefix, but binary .rbxm files start with
+// "<roblox!", which also matches that prefix, so real binary files were being
+// wrongly routed into the XML parser. Fixed to exclude that case, mirroring what
+// the existing Python parser already got right. rbx_xml::from_reader_default's
+// exact name turned out to be correct (no error about it) — no remaining known
+// unverified spots as of this fix.
 
 use rbx_dom_weak::{WeakDom};
 use rbx_dom_weak::types::{Ref, Variant};
@@ -130,15 +134,21 @@ async fn handler(req: Request) -> Result<Value, Error> {
         return Ok(json!({"error": "empty body — POST raw .rbxm/.rbxmx bytes"}));
     }
 
-    // Detect binary (.rbxm, starts with the magic header) vs XML (.rbxmx, starts
-    // with "<roblox"). Same detection heuristic the existing Python parser uses.
+    // Detect binary (.rbxm — starts with the literal magic bytes "<roblox!") vs
+    // XML (.rbxmx — starts with "<roblox" followed by anything OTHER than "!",
+    // e.g. a space before an attribute). The two prefixes overlap on their first
+    // 7 bytes, so checking for "<roblox" alone (what this used to do) wrongly
+    // routes real binary files into the XML parser — exactly matching the
+    // "Invalid file header" error hit while testing. Mirrors the check the
+    // existing Python parser already gets right:
+    //   is_xml = data[:20].lstrip().startswith(b'<roblox') and data[:8] != b'<roblox!'
     let is_xml = {
         let trimmed = body_bytes
             .iter()
             .position(|&b| !b.is_ascii_whitespace())
             .map(|i| &body_bytes[i..])
             .unwrap_or(&body_bytes[..]);
-        trimmed.starts_with(b"<roblox")
+        trimmed.starts_with(b"<roblox") && !trimmed.starts_with(b"<roblox!")
     };
 
     // Both branches are normalized to Result<WeakDom, String> (via .map_err) since
