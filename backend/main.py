@@ -414,13 +414,35 @@ def fetch_asset_raw_bytes(asset_id, s, timeout=25):
     scoped with legacy-asset:manage), then falls back to the older cookie-authenticated
     assetdelivery.roblox.com domain — so this keeps working even if the key isn't
     configured, just without the extra resilience the Open Cloud path provides.
-    Raises on total failure (both paths exhausted)."""
+    Raises on total failure (both paths exhausted).
+
+    IMPORTANT: the Open Cloud endpoint doesn't always return raw bytes directly —
+    for some assets it returns a small JSON wrapper like
+    {"location": "https://contentdelivery.roblox.com/v1/bytes/...", ...} that has
+    to be followed with a second request to get the actual file. Confirmed via
+    live testing: earlier code was treating that JSON wrapper itself as if it were
+    the file, which silently corrupted every download through this path (varying,
+    tiny byte counts, "Invalid file header" downstream — nothing was ever actually
+    fetching real content)."""
     if API_KEY:
         try:
             r = s.get(f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}",
                        headers=oc_headers(), timeout=timeout)
             if r.status_code == 200 and r.content:
-                return r.content
+                ctype = r.headers.get("content-type", "")
+                looks_like_json = ctype.startswith("application/json") or r.content[:1] == b"{"
+                if looks_like_json:
+                    try:
+                        loc = r.json().get("location")
+                    except Exception:
+                        loc = None
+                    if loc:
+                        r2 = s.get(loc, timeout=timeout)
+                        if r2.status_code == 200 and r2.content:
+                            return r2.content
+                    # JSON but no usable location — fall through to legacy path below
+                else:
+                    return r.content
         except Exception:
             pass
     r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=timeout)
