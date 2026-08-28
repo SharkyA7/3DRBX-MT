@@ -2604,6 +2604,14 @@ def debug_model_parser_check():
             raw = fetch_asset_raw_bytes(file_id, s, timeout=25)
             result["asset_fetch_ok"] = True
             result["asset_bytes"] = len(raw)
+            # Show exactly what came back — byte counts varying between calls for
+            # the same asset ID suggests this might not be real file content at
+            # all (an error page, a JSON indirection, etc.), so let's actually see it.
+            result["asset_first_16_bytes_hex"] = raw[:16].hex()
+            try:
+                result["asset_preview_as_text"] = raw[:300].decode("utf-8", errors="replace")
+            except Exception:
+                result["asset_preview_as_text"] = None
         except Exception as e:
             return jsonify({**result, "ok": False, "stage": "fetch_asset", "reason": str(e)}), 200
 
