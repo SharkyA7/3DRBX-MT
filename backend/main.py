@@ -2764,17 +2764,20 @@ def _manifest_from_rust_instances(instances, file_id):
     total_parts_all = meshpart_count + part_count + union_count
     reasons = []
     if animation_classes_found:
+        # Informational only, not a blocker — the Rust parser decodes real CFrame
+        # rotation (unlike the old Python parser's identity-fallback), so a rigged
+        # character now renders correctly in its default rest/T-pose instead of a
+        # scattered pile of misplaced boxes. Surfaced to the frontend so it can
+        # show a heads-up rather than pretending this is a fully-animated export.
         reasons.append(
-            f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
-            "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
-            "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
-            "If this is a character, try the Avatar feature instead."
+            f"Asset ini berisi rig ({', '.join(animation_classes_found)}) — akan dirender dalam rest/T-pose "
+            "default, bukan animasi aktif. Untuk avatar yang sedang dipakai user, coba fitur Avatar."
         )
     if total_parts_all > 500:
         reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 500)")
-    if total_parts_all == 0 and not animation_classes_found:
+    if total_parts_all == 0:
         reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
-    supported = (0 < total_parts_all <= 500) and not animation_classes_found
+    supported = 0 < total_parts_all <= 500
 
     return {
         "assetId": file_id,
