@@ -2680,13 +2680,23 @@ def _manifest_from_rust_instances(instances, file_id):
     for inst in instances:
         children_by_parent.setdefault(inst.get("parent_referent"), []).append(inst)
 
-    def surface_appearance_texture(mesh_referent):
-        for child in children_by_parent.get(mesh_referent, []):
+    def resolve_texture(part_referent):
+        """Texture resolution priority: SurfaceAppearance (modern PBR) > Decal
+        (classic face/logo texturing, e.g. a Noob's face) > caller falls back to
+        legacy TextureID after this. Decal was a real gap — found while checking a
+        real Noob NPC test render that came back correctly textureless-and-blocky
+        for its arm (accurate — Parts have no texture) but was ALSO missing its
+        face, which this fixes."""
+        for child in children_by_parent.get(part_referent, []):
             if child["class_name"] == "SurfaceAppearance":
                 props = child["properties"]
                 for key in ("ColorMap", "NormalMap", "MetalnessMap", "RoughnessMap"):
                     aid = _extract_asset_id_str(props.get(key))
                     if aid: return aid, "SurfaceAppearance." + key
+        for child in children_by_parent.get(part_referent, []):
+            if child["class_name"] == "Decal":
+                aid = _extract_asset_id_str(child["properties"].get("Texture"))
+                if aid: return aid, "Decal.Texture"
         return None, None
 
     def special_mesh(part_referent):
@@ -2738,7 +2748,7 @@ def _manifest_from_rust_instances(instances, file_id):
         if cn == "MeshPart":
             meshpart_count += 1
             mesh_id = _extract_asset_id_str(props.get("MeshId"))
-            tex_id, tex_source = surface_appearance_texture(inst["referent"])
+            tex_id, tex_source = resolve_texture(inst["referent"])
             if not tex_id:
                 tex_id = _extract_asset_id_str(props.get("TextureID"))
                 tex_source = "TextureID" if tex_id else None
@@ -2750,8 +2760,12 @@ def _manifest_from_rust_instances(instances, file_id):
             shape_enum = props.get("Shape")
             part_dict["shape"] = _PART_TYPE_BY_ENUM.get(shape_enum, "Block") if isinstance(shape_enum, int) else "Block"
             part_dict["meshId"] = None
-            part_dict["textureId"] = _extract_asset_id_str(props.get("TextureID"))
-            part_dict["textureIdType"] = "TextureID" if part_dict["textureId"] else None
+            tex_id, tex_source = resolve_texture(inst["referent"])
+            if not tex_id:
+                tex_id = _extract_asset_id_str(props.get("TextureID"))
+                tex_source = "TextureID" if tex_id else None
+            part_dict["textureId"] = tex_id
+            part_dict["textureIdType"] = tex_source
             part_dict["specialMesh"] = special_mesh(inst["referent"])
         elif cn == "UnionOperation":
             union_count += 1
