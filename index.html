@@ -582,8 +582,16 @@ window.assembleModelScene = async function(data, statusEl){
       });
     }
 
-    // Fetch texture images untuk MeshPart yang punya TextureID
-    const uniqueTextureIds = [...new Set([...meshParts.map(p => p.textureId), ...specialFileParts.map(p => p.specialMesh.textureId)].filter(Boolean))];
+    // Fetch texture images for ANY part that has one — MeshPart, Part (Decal), a
+    // SpecialMesh-file Part, or UnionOperation. Previously only scanned meshParts
+    // + specialFileParts, so a Decal's texture on a plain box Part (e.g. a face)
+    // was never even fetched, regardless of what the render loop below did with it.
+    const uniqueTextureIds = [...new Set([
+      ...meshParts.map(p => p.textureId),
+      ...specialFileParts.map(p => p.specialMesh.textureId),
+      ...boxParts.map(p => p.textureId),
+      ...unionParts.map(p => p.textureId),
+    ].filter(Boolean))];
     const textureCache = {};
     if(uniqueTextureIds.length > 0){
       statusEl.textContent = `⏳ Mengunduh ${uniqueTextureIds.length} texture...`;
@@ -639,7 +647,19 @@ window.assembleModelScene = async function(data, statusEl){
     for(const part of boxParts){
       const [sx,sy,sz] = part.size.value;
       const [r,g,b] = part.color.value;
-      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r/255, g/255, b/255) });
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      // Same texture-map logic meshParts/unionParts use — previously missing here
+      // entirely, so a Part's Decal (e.g. a face) was always silently dropped even
+      // once the backend correctly reported it. Applies across all faces uniformly
+      // (default box UV unwrap) rather than only the specific face a real Decal
+      // targets (Front/Back/Top/etc.) — real per-face placement would need the
+      // Decal's Face property plus custom per-face UVs, a bigger follow-up; this
+      // is still far better than dropping the texture entirely.
+      if(part.textureId && textureCache[part.textureId]){
+        matOpts.map = textureCache[part.textureId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
       let geom, extraScale = null;
 
       if(part.specialMesh && part.specialMesh.meshType === "Head"){
