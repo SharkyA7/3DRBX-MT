@@ -2656,7 +2656,15 @@ def debug_model_parser_check():
             result["texture_bearing_instances"] = [
                 {"class_name": i["class_name"], "name": i["name"], "referent": i["referent"],
                  "parent_referent": i["parent_referent"], "properties": i["properties"]}
-                for i in body["instances"] if i["class_name"] in ("Decal", "SurfaceAppearance", "Texture")
+                for i in body["instances"] if i["class_name"] in (
+                    "Decal", "SurfaceAppearance", "Texture",
+                    # Classic clothing system — a completely different mechanism
+                    # from Decal/SurfaceAppearance: paints a texture across the
+                    # WHOLE body via a fixed UV template, not per-part at all.
+                    # Wasn't checked before — the Bacon NPC's shirt/pants are the
+                    # actual reason to add this.
+                    "Shirt", "Pants", "ShirtGraphic",
+                )
             ]
         except Exception as e:
             return jsonify({**result, "ok": False, "stage": "rust_service_unreachable", "reason": str(e)}), 200
