@@ -2650,6 +2650,14 @@ def debug_model_parser_check():
                 return jsonify({**result, "ok": False, "stage": "rust_returned_error", "rust_body": body}), 200
             result["instance_count"] = len(body["instances"])
             result["sample_instance"] = body["instances"][0] if body["instances"] else None
+            # The actual data we need this time: every Decal/SurfaceAppearance
+            # instance's raw properties, unfiltered — so we can see exactly what
+            # shape the texture reference comes through as, instead of guessing.
+            result["texture_bearing_instances"] = [
+                {"class_name": i["class_name"], "name": i["name"], "referent": i["referent"],
+                 "parent_referent": i["parent_referent"], "properties": i["properties"]}
+                for i in body["instances"] if i["class_name"] in ("Decal", "SurfaceAppearance", "Texture")
+            ]
         except Exception as e:
             return jsonify({**result, "ok": False, "stage": "rust_service_unreachable", "reason": str(e)}), 200
 
@@ -2658,6 +2666,13 @@ def debug_model_parser_check():
             result["manifest_supported"] = manifest.get("supported")
             result["manifest_reasons"] = manifest.get("reasons")
             result["manifest_total_parts"] = manifest.get("totalParts")
+            # Show what textureId (if any) got resolved for every part, so we can
+            # see whether resolution failed entirely vs. failed for a specific part.
+            result["parts_texture_summary"] = [
+                {"name": p.get("name"), "className": p.get("className"),
+                 "textureId": p.get("textureId"), "textureIdType": p.get("textureIdType")}
+                for p in manifest.get("parts", [])
+            ]
         except Exception as e:
             return jsonify({**result, "ok": False, "stage": "manifest_conversion", "reason": str(e)}), 200
 
