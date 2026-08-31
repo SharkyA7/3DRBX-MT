@@ -2748,11 +2748,18 @@ def _manifest_from_rust_instances(instances, file_id):
         elif inst["class_name"] == "Pants":
             pants_texture_id = _extract_asset_id_str(inst["properties"].get("PantsTemplate"))
 
+    # Exact R15 + R6 body part names only — NOT substring matching. Confirmed bug:
+    # "Handle" (a tool/prop, not a body part at all) contains the substring "hand",
+    # so a loose `"hand" in name_lower` check wrongly painted a bacon prop with the
+    # shirt texture. Explicit names avoid this whole class of false-positive.
+    _PANTS_PART_NAMES = {"leftupperleg","leftlowerleg","leftfoot","rightupperleg","rightlowerleg","rightfoot","leftleg","rightleg"}
+    _SHIRT_PART_NAMES = {"uppertorso","lowertorso","torso","leftupperarm","leftlowerarm","lefthand","rightupperarm","rightlowerarm","righthand","leftarm","rightarm"}
+
     def clothing_texture_for(part_name):
-        name_lower = (part_name or "").lower()
-        if pants_texture_id and ("leg" in name_lower or "foot" in name_lower):
+        name_lower = (part_name or "").lower().replace(" ", "")
+        if pants_texture_id and name_lower in _PANTS_PART_NAMES:
             return pants_texture_id, "Pants.PantsTemplate"
-        if shirt_texture_id and ("torso" in name_lower or "arm" in name_lower or "hand" in name_lower):
+        if shirt_texture_id and name_lower in _SHIRT_PART_NAMES:
             return shirt_texture_id, "Shirt.ShirtTemplate"
         return None, None
 
