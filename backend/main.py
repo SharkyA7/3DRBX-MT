@@ -2732,6 +2732,30 @@ def _manifest_from_rust_instances(instances, file_id):
                 }
         return None
 
+    # Classic Shirt/Pants clothing system — confirmed via a real Bacon NPC test:
+    # these are NOT attached to any specific body part at all, they sit as direct
+    # children of the Model root and paint a texture across the WHOLE body using
+    # a fixed UV template Roblox's client understands internally. We don't have
+    # that template-remapping logic, so this is a pragmatic approximation (same
+    # spirit as the Decal-on-a-box compromise): apply the Shirt texture to
+    # torso/arm parts and the Pants texture to leg parts, name-based, without
+    # trying to replicate the exact per-region template UV mapping. Imperfect,
+    # but far better than the alternative of no texture at all.
+    shirt_texture_id = pants_texture_id = None
+    for inst in instances:
+        if inst["class_name"] == "Shirt":
+            shirt_texture_id = _extract_asset_id_str(inst["properties"].get("ShirtTemplate"))
+        elif inst["class_name"] == "Pants":
+            pants_texture_id = _extract_asset_id_str(inst["properties"].get("PantsTemplate"))
+
+    def clothing_texture_for(part_name):
+        name_lower = (part_name or "").lower()
+        if pants_texture_id and ("leg" in name_lower or "foot" in name_lower):
+            return pants_texture_id, "Pants.PantsTemplate"
+        if shirt_texture_id and ("torso" in name_lower or "arm" in name_lower or "hand" in name_lower):
+            return shirt_texture_id, "Shirt.ShirtTemplate"
+        return None, None
+
     animation_classes_found = sorted({
         inst["class_name"] for inst in instances if inst["class_name"] in _ANIMATION_CLASSES
     })
@@ -2775,6 +2799,8 @@ def _manifest_from_rust_instances(instances, file_id):
             if not tex_id:
                 tex_id = _extract_asset_id_str(props.get("TextureID"))
                 tex_source = "TextureID" if tex_id else None
+            if not tex_id:
+                tex_id, tex_source = clothing_texture_for(inst.get("name"))
             part_dict["meshId"] = mesh_id
             part_dict["textureId"] = tex_id
             part_dict["textureIdType"] = tex_source
@@ -2787,6 +2813,8 @@ def _manifest_from_rust_instances(instances, file_id):
             if not tex_id:
                 tex_id = _extract_asset_id_str(props.get("TextureID"))
                 tex_source = "TextureID" if tex_id else None
+            if not tex_id:
+                tex_id, tex_source = clothing_texture_for(inst.get("name"))
             part_dict["textureId"] = tex_id
             part_dict["textureIdType"] = tex_source
             part_dict["specialMesh"] = special_mesh(inst["referent"])
