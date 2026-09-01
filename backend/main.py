@@ -2790,6 +2790,13 @@ def _manifest_from_rust_instances(instances, file_id):
         if all(isinstance(c, float) and c <= 1.0 for c in color):
             color = [round(c * 255) for c in color]  # Color3 (0-1 float) -> 0-255
 
+        # Never read before — every Part-class instance rendered as a solid opaque
+        # box on the frontend regardless of this, including things like
+        # HumanoidRootPart, which Roblox always sets to 1 (fully invisible) and
+        # is never meant to be visible at all.
+        transparency = props.get("Transparency")
+        transparency = float(transparency) if isinstance(transparency, (int, float)) else 0.0
+
         part_dict = {
             "name": inst.get("name") or cn,
             "className": cn,
@@ -2797,6 +2804,7 @@ def _manifest_from_rust_instances(instances, file_id):
             "size": {"status": "decoded", "value": [round(float(v), 4) for v in size]},
             "rotation": rotation,
             "color": {"status": "best-effort", "value": list(color)},
+            "transparency": transparency,
         }
 
         if cn == "MeshPart":
