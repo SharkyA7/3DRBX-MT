@@ -627,6 +627,18 @@ window.assembleModelScene = async function(data, statusEl){
       mesh.quaternion.copy(quat);
     }
 
+    function applyTransparency(mesh, mat, part){
+      // Roblox Transparency was never read anywhere in this pipeline before, so
+      // EVERY Part-class instance rendered as a solid opaque box regardless of
+      // this property — including things like HumanoidRootPart, which Roblox
+      // always sets to Transparency=1 (fully invisible) and is never meant to
+      // be seen at all. 0 = opaque, 1 = fully invisible; values in between are
+      // real partial transparency (e.g. glass/water parts).
+      const t = typeof part.transparency === "number" ? part.transparency : 0;
+      if(t >= 0.99){ mesh.visible = false; return; }
+      if(t > 0){ mat.transparent = true; mat.opacity = 1 - t; }
+    }
+
     let skippedParts = 0;
     for(const part of meshParts){
       const geom = meshGeomCache[part.meshId];
@@ -640,6 +652,7 @@ window.assembleModelScene = async function(data, statusEl){
       const mat = new THREE.MeshStandardMaterial(matOpts);
       const mesh = new THREE.Mesh(geom.clone(), mat);
       applyTransform(mesh, part);
+      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "MeshPart";
       root.add(mesh);
     }
@@ -684,6 +697,7 @@ window.assembleModelScene = async function(data, statusEl){
       const mesh = new THREE.Mesh(geom, mat);
       if(extraScale) mesh.scale.set(...extraScale);
       applyTransform(mesh, part);
+      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "Part";
       root.add(mesh);
     }
@@ -703,6 +717,7 @@ window.assembleModelScene = async function(data, statusEl){
       const [msx,msy,msz] = part.specialMesh.scale || [1,1,1];
       mesh.scale.set(sx*msx, sy*msy, sz*msz);
       applyTransform(mesh, part);
+      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "Part";
       root.add(mesh);
     }
@@ -719,6 +734,7 @@ window.assembleModelScene = async function(data, statusEl){
       const mat = new THREE.MeshStandardMaterial(matOpts);
       const mesh = new THREE.Mesh(geom.clone(), mat);
       applyTransform(mesh, part);
+      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "UnionOperation";
       root.add(mesh);
     }
