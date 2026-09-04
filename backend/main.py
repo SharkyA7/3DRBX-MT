@@ -181,7 +181,8 @@ def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
         # v4.xx/v5.xx - binary header verified, LOD0 extraction
         try:
             mesh = _parse_v4(data)
-        except Exception:
+        except Exception as e:
+            raise ValueError(f"v4 parse failed: {type(e).__name__}: {e}") from e
             try:
                 mesh = _parse_v3(data)
             except Exception:
