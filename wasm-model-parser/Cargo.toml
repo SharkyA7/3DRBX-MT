@@ -1,0 +1,37 @@
+[package]
+name = "rbx-wasm-parser"
+version = "0.1.0"
+edition = "2021"
+# Compiles to a plain WASI module — read raw .rbxm/.rbxmx bytes from stdin,
+# write JSON to stdout. Embedded directly into the Python backend via the
+# `wasmtime` Python package — no network call, no separate hosting, no
+# Vercel-specific runtime crate (that's what caused the multi-round debugging
+# with the Vercel Rust service; this is a much simpler, more standard shape).
+#
+# BUILD:
+#   rustup target add wasm32-wasip1
+#   cargo build --release --target wasm32-wasip1
+#   cp target/wasm32-wasip1/release/rbx_wasm_parser.wasm ../backend/rbx_parser.wasm
+#
+# NOTE ON TARGET NAME: Rust's WASI target naming has changed over toolchain
+# versions (`wasm32-wasi` was the older/deprecated name, `wasm32-wasip1` is the
+# current one at time of writing). If `wasm32-wasip1` isn't recognized by your
+# installed toolchain, try `wasm32-wasi` instead — same target, different name.
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Exact same rbx-dom crates already proven working in rust-model-parser/ — this
+# parsing logic is UNCHANGED, only how it's invoked (stdin/stdout vs HTTP) differs.
+rbx_binary = "0.7"
+rbx_xml = "0.13"
+rbx_dom_weak = "2.9"
+
+[[bin]]
+name = "rbx_wasm_parser"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "s"   # optimize for size — matters more for a WASM module than speed here
+lto = true
