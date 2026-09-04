@@ -127,7 +127,7 @@ def _parse_v4(data: bytes) -> "RobloxMesh":
     LOD0 = faces[offsets[0]:offsets[1]] (level paling detail).
     Ref: devforum.roblox.com/t/roblox-mesh-format/326114
     """
-    pos = 13  # skip "version 4.0X\n"
+    pos = data.index(b"\n") + 1  # skip version line (dynamic length)
     header_size = struct.unpack("<H", data[pos:pos+2])[0]
     num_verts = struct.unpack("<I", data[pos+4:pos+8])[0]
     num_faces = struct.unpack("<I", data[pos+8:pos+12])[0]
