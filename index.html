@@ -896,6 +896,7 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         <div class="dropdown-item" onclick="openDiscordModal();document.getElementById('dropdown-menu').style.display='none'">🎮 <span data-t-id="GABUNG DISCORD" data-t-en="JOIN DISCORD">JOIN DISCORD</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
+        <div class="dropdown-item" onclick="switchTab('assets2d');document.getElementById('dropdown-menu').style.display='none'"><span data-t-id="ASET 2D" data-t-en="2D ASSETS">ASET 2D</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
@@ -1050,6 +1051,39 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
         </label>
       </div>
       <button class="btn" id="audio-dl-btn" onclick="downloadAudio()" disabled style="margin-top:10px;opacity:0.5">⬇ <span data-t-id="DOWNLOAD AUDIO + INFO" data-t-en="DOWNLOAD AUDIO + INFO">DOWNLOAD AUDIO + INFO</span></button>
+    </div>
+  </div>
+
+  <!-- ── 2D ASSETS PANEL ── -->
+  <div class="panel" id="panel-assets2d">
+    <div class="card">
+      <div class="label"><span data-t-id="GAMBAR / DECAL" data-t-en="IMAGE / DECAL">GAMBAR / DECAL</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
+        <span data-t-id="Untuk item tanpa mesh 3D — Background, Decal, atau gambar biasa." data-t-en="For items with no 3D mesh — Backgrounds, Decals, or plain images.">Untuk item tanpa mesh 3D — Background, Decal, atau gambar biasa.</span>
+      </p>
+      <input class="inp" id="img2d-input" type="number" placeholder="Asset ID">
+      <button class="btn" id="img2d-btn" onclick="download2dImage()">⬇ <span data-t-id="DOWNLOAD GAMBAR" data-t-en="DOWNLOAD IMAGE">DOWNLOAD GAMBAR</span></button>
+      <div id="img2d-status" style="margin-top:8px;font-size:9px"></div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span data-t-id="FONT FAMILY" data-t-en="FONT FAMILY">FONT FAMILY</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
+        <span data-t-id="Unduh manifest + setiap file .ttf/.otf Face yang direferensikan, dalam satu ZIP." data-t-en="Downloads the manifest plus every referenced Face's .ttf/.otf file, zipped together.">Unduh manifest + setiap file .ttf/.otf Face yang direferensikan, dalam satu ZIP.</span>
+      </p>
+      <input class="inp" id="font2d-input" type="number" placeholder="Font Family Asset ID">
+      <button class="btn" id="font2d-btn" onclick="download2dFont()">⬇ <span data-t-id="DOWNLOAD FONT" data-t-en="DOWNLOAD FONT">DOWNLOAD FONT</span></button>
+      <div id="font2d-status" style="margin-top:8px;font-size:9px"></div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span data-t-id="VIDEO" data-t-en="VIDEO">VIDEO</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
+        <span data-t-id="Roblox menyajikan video sebagai manifest HLS, bukan satu file. Ini menggabungkan semua segmen menjadi satu file .ts yang bisa diputar (mis. di VLC)." data-t-en="Roblox serves video as an HLS manifest, not a single file. This concatenates every segment into one playable .ts file (e.g. in VLC).">Roblox menyajikan video sebagai manifest HLS, bukan satu file. Ini menggabungkan semua segmen menjadi satu file .ts yang bisa diputar (mis. di VLC).</span>
+      </p>
+      <input class="inp" id="video2d-input" type="number" placeholder="Video Asset ID">
+      <button class="btn" id="video2d-btn" onclick="download2dVideo()">⬇ <span data-t-id="DOWNLOAD VIDEO" data-t-en="DOWNLOAD VIDEO">DOWNLOAD VIDEO</span></button>
+      <div id="video2d-status" style="margin-top:8px;font-size:9px"></div>
     </div>
   </div>
 
@@ -1810,6 +1844,9 @@ const ROUTES=[
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
+  ['GET','GET /api/catalog/image?asset_id=','Gambar 2D mentah (Background/Decal/Image — bukan mesh)'],
+  ['GET','GET /api/2d/font?id=','ZIP Font Family (manifest + setiap file .ttf/.otf Face)'],
+  ['GET','GET /api/2d/video?id=','Video (manifest HLS digabung jadi satu file .ts)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
@@ -2129,6 +2166,67 @@ async function downloadAudio(){
   }catch(e){
     showApiError("audio-status", e);
   }finally{ btn.disabled=false; }
+}
+
+// ── 2D ASSETS (Image/Decal, Font, Video) ───────────────────────────
+// All three backend endpoints return the raw file directly (with a
+// Content-Disposition header carrying the real filename) on success, or a
+// JSON {"error": "..."} on failure — unlike Audio there's no separate
+// info/preview step, so this is a single fetch-blob-and-save per download.
+function _filenameFromContentDisposition(res, fallback){
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename="?([^";]+)"?/i.exec(cd);
+  return m ? m[1] : fallback;
+}
+
+async function _download2dAsset({inputId, btnId, statusId, url, fallbackName}){
+  const id = document.getElementById(inputId).value.trim();
+  const statusEl = document.getElementById(statusId);
+  if(!id){ statusEl.textContent = "Masukkan Asset ID."; return; }
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  statusEl.textContent = "Mengunduh...";
+  try{
+    const res = await fetch(url(id));
+    if(!res.ok){
+      const e = await res.json().catch(()=>({}));
+      throw new Error(e.error || res.statusText);
+    }
+    const blob = await res.blob();
+    const filename = _filenameFromContentDisposition(res, fallbackName(id));
+    const a = Object.assign(document.createElement("a"),{
+      href: URL.createObjectURL(blob),
+      download: filename
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    statusEl.textContent = "✓ Download selesai!";
+  }catch(e){
+    showApiError(statusId, e);
+  }finally{ btn.disabled = false; }
+}
+
+async function download2dImage(){
+  await _download2dAsset({
+    inputId: "img2d-input", btnId: "img2d-btn", statusId: "img2d-status",
+    url: id => `${BASE}/api/catalog/image?asset_id=${encodeURIComponent(id)}`,
+    fallbackName: id => `image_${id}.png`,
+  });
+}
+
+async function download2dFont(){
+  await _download2dAsset({
+    inputId: "font2d-input", btnId: "font2d-btn", statusId: "font2d-status",
+    url: id => `${BASE}/api/2d/font?id=${encodeURIComponent(id)}`,
+    fallbackName: id => `font_${id}.zip`,
+  });
+}
+
+async function download2dVideo(){
+  await _download2dAsset({
+    inputId: "video2d-input", btnId: "video2d-btn", statusId: "video2d-status",
+    url: id => `${BASE}/api/2d/video?id=${encodeURIComponent(id)}`,
+    fallbackName: id => `video_${id}.ts`,
+  });
 }
 
 function showApiError(elId, err){
