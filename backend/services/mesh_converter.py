@@ -57,63 +57,66 @@ def _parse_v1(data: bytes) -> RobloxMesh:
 
 
 def _parse_v2(data: bytes) -> RobloxMesh:
-    """Version 2.00 — binary with header."""
-    buf = io.BytesIO(data)
-    # Skip version line  e.g. b'version 2.00\n'
-    buf.readline()
-    # Header line: sizeof_MeshHeader sizeof_Vertex sizeof_Face
-    hdr_line = buf.readline().decode().strip()
-    parts = hdr_line.split()
-    sizeof_header, sizeof_vertex, sizeof_face = int(parts[0]), int(parts[1]), int(parts[2])
+    """Version 2.00 — binary MeshHeader immediately follows the fixed 13-byte
+    "version 2.00\\n" line. There is NO ASCII/newline-terminated header line here —
+    the header (sizeof_MeshHeader: uint16, sizeof_Vertex: uint8, sizeof_Face: uint8,
+    numVerts: uint32, numFaces: uint32 = 12 bytes total) is raw binary.
+    Reading it with buf.readline().decode() (the old approach) is wrong: readline()
+    stops at the first 0x0A byte, which shows up constantly inside ordinary binary
+    vertex floats, so it silently swallows real vertex bytes into a bogus "header
+    line" and then throws a UnicodeDecodeError trying to decode them as UTF-8.
+    Ref: devforum.roblox.com/t/roblox-mesh-format/326114,
+         github.com/pkhead/rbx-mesh2obj (mesh_v2::MeshHeader)."""
+    pos = data.index(b"\n") + 1  # skip "version 2.00\n" (13 bytes, but be tolerant of length)
+    sizeof_header, sizeof_vertex, sizeof_face = struct.unpack_from("<HBB", data, pos)
+    num_verts, num_faces = struct.unpack_from("<II", data, pos + 4)
 
-    # Mesh header
-    hdr_data = buf.read(sizeof_header)
-    nh = (sizeof_header - 4) // 4  # remaining ints after 2-byte lod fields
-    num_verts, num_faces = struct.unpack_from("<II", hdr_data, 0)
-
+    p = pos + sizeof_header
     verts, norms, uvs, faces = [], [], [], []
 
     for _ in range(num_verts):
-        raw = buf.read(sizeof_vertex)
-        # px py pz  nx ny nz  u v  tx ty tz ts (tangent, 4 bytes)
-        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", raw, 0)
+        # px py pz  nx ny nz  u v  (+ optional trailing color bytes we don't read)
+        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", data, p)
         verts.append((px, py, pz))
         norms.append((nx, ny, nz))
         uvs.append((u, 1.0 - v))   # flip V axis
+        p += sizeof_vertex
 
     for _ in range(num_faces):
-        raw = buf.read(sizeof_face)
-        i0, i1, i2 = struct.unpack_from("<III", raw, 0)
+        i0, i1, i2 = struct.unpack_from("<III", data, p)
         faces.append((i0, i1, i2))
+        p += sizeof_face
 
     return RobloxMesh(verts, norms, uvs, faces, version="2.00")
 
 
 def _parse_v3(data: bytes) -> RobloxMesh:
-    """Version 3.00 — binary + LOD table (we ignore LOD)."""
-    buf = io.BytesIO(data)
-    buf.readline()  # version
-    hdr_line = buf.readline().decode().strip()
-    parts = hdr_line.split()
-    sizeof_header, sizeof_vertex, sizeof_face, sizeof_lod = (
-        int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-    )
-    hdr_raw = buf.read(sizeof_header)
-    num_verts, num_faces, num_lods = struct.unpack_from("<III", hdr_raw, 0)
+    """Version 3.00 — binary MeshHeader immediately follows the fixed 13-byte
+    "version 3.00\\n" line. Per MaximumADHD's official writeup
+    (devforum.roblox.com/t/version-300-of-mesh-format-has-no-public-documentation/287887),
+    the v3 MeshHeader is 7 consecutive uint16 fields (14 bytes total):
+      sizeof_MeshHeader, sizeof_MeshVertex, sizeof_MeshFace, sizeof_MeshLOD,
+      numLODs, numVerts, numFaces.
+    As with v2, this is raw binary — NOT an ASCII line — so it must never be read
+    with buf.readline().decode()."""
+    pos = data.index(b"\n") + 1
+    (sizeof_header, sizeof_vertex, sizeof_face, sizeof_lod,
+     num_lods, num_verts, num_faces) = struct.unpack_from("<HHHHHHH", data, pos)
 
+    p = pos + sizeof_header
     verts, norms, uvs, faces = [], [], [], []
 
     for _ in range(num_verts):
-        raw = buf.read(sizeof_vertex)
-        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", raw, 0)
+        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", data, p)
         verts.append((px, py, pz))
         norms.append((nx, ny, nz))
         uvs.append((u, 1.0 - v))
+        p += sizeof_vertex
 
     for _ in range(num_faces):
-        raw = buf.read(sizeof_face)
-        i0, i1, i2 = struct.unpack_from("<III", raw, 0)
+        i0, i1, i2 = struct.unpack_from("<III", data, p)
         faces.append((i0, i1, i2))
+        p += sizeof_face
 
     return RobloxMesh(verts, norms, uvs, faces, version="3.00")
 
