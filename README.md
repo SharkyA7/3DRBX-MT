@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="NEW BANNER V5.gif" alt="Banner GIF" width="1080" height="1920">
+  <img src="ROBLOX BLUEPRINT.png" alt="Banner png" width="1080" height="1920">
 </div>
 
 ---
