@@ -158,14 +158,6 @@ select option{background:var(--s2)}
 @media(max-width:460px){.dl-grid{grid-template-columns:1fr}}
 .dl-card{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;transition:border-color .2s}
 .dl-card.ready{border-color:var(--accent);box-shadow:0 0 16px rgba(80,232,244,.1)}
-.packed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-top:14px}
-.packed-item{position:relative;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px;text-align:center}
-.packed-thumb{background:var(--s1);border:1px solid var(--border);border-radius:6px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;margin-bottom:6px}
-.packed-thumb img{width:100%;height:100%;object-fit:cover}
-.packed-name{font-size:10px;color:var(--white);line-height:1.3;max-height:2.6em;overflow:hidden;word-break:break-word}
-.packed-id{font-size:9px;color:var(--muted);margin-top:2px}
-.packed-remove{position:absolute;top:-6px;right:-6px;width:18px;height:18px;line-height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:12px;cursor:pointer;padding:0}
-.packed-remove:hover{filter:brightness(1.2)}
 .dl-title{font-family:var(--font-ui);font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .dl-desc{font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
@@ -504,16 +496,31 @@ window.convertZipToGLB = async function(zipBlob, baseName, statusCallback){
   URL.revokeObjectURL(a.href);
 };
 
-// Shared assembly step used by both "Build GLB" and "Download OBJ+Texture ZIP".
-// Fetches all mesh/union geometry + textures once and returns a fully-transformed
-// THREE.Group (root) plus the raw texture cache, so neither export path has to
-// re-download anything the other already fetched.
-window.assembleModelScene = async function(data, statusEl){
+window.buildModelGLB = async function(customStatusEl, customBtn){
+  const statusEl = customStatusEl || document.getElementById("model-status");
+  const btn = customBtn || document.getElementById("model-build-btn");
+  if(!window.currentModelData || !window.currentModelData.supported){
+    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
+    return;
+  }
+  const data = window.currentModelData;
+  btn.disabled = true;
+
+  try{
     const meshParts = data.parts.filter(p => p.className === "MeshPart" && p.meshId);
-    const boxParts  = data.parts.filter(p => p.className === "Part" && !(p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId));
-    const specialFileParts = data.parts.filter(p => p.className === "Part" && p.specialMesh && p.specialMesh.meshType === "FileMesh" && p.specialMesh.meshId);
+    // Parts whose real visible shape comes from a SpecialMesh/FileMesh child (Head, hair/hat
+    // "Handle" accessories, etc) instead of their own Size — the manifest already resolves
+    // these (see part.specialMesh.meshId/textureId), they just weren't being rendered as
+    // anything but a plain colored box before. Render them like a MeshPart, using the
+    // specialMesh's own mesh+texture instead of the Part's bounding-box Size.
+    const specialMeshParts = data.parts.filter(p => p.specialMesh && p.specialMesh.meshId);
+    const boxParts  = data.parts.filter(p =>
+      p.className === "Part" && !(p.specialMesh && p.specialMesh.meshId));
     const unionParts = data.parts.filter(p => p.className === "UnionOperation" && p.unionAssetId);
-    const uniqueMeshIds = [...new Set([...meshParts.map(p => p.meshId), ...specialFileParts.map(p => p.specialMesh.meshId)])];
+    const uniqueMeshIds = [...new Set([
+      ...meshParts.map(p => p.meshId),
+      ...specialMeshParts.map(p => p.specialMesh.meshId),
+    ])];
     const uniqueUnionIds = [...new Set(unionParts.map(p => p.unionAssetId))];
 
     const objLoader = new OBJLoader();
@@ -582,15 +589,14 @@ window.assembleModelScene = async function(data, statusEl){
       });
     }
 
-    // Fetch texture images for ANY part that has one — MeshPart, Part (Decal), a
-    // SpecialMesh-file Part, or UnionOperation. Previously only scanned meshParts
-    // + specialFileParts, so a Decal's texture on a plain box Part (e.g. a face)
-    // was never even fetched, regardless of what the render loop below did with it.
+    // Fetch texture images — previously this only looked at MeshParts, so a Part's own
+    // textureId (e.g. Head's face Decal.Texture) or its specialMesh's textureId (e.g. a
+    // hair "Handle" accessory's texture) was resolved by the backend but never actually
+    // downloaded or applied here.
     const uniqueTextureIds = [...new Set([
       ...meshParts.map(p => p.textureId),
-      ...specialFileParts.map(p => p.specialMesh.textureId),
+      ...specialMeshParts.map(p => p.specialMesh.textureId || p.textureId),
       ...boxParts.map(p => p.textureId),
-      ...unionParts.map(p => p.textureId),
     ].filter(Boolean))];
     const textureCache = {};
     if(uniqueTextureIds.length > 0){
@@ -627,24 +633,25 @@ window.assembleModelScene = async function(data, statusEl){
       mesh.quaternion.copy(quat);
     }
 
-    function applyTransparency(mesh, mat, part){
-      // Roblox Transparency was never read anywhere in this pipeline before, so
-      // EVERY Part-class instance rendered as a solid opaque box regardless of
-      // this property — including things like HumanoidRootPart, which Roblox
-      // always sets to Transparency=1 (fully invisible) and is never meant to
-      // be seen at all. 0 = opaque, 1 = fully invisible; values in between are
-      // real partial transparency (e.g. glass/water parts).
+    // Roblox parts can be partially or fully transparent (HumanoidRootPart is ALWAYS
+    // Transparency=1, i.e. fully invisible, by design — it's a physics/anchor part, never
+    // meant to be seen). Apply that here instead of always rendering everything opaque.
+    function applyMaterialOpts(matOpts, part){
       const t = typeof part.transparency === "number" ? part.transparency : 0;
-      if(t >= 0.99){ mesh.visible = false; return; }
-      if(t > 0){ mat.transparent = true; mat.opacity = 1 - t; }
+      if(t > 0){
+        matOpts.transparent = true;
+        matOpts.opacity = Math.max(0, 1 - t);
+      }
+      return matOpts;
     }
 
     let skippedParts = 0;
     for(const part of meshParts){
+      if(part.transparency >= 1) continue;  // fully invisible, e.g. some MeshPart accessories
       const geom = meshGeomCache[part.meshId];
       if(!geom){ skippedParts++; continue; }
       const [r,g,b] = part.color.value;
-      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
       if(part.textureId && textureCache[part.textureId]){
         matOpts.map = textureCache[part.textureId];
         matOpts.color = new THREE.Color(1,1,1);
@@ -652,81 +659,57 @@ window.assembleModelScene = async function(data, statusEl){
       const mat = new THREE.MeshStandardMaterial(matOpts);
       const mesh = new THREE.Mesh(geom.clone(), mat);
       applyTransform(mesh, part);
-      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "MeshPart";
       root.add(mesh);
     }
 
+    // Parts whose visible geometry comes from a SpecialMesh/FileMesh child (Head, hair/hat
+    // accessories via their "Handle" part, etc). Rendered like a MeshPart using the
+    // specialMesh's own mesh + texture, positioned/rotated using the parent Part's CFrame.
+    // NOTE: we don't yet decode the SpecialMesh's own Scale/Offset properties (the backend
+    // manifest only exposes meshId/textureId for it), so an accessory with a custom
+    // non-default Scale may render at the wrong size — a known follow-up, not covered here.
+    for(const part of specialMeshParts){
+      if(part.transparency >= 1) continue;
+      const geom = meshGeomCache[part.specialMesh.meshId];
+      if(!geom){ skippedParts++; continue; }
+      const [r,g,b] = part.color.value;
+      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
+      const texId = part.specialMesh.textureId || part.textureId;
+      if(texId && textureCache[texId]){
+        matOpts.map = textureCache[texId];
+        matOpts.color = new THREE.Color(1,1,1);
+      }
+      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mesh = new THREE.Mesh(geom.clone(), mat);
+      applyTransform(mesh, part);
+      mesh.name = part.name || "SpecialMesh";
+      root.add(mesh);
+    }
+
     for(const part of boxParts){
+      if(part.transparency >= 1) continue;  // e.g. HumanoidRootPart — never meant to be visible
       const [sx,sy,sz] = part.size.value;
       const [r,g,b] = part.color.value;
-      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
-      // Same texture-map logic meshParts/unionParts use — previously missing here
-      // entirely, so a Part's Decal (e.g. a face) was always silently dropped even
-      // once the backend correctly reported it. Applies across all faces uniformly
-      // (default box UV unwrap) rather than only the specific face a real Decal
-      // targets (Front/Back/Top/etc.) — real per-face placement would need the
-      // Decal's Face property plus custom per-face UVs, a bigger follow-up; this
-      // is still far better than dropping the texture entirely.
+      const geom = new THREE.BoxGeometry(sx, sy, sz);
+      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
       if(part.textureId && textureCache[part.textureId]){
         matOpts.map = textureCache[part.textureId];
         matOpts.color = new THREE.Color(1,1,1);
       }
       const mat = new THREE.MeshStandardMaterial(matOpts);
-      let geom, extraScale = null;
-
-      if(part.specialMesh && part.specialMesh.meshType === "Head"){
-        // Built-in Roblox "Head" mesh has no downloadable asset — approximate with
-        // a sphere scaled to the part's bounding box, adjusted by SpecialMesh.Scale.
-        const [hsx,hsy,hsz] = part.specialMesh.scale || [1,1,1];
-        geom = new THREE.SphereGeometry(1, 24, 16);
-        extraScale = [sx/2*hsx, sy/2*hsy, sz/2*hsz];
-      } else if(part.shape === "Ball"){
-        geom = new THREE.SphereGeometry(1, 24, 16);
-        extraScale = [sx/2, sy/2, sz/2];
-      } else if(part.shape === "Cylinder"){
-        // NOTE: Roblox aligns a Cylinder part's round axis along local X,
-        // unlike THREE.CylinderGeometry's default Y-axis — rotated to match.
-        const radius = (sy + sz) / 4;
-        geom = new THREE.CylinderGeometry(radius, radius, sx, 24);
-        geom.rotateZ(Math.PI/2);
-      } else {
-        geom = new THREE.BoxGeometry(sx, sy, sz);
-      }
-
       const mesh = new THREE.Mesh(geom, mat);
-      if(extraScale) mesh.scale.set(...extraScale);
       applyTransform(mesh, part);
-      applyTransparency(mesh, mat, part);
-      mesh.name = part.name || "Part";
-      root.add(mesh);
-    }
-
-    for(const part of specialFileParts){
-      const geom = meshGeomCache[part.specialMesh.meshId];
-      if(!geom){ skippedParts++; continue; }
-      const [r,g,b] = part.color.value;
-      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
-      if(part.specialMesh.textureId && textureCache[part.specialMesh.textureId]){
-        matOpts.map = textureCache[part.specialMesh.textureId];
-        matOpts.color = new THREE.Color(1,1,1);
-      }
-      const mat = new THREE.MeshStandardMaterial(matOpts);
-      const mesh = new THREE.Mesh(geom.clone(), mat);
-      const [sx,sy,sz] = part.size.value;
-      const [msx,msy,msz] = part.specialMesh.scale || [1,1,1];
-      mesh.scale.set(sx*msx, sy*msy, sz*msz);
-      applyTransform(mesh, part);
-      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "Part";
       root.add(mesh);
     }
 
     for(const part of unionParts){
+      if(part.transparency >= 1) continue;
       const geom = unionGeomCache[part.unionAssetId];
       if(!geom){ skippedParts++; continue; }
       const [r,g,b] = part.color.value;
-      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
+      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
       if(part.textureId && textureCache[part.textureId]){
         matOpts.map = textureCache[part.textureId];
         matOpts.color = new THREE.Color(1,1,1);
@@ -734,26 +717,9 @@ window.assembleModelScene = async function(data, statusEl){
       const mat = new THREE.MeshStandardMaterial(matOpts);
       const mesh = new THREE.Mesh(geom.clone(), mat);
       applyTransform(mesh, part);
-      applyTransparency(mesh, mat, part);
       mesh.name = part.name || "UnionOperation";
       root.add(mesh);
     }
-
-    return { root, meshParts, boxParts, specialFileParts, unionParts, textureCache, failedMeshes, skippedParts };
-};
-
-window.buildModelGLB = async function(customStatusEl, customBtn){
-  const statusEl = customStatusEl || document.getElementById("model-status");
-  const btn = customBtn || document.getElementById("model-build-btn");
-  if(!window.currentModelData || !window.currentModelData.supported){
-    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
-    return;
-  }
-  const data = window.currentModelData;
-  btn.disabled = true;
-
-  try{
-    const { root, meshParts, boxParts, unionParts, failedMeshes } = await window.assembleModelScene(data, statusEl);
 
     statusEl.textContent = "⏳ Export GLB...";
     const exporter = new GLTFExporter();
@@ -772,129 +738,6 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       statusEl.textContent = "✗ Export GLB gagal: " + err.message;
       btn.disabled = false;
     }, { binary: true });
-
-  }catch(e){
-    statusEl.textContent = "✗ " + e.message;
-    btn.disabled = false;
-  }
-};
-
-// Download OBJ + MTL + texture files as a ZIP -- some mobile sculpting/viewer
-// apps (Nomad Sculpt, Prisma 3D) don't reliably read textures embedded in a
-// binary GLB. OBJ+MTL with textures as plain loose PNG files sidesteps that
-// entirely, same fix already used for the Avatar "real" download.
-window.downloadModelOBJZip = async function(customStatusEl, customBtn){
-  const statusEl = customStatusEl || document.getElementById("model-status");
-  const btn = customBtn || document.getElementById("model-objzip-btn");
-  if(!window.currentModelData || !window.currentModelData.supported){
-    statusEl.textContent = "✗ Tidak ada model yang didukung untuk dibangun.";
-    return;
-  }
-  const data = window.currentModelData;
-  btn.disabled = true;
-
-  try{
-    const { root, meshParts, boxParts, unionParts, textureCache, failedMeshes } = await window.assembleModelScene(data, statusEl);
-
-    statusEl.textContent = "⏳ Menyusun OBJ + MTL...";
-    const name = `model_${data.assetId}`;
-    const objLines = ["# " + name, ""];
-    const mtlLines = [];
-    const zip = new JSZip();
-    const texFileByUuid = {}; // THREE.Texture.uuid -> filename in zip, avoids exporting the same image twice
-    let texIndex = 0;
-    let vOffset = 1, vtOffset = 1;
-    let matIndex = 0;
-
-    objLines.push(`mtllib ${name}.mtl`);
-
-    const meshesToExport = [];
-    root.traverse(child => { if(child.isMesh) meshesToExport.push(child); });
-
-    for(const mesh of meshesToExport){
-      mesh.updateMatrix();
-      const geom = mesh.geometry;
-      const pos = geom.attributes.position;
-      const uv = geom.attributes.uv;
-      const matName = `mat_${matIndex++}`;
-      const mat = mesh.material;
-
-      // Material block
-      mtlLines.push(`newmtl ${matName}`);
-      const col = mat.color || new THREE.Color(1,1,1);
-      mtlLines.push(`Kd ${col.r.toFixed(4)} ${col.g.toFixed(4)} ${col.b.toFixed(4)}`);
-      mtlLines.push(`Ka 0 0 0`, `Ks 0 0 0`, `d 1`, `illum 1`);
-      if(mat.map){
-        let texFile = texFileByUuid[mat.map.uuid];
-        if(!texFile){
-          const img = mat.map.image; // ImageBitmap
-          const c = document.createElement("canvas");
-          c.width = img.width; c.height = img.height;
-          c.getContext("2d").drawImage(img, 0, 0);
-          const pngBlob = await new Promise(r => c.toBlob(r, "image/png"));
-          texFile = `textures/texture_${texIndex++}.png`;
-          zip.file(texFile, pngBlob);
-          texFileByUuid[mat.map.uuid] = texFile;
-        }
-        mtlLines.push(`map_Kd ${texFile}`);
-      }
-      mtlLines.push("");
-
-      // Geometry block, baked to world space so the OBJ needs no separate transform nodes
-      objLines.push(`o ${mesh.name || matName}`);
-      const v = new THREE.Vector3();
-      for(let i=0; i<pos.count; i++){
-        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrix);
-        objLines.push(`v ${v.x.toFixed(6)} ${v.y.toFixed(6)} ${v.z.toFixed(6)}`);
-      }
-      if(uv){
-        for(let i=0; i<uv.count; i++){
-          objLines.push(`vt ${uv.getX(i).toFixed(6)} ${uv.getY(i).toFixed(6)}`);
-        }
-      }
-      objLines.push(`usemtl ${matName}`);
-      const idx = geom.index;
-      const faceCount = idx ? idx.count/3 : pos.count/3;
-      for(let f=0; f<faceCount; f++){
-        const a = (idx ? idx.getX(f*3)   : f*3)   + vOffset;
-        const b = (idx ? idx.getX(f*3+1) : f*3+1) + vOffset;
-        const c = (idx ? idx.getX(f*3+2) : f*3+2) + vOffset;
-        if(uv){
-          const ta = a - vOffset + vtOffset, tb = b - vOffset + vtOffset, tc = c - vOffset + vtOffset;
-          objLines.push(`f ${a}/${ta} ${b}/${tb} ${c}/${tc}`);
-        } else {
-          objLines.push(`f ${a} ${b} ${c}`);
-        }
-      }
-      vOffset += pos.count;
-      if(uv) vtOffset += uv.count;
-    }
-
-    zip.file(`${name}.obj`, objLines.join("\n"));
-    zip.file(`${name}.mtl`, mtlLines.join("\n"));
-    zip.file("README.txt",
-      `Model: ${name}\n\n`+
-      `Cara import di Nomad Sculpt:\n`+
-      `  1. Files -> Import -> pilih ${name}.obj\n`+
-      `  2. Tap mesh -> Material -> Base Color -> load texture dari textures/\n\n`+
-      `Cara import di Prisma 3D:\n`+
-      `  1. + -> Import -> OBJ -> pilih ${name}.obj\n`+
-      `  2. Material -> Texture -> pilih file dari textures/\n\n`+
-      `Kalau texture nggak muncul otomatis pas import, itu wajar untuk OBJ -- ` +
-      `link-kan manual dari folder textures/ sesuai instruksi di atas.`
-    );
-
-    statusEl.textContent = "⏳ Membuat ZIP...";
-    const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE"});
-    const a = Object.assign(document.createElement("a"), {
-      href: URL.createObjectURL(blob),
-      download: `${name}_obj.zip`
-    });
-    a.click();
-    URL.revokeObjectURL(a.href);
-    const failNote = failedMeshes > 0 ? ` (${failedMeshes} gagal di-skip)` : "";
-    statusEl.textContent = `✓ OBJ+ZIP berhasil! ${meshesToExport.length} mesh, ${Object.keys(texFileByUuid).length} texture${failNote}.`;
-    btn.disabled = false;
 
   }catch(e){
     statusEl.textContent = "✗ " + e.message;
@@ -1052,7 +895,6 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <a class="dropdown-item" href="/Flipbook" style="text-decoration:none"><img class="nav-icon" src="/icons/FLIPBOOK.svg" alt=""> <span data-t-id="FLIPBOOK" data-t-en="FLIPBOOK">FLIPBOOK</span></a>
         <div class="dropdown-item" onclick="openDiscordModal();document.getElementById('dropdown-menu').style.display='none'">🎮 <span data-t-id="GABUNG DISCORD" data-t-en="JOIN DISCORD">JOIN DISCORD</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
-        <div class="dropdown-item" onclick="switchTab('image2d');document.getElementById('dropdown-menu').style.display='none'">🖼️ <span data-t-id="2D ASSETS" data-t-en="2D ASSETS">2D ASSETS</span></div>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
@@ -1139,7 +981,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <div class="row">
         <div style="flex:1;min-width:180px">
           <input type="number" id="cat-input" data-t-ph-id="Asset ID (misal: 102611803)" data-t-ph-en="Asset ID (e.g: 102611803)" placeholder="Asset ID (misal: 102611803)">
-          <p class="hint"><span data-t-id="Ambil ID dari URL: roblox.com/catalog/" data-t-en="Get ID from URL: roblox.com/catalog/">Ambil ID dari URL: roblox.com/catalog/</span><strong>ID</strong><span data-t-id="/nama-item" data-t-en="/item-name">/nama-item</span> <span data-t-id="— Bundle (roblox.com/bundles/ID) juga didukung." data-t-en="— Bundle (roblox.com/bundles/ID) is also supported.">— Bundle (roblox.com/bundles/ID) juga didukung.</span></p>
+          <p class="hint"><span data-t-id="Ambil ID dari URL: roblox.com/catalog/" data-t-en="Get ID from URL: roblox.com/catalog/">Ambil ID dari URL: roblox.com/catalog/</span><strong>ID</strong><span data-t-id="/nama-item" data-t-en="/item-name">/nama-item</span></p>
         </div>
         <select id="cat-format" style="flex:0 0 120px;min-width:120px">
           <option value="obj">OBJ + MTL</option>
@@ -1149,36 +991,6 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
       <div class="status-box idle" id="cat-status"><div class="dot"></div><span id="cat-msg">Siap.</span></div>
       <div class="prog"><div class="prog-fill" id="cat-prog"></div></div>
-      <button class="btn btn-amber" id="pk-toggle-btn" style="margin-top:14px" onclick="togglePackedMode()">📦 <span data-t-id="PREVIEW CATALOG PACKED" data-t-en="PREVIEW CATALOG PACKED">PREVIEW CATALOG PACKED</span></button>
-    </div>
-
-    <div id="cat-packed" style="display:none">
-      <div class="card">
-        <div class="label"><span data-t-id="TAMBAH ITEM KE PACK" data-t-en="ADD ITEM TO PACK">TAMBAH ITEM KE PACK</span></div>
-        <div class="row">
-          <div style="flex:1;min-width:180px">
-            <input type="number" id="pk-input" data-t-ph-id="Asset ID (misal: 102611803)" data-t-ph-en="Asset ID (e.g: 102611803)" placeholder="Asset ID (misal: 102611803)">
-            <p class="hint"><span data-t-id="Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya." data-t-en="Add IDs one at a time, then FETCH again for the next item.">Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya.</span></p>
-          </div>
-          <button class="btn" id="pk-add-btn" onclick="addPackedItem()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
-        </div>
-        <div class="status-box idle" id="pk-status"><div class="dot"></div><span id="pk-msg"><span data-t-id="Belum ada item." data-t-en="No items yet.">Belum ada item.</span></span></div>
-      </div>
-
-      <div class="card" id="pk-preview-card" style="display:none">
-        <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span> (<span id="pk-count">0</span>)</div>
-        <div class="packed-grid" id="pk-grid"></div>
-      </div>
-
-      <div class="card" id="pk-download-card" style="display:none">
-        <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-        <div class="dl-card ready">
-          <div class="dl-title"><span style="color:#4af">OBJ + TEXTURE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-          <div class="dl-desc"><span data-t-id="Semua item dibungkus jadi satu ZIP, masing-masing di folder sendiri dengan OBJ+MTL+texture. Tidak ada GLTF." data-t-en="All items are packed into one ZIP, each in its own folder with OBJ+MTL+texture. No GLTF.">Semua item dibungkus jadi satu ZIP, masing-masing di folder sendiri dengan OBJ+MTL+texture. Tidak ada GLTF.</span></div>
-          <button class="btn btn-green" id="pk-download-btn" onclick="downloadPackedCatalog()">⬇ <span data-t-id="DOWNLOAD CATALOG PACKED ZIP" data-t-en="DOWNLOAD CATALOG PACKED ZIP">DOWNLOAD CATALOG PACKED ZIP</span></button>
-        </div>
-        <div class="prog"><div class="prog-fill" id="pk-prog"></div></div>
-      </div>
     </div>
 
     <div id="cat-result" style="display:none">
@@ -1198,108 +1010,18 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
       <div class="card">
         <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-        <div id="cat-anim-warning" style="display:none;background:rgba(255,80,80,.1);border:1px solid #f55;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f88">
-          ⚠️ <span data-t-id="Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF." data-t-en="This is an Animation Bundle — it only contains motion/keyframe data, no 3D mesh. It can't be downloaded as OBJ/GLTF.">Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.</span>
-        </div>
-        <div class="dl-grid" id="cat-dl-grid">
-          <div class="dl-card ready" id="cat-dl-obj-card">
+        <div class="dl-grid">
+          <div class="dl-card ready">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
             <button class="btn btn-green" onclick="downloadCatalog('obj')">⬇ OBJ ZIP</button>
           </div>
-          <div class="dl-card ready" id="cat-dl-gltf-card">
+          <div class="dl-card ready">
             <div class="dl-title"><span style="color:#fa4">GLTF</span><span class="badge b-ok">SIAP</span></div>
             <div class="dl-desc">Dikonversi ke GLTF 2.0 dengan embedded buffer.</div>
             <button class="btn btn-amber" onclick="downloadCatalog('gltf')">⬇ GLTF ZIP</button>
           </div>
-          <div class="dl-card ready" id="cat-dl-image-card" style="display:none">
-            <div class="dl-title"><span style="color:#8f8">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh).</span></div>
-            <button class="btn" style="background:#2a4;color:#fff" id="cat-dl-image-btn" onclick="downloadCatalogImage()">⬇ IMAGE (PNG)</button>
-          </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── 2D ASSETS PANEL ── -->
-  <div class="panel" id="panel-image2d">
-    <div class="card">
-      <div class="label"><span data-t-id="CARI 2D ASSET" data-t-en="SEARCH 2D ASSET">CARI 2D ASSET</span></div>
-      <div class="row">
-        <div style="flex:1;min-width:180px">
-          <input type="number" id="img2d-input" data-t-ph-id="Asset ID (Decal/Image/Face/GUI/Background)" data-t-ph-en="Asset ID (Decal/Image/Face/GUI/Background)" placeholder="Asset ID (Decal/Image/Face/GUI/Background)">
-          <p class="hint"><span data-t-id="Untuk aset 2D apapun: Decal, Image, Face, GUI, Texture, Background — bukan mesh 3D." data-t-en="For any 2D asset: Decal, Image, Face, GUI, Texture, Background — not a 3D mesh.">Untuk aset 2D apapun: Decal, Image, Face, GUI, Texture, Background — bukan mesh 3D.</span></p>
-        </div>
-        <button class="btn" id="img2d-btn" onclick="fetchImage2D()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
-      </div>
-      <div class="status-box idle" id="img2d-status"><div class="dot"></div><span id="img2d-msg"><span data-t-id="Siap." data-t-en="Ready.">Siap.</span></span></div>
-      <div class="prog"><div class="prog-fill" id="img2d-prog"></div></div>
-    </div>
-
-    <div class="card" id="img2d-result" style="display:none">
-      <div class="row" style="align-items:flex-start;gap:16px">
-        <div class="av-img" id="img2d-thumb" style="width:100px;flex-shrink:0">🖼️</div>
-        <div style="flex:1;min-width:160px">
-          <div class="irow"><span class="ikey"><span data-t-id="NAMA" data-t-en="NAME">NAMA</span></span><span class="ival" id="img2d-name">—</span></div>
-          <div class="irow" style="margin-top:8px"><span class="ikey">ID</span><span class="ival" id="img2d-id">—</span></div>
-          <div class="irow" style="margin-top:8px"><span class="ikey"><span data-t-id="TIPE" data-t-en="TYPE">TIPE</span></span><span class="ival" id="img2d-type">—</span></div>
-          <div class="irow" style="margin-top:8px"><span class="ikey">CREATOR</span><span class="ival" id="img2d-creator">—</span></div>
-          <div class="irow" style="margin-top:8px"><span class="ikey"><span data-t-id="HARGA" data-t-en="PRICE">HARGA</span></span><span class="ival" id="img2d-price">—</span></div>
-          <a id="img2d-link" href="#" target="_blank" rel="noopener" class="hint" style="display:block;margin-top:8px"><span data-t-id="Lihat di Roblox →" data-t-en="View on Roblox →">Lihat di Roblox →</span></a>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" id="img2d-dl-card" style="display:none">
-      <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-      <p class="hint" style="margin-bottom:10px"><span data-t-id="Pilih tombol sesuai jenis aset — Decal/Image pakai IMAGE, font pakai FONT, video pakai VIDEO." data-t-en="Pick the button matching the asset's actual type — Decal/Image uses IMAGE, fonts use FONT, videos use VIDEO.">Pilih tombol sesuai jenis aset — Decal/Image pakai IMAGE, font pakai FONT, video pakai VIDEO.</span></p>
-      <div class="dl-grid" style="grid-template-columns:1fr 1fr 1fr">
-        <div class="dl-card ready">
-          <div class="dl-title"><span style="color:#4af">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-          <div class="dl-desc"><span data-t-id="Decal, Image, Face, GUI, Background." data-t-en="Decal, Image, Face, GUI, Background.">Decal, Image, Face, GUI, Background.</span></div>
-          <button class="btn" style="background:#2a4;color:#fff" id="img2d-dl-btn" onclick="downloadImage2D()">⬇ <span data-t-id="IMAGE" data-t-en="IMAGE">IMAGE</span></button>
-        </div>
-        <div class="dl-card ready">
-          <div class="dl-title"><span style="color:#c8f">FONT</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-          <div class="dl-desc"><span data-t-id="ZIP: manifest + semua file .ttf/.otf per weight/style." data-t-en="ZIP: manifest + every .ttf/.otf per weight/style.">ZIP: manifest + semua file .ttf/.otf per weight/style.</span></div>
-          <button class="btn" style="background:#84f;color:#fff" id="img2d-dl-font-btn" onclick="downloadFont2D()">⬇ <span data-t-id="FONT" data-t-en="FONT">FONT</span></button>
-        </div>
-        <div class="dl-card ready">
-          <div class="dl-title"><span style="color:#fa4">VIDEO</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-          <div class="dl-desc"><span data-t-id="File .ts (bukan .mp4) — bisa diputar di VLC." data-t-en=".ts file (not .mp4) — plays in VLC.">File .ts (bukan .mp4) — bisa diputar di VLC.</span></div>
-          <button class="btn btn-amber" id="img2d-dl-video-btn" onclick="downloadVideo2D()">⬇ <span data-t-id="VIDEO" data-t-en="VIDEO">VIDEO</span></button>
-        </div>
-      </div>
-    </div>
-
-    <button class="btn btn-amber" id="img2d-pk-toggle-btn" style="margin-top:14px" onclick="toggleImage2DPacked()">📦 <span data-t-id="PACKED 2D ASSETS" data-t-en="PACKED 2D ASSETS">PACKED 2D ASSETS</span></button>
-
-    <div id="img2d-packed" style="display:none">
-      <div class="card">
-        <div class="label"><span data-t-id="TAMBAH 2D ASSET KE PACK" data-t-en="ADD 2D ASSET TO PACK">TAMBAH 2D ASSET KE PACK</span></div>
-        <div class="row">
-          <div style="flex:1;min-width:180px">
-            <input type="number" id="img2d-pk-input" data-t-ph-id="Asset ID" data-t-ph-en="Asset ID" placeholder="Asset ID">
-          </div>
-          <button class="btn" id="img2d-pk-add-btn" onclick="addPacked2DItem()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
-        </div>
-        <div class="status-box idle" id="img2d-pk-status"><div class="dot"></div><span id="img2d-pk-msg"><span data-t-id="Belum ada item." data-t-en="No items yet.">Belum ada item.</span></span></div>
-      </div>
-
-      <div class="card" id="img2d-pk-preview-card" style="display:none">
-        <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span> (<span id="img2d-pk-count">0</span>)</div>
-        <div class="packed-grid" id="img2d-pk-grid"></div>
-      </div>
-
-      <div class="card" id="img2d-pk-download-card" style="display:none">
-        <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-        <div class="dl-card ready">
-          <div class="dl-title"><span style="color:#2a4">IMAGES</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-          <div class="dl-desc"><span data-t-id="Semua gambar dibungkus jadi satu ZIP." data-t-en="All images packed into one ZIP.">Semua gambar dibungkus jadi satu ZIP.</span></div>
-          <button class="btn" style="background:#2a4;color:#fff" id="img2d-pk-download-btn" onclick="downloadPacked2DImages()">⬇ <span data-t-id="DOWNLOAD PACKED IMAGES ZIP" data-t-en="DOWNLOAD PACKED IMAGES ZIP">DOWNLOAD PACKED IMAGES ZIP</span></button>
-        </div>
-        <div class="prog"><div class="prog-fill" id="img2d-pk-prog"></div></div>
       </div>
     </div>
   </div>
@@ -1384,8 +1106,6 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
       <div id="model-reasons" style="margin-top:10px;font-size:9px;color:#ff7777"></div>
       <button class="btn btn-green" id="model-build-btn" onclick="buildModelGLB()" disabled style="margin-top:14px;opacity:0.5">⬇ <span data-t-id="BUILD GLB" data-t-en="BUILD GLB">BUILD GLB</span></button>
-      <button class="btn btn-green" id="model-objzip-btn" onclick="downloadModelOBJZip()" disabled style="margin-top:8px;opacity:0.5">⬇ <span data-t-id="OBJ + TEXTURE (ZIP)" data-t-en="OBJ + TEXTURE (ZIP)">OBJ + TEXTURE (ZIP)</span></button>
-      <div style="margin-top:4px;font-size:8px;color:var(--gray)"><span data-t-id="Pakai ini kalau texture GLB nggak muncul di Nomad Sculpt / Prisma 3D" data-t-en="Use this if GLB textures don't show up in Nomad Sculpt / Prisma 3D">Pakai ini kalau texture GLB nggak muncul di Nomad Sculpt / Prisma 3D</span></div>
     </div>
 
     <div class="card" style="margin-top:12px">
@@ -1407,7 +1127,6 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         </div>
         <div id="rbxm-reasons" style="margin-top:8px;font-size:9px;color:#ff7777"></div>
         <button class="btn btn-green" id="rbxm-build-btn" onclick="buildFromUpload()" disabled style="margin-top:12px;opacity:0.5;width:100%">⬇ <span data-t-id="BUILD GLB DARI FILE" data-t-en="BUILD GLB FROM FILE">BUILD GLB DARI FILE</span></button>
-        <button class="btn btn-green" id="rbxm-objzip-btn" onclick="downloadOBJZipFromUpload()" disabled style="margin-top:8px;opacity:0.5;width:100%">⬇ <span data-t-id="OBJ + TEXTURE (ZIP)" data-t-en="OBJ + TEXTURE (ZIP)">OBJ + TEXTURE (ZIP)</span></button>
       </div>
     </div>
   </div>
@@ -1446,47 +1165,17 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <div style="margin-bottom:10px;padding:10px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.3);border-radius:4px;font-size:8px;color:#ffaa00;line-height:1.8">⚠ <span data-t-id="NOTED: Baking technique using Ibis Paint only works in Prisma 3D." data-t-en="NOTED: Baking technique using Ibis Paint only works in Prisma 3D.">NOTED: Baking technique using Ibis Paint only works in Prisma 3D.</span></div>
       <button class="btn btn-green" onclick="downloadTextures()" style="width:100%">⬇ <span data-t-id="DOWNLOAD ALL MAPS (ZIP)" data-t-en="DOWNLOAD ALL MAPS (ZIP)">DOWNLOAD ALL MAPS (ZIP)</span></button>
 
-      <button class="btn" onclick="previewBakeAll()" style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#4f46e5);width:100%">🔥 <span data-t-id="BAKED VERSION" data-t-en="BAKED VERSION">BAKED VERSION</span></button>
       <div id="bake-preview-wrap" style="display:none;margin-top:14px;margin-bottom:10px">
-        <div style="margin-bottom:14px;padding:10px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.3);border-radius:4px;font-size:8px;color:#a78bfa;line-height:1.8">ℹ <span data-t-id="Setiap versi di bawah di-bake beda-beda sesuai cara software-nya baca texture. Pilih sesuai software yang kamu pakai." data-t-en="Each version below is baked differently to match how that software reads textures. Choose the one matching your app.">Each version below is baked differently to match how that software reads textures. Choose the one matching your app.</span></div>
-
-        <p style="font-size:8px;color:#a78bfa;margin-bottom:6px;letter-spacing:1px;font-weight:700">BAKED 1 — PRISMA 3D</p>
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;line-height:1.6">Dipacking khusus untuk teknik recombine di Ibis Paint.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ALBEDO+AO+EMI</p><canvas id="bake-p3d-1" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL+BUMP</p><canvas id="bake-p3d-2" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">REFLECTION</p><canvas id="bake-p3d-3" style="width:100%;border-radius:4px"></canvas></div>
+        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;letter-spacing:1px"><span data-t-id="PREVIEW HASIL BAKE" data-t-en="BAKE RESULT PREVIEW">PREVIEW HASIL BAKE</span></p>
+        <div style="margin-bottom:10px;padding:10px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.3);border-radius:4px;font-size:8px;color:#a78bfa;line-height:1.8">ℹ <span data-t-id="Catatan: baked texture ini dibuat khusus untuk workflow Prisma 3D + Ibis Paint. Untuk Blender &amp; Roblox Studio, gunakan map individual di atas (bukan versi baked ini). Untuk Unreal Engine, dibutuhkan packing ORM yang berbeda — belum didukung di sini." data-t-en="Note: these baked textures are built specifically for the Prisma 3D + Ibis Paint workflow. For Blender &amp; Roblox Studio, use the individual maps above instead (not this baked version). Unreal Engine needs a different ORM packing — not supported here yet.">Note: these baked textures are built specifically for the Prisma 3D + Ibis Paint workflow. For Blender &amp; Roblox Studio, use the individual maps above instead (not this baked version). Unreal Engine needs a different ORM packing — not supported here yet.</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">BAKED 1</p><canvas id="bake-preview-1" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">BAKED 2</p><canvas id="bake-preview-2" style="width:100%;border-radius:4px"></canvas></div>
+          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">BAKED 3</p><canvas id="bake-preview-3" style="width:100%;border-radius:4px"></canvas></div>
         </div>
-        <button class="btn btn-green" onclick="downloadBakePrisma()" style="width:100%;margin-bottom:16px">⬇ <span data-t-id="DOWNLOAD (PRISMA 3D)" data-t-en="DOWNLOAD (PRISMA 3D)">DOWNLOAD (PRISMA 3D)</span></button>
-
-        <p style="font-size:8px;color:#a78bfa;margin-bottom:6px;letter-spacing:1px;font-weight:700">BAKED 2 — BLENDER</p>
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;line-height:1.6">BaseColor + Normal terpisah, plus ORM packed (R=AO, G=Roughness, B=Metallic) buat di-split pakai Separate Color node.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">BASECOLOR</p><canvas id="bake-blender-1" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL</p><canvas id="bake-blender-2" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ORM</p><canvas id="bake-blender-3" style="width:100%;border-radius:4px"></canvas></div>
-        </div>
-        <button class="btn btn-green" onclick="downloadBakeBlender()" style="width:100%;margin-bottom:16px">⬇ <span data-t-id="DOWNLOAD (BLENDER)" data-t-en="DOWNLOAD (BLENDER)">DOWNLOAD (BLENDER)</span></button>
-
-        <p style="font-size:8px;color:#a78bfa;margin-bottom:6px;letter-spacing:1px;font-weight:700">BAKED 3 — ROBLOX STUDIO</p>
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;line-height:1.6">Tidak di-pack — Studio (SurfaceAppearance) butuh tiap map terpisah dengan nama slot yang sesuai.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-          <div><p style="font-size:6px;color:var(--gray);margin-bottom:4px">COLORMAP</p><canvas id="bake-studio-1" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:6px;color:var(--gray);margin-bottom:4px">NORMALMAP</p><canvas id="bake-studio-2" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:6px;color:var(--gray);margin-bottom:4px">ROUGHNESSMAP</p><canvas id="bake-studio-3" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:6px;color:var(--gray);margin-bottom:4px">METALNESSMAP</p><canvas id="bake-studio-4" style="width:100%;border-radius:4px"></canvas></div>
-        </div>
-        <button class="btn btn-green" onclick="downloadBakeStudio()" style="width:100%;margin-bottom:16px">⬇ <span data-t-id="DOWNLOAD (ROBLOX STUDIO)" data-t-en="DOWNLOAD (ROBLOX STUDIO)">DOWNLOAD (ROBLOX STUDIO)</span></button>
-
-        <p style="font-size:8px;color:#a78bfa;margin-bottom:6px;letter-spacing:1px;font-weight:700">BAKED 4 — UNREAL ENGINE</p>
-        <p style="font-size:8px;color:var(--gray);margin-bottom:8px;line-height:1.6">BaseColor + Normal terpisah, plus ORM packed (R=AO, G=Roughness, B=Metallic) sesuai konvensi Unreal.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">BASECOLOR</p><canvas id="bake-unreal-1" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">NORMAL</p><canvas id="bake-unreal-2" style="width:100%;border-radius:4px"></canvas></div>
-          <div><p style="font-size:7px;color:var(--gray);margin-bottom:4px">ORM</p><canvas id="bake-unreal-3" style="width:100%;border-radius:4px"></canvas></div>
-        </div>
-        <button class="btn btn-green" onclick="downloadBakeUnreal()" style="width:100%">⬇ <span data-t-id="DOWNLOAD (UNREAL ENGINE)" data-t-en="DOWNLOAD (UNREAL ENGINE)">DOWNLOAD (UNREAL ENGINE)</span></button>
       </div>
+      <button class="btn" onclick="previewBakePrisma()" style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#4f46e5);width:100%">🔥 <span data-t-id="BAKED VERSION" data-t-en="BAKED VERSION">BAKED VERSION</span></button>
+      <button class="btn btn-green" id="bake-download-btn" onclick="downloadBakePrisma()" style="margin-top:8px;display:none;width:100%">⬇ <span data-t-id="DOWNLOAD BAKED ZIP" data-t-en="DOWNLOAD BAKED ZIP">DOWNLOAD BAKED ZIP</span></button>
       <div id="bake-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
     </div>
 
@@ -1720,23 +1409,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 
     <div class="tl-item latest">
       <div class="tl-dot"></div>
-      <div class="tl-version">v3.0 <span class="tl-badge-new">LATEST</span></div>
-      <div class="tl-date"><span data-t-id="19 Agustus 2026" data-t-en="August 19, 2026">19 Agustus 2026</span></div>
-      <div class="tl-card">
-        <ul class="tl-changes">
-          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Fitur Packed Catalog — tambahkan banyak item katalog ke preview, lalu download semuanya sekaligus jadi satu ZIP (OBJ+MTL+Texture, per folder)" data-t-en="Packed Catalog feature — add multiple catalog items to a preview, then download them all at once as one ZIP (OBJ+MTL+Texture, per folder)">Fitur Packed Catalog — tambahkan banyak item katalog ke preview, lalu download semuanya sekaligus jadi satu ZIP (OBJ+MTL+Texture, per folder)</span></li>
-          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Dukungan Bundle — ID Bundle (roblox.com/bundles/ID) sekarang otomatis terdeteksi & bisa diunduh, baik satuan maupun lewat Packed Catalog" data-t-en="Bundle support — Bundle IDs (roblox.com/bundles/ID) are now auto-detected and downloadable, both single-item and via Packed Catalog">Dukungan Bundle — ID Bundle (roblox.com/bundles/ID) sekarang otomatis terdeteksi & bisa diunduh, baik satuan maupun lewat Packed Catalog</span></li>
-          <li><span class="tl-tag tag-fix">FIX</span><span data-t-id="Nama file/folder hasil download sekarang memakai nama asli item, bukan lagi angka ID (sebelumnya nama sering gagal diambil karena diblokir Cloudflare)" data-t-en="Downloaded file/folder names now use the item's real name instead of just the ID (name lookup was previously being silently blocked by Cloudflare)">Nama file/folder hasil download sekarang memakai nama asli item, bukan lagi angka ID (sebelumnya nama sering gagal diambil karena diblokir Cloudflare)</span></li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Packed Catalog & download Bundle sekarang diambil paralel, memangkas waktu tunggu untuk batch besar" data-t-en="Packed Catalog & Bundle downloads now fetch in parallel, cutting wait time significantly for large batches">Packed Catalog & download Bundle sekarang diambil paralel, memangkas waktu tunggu untuk batch besar</span></li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Caching untuk info katalog/bundle — fetch berulang untuk item populer jadi lebih cepat" data-t-en="Caching for catalog/bundle info — repeated fetches for popular items are now faster">Caching untuk info katalog/bundle — fetch berulang untuk item populer jadi lebih cepat</span></li>
-          <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Rate limiting dasar ditambahkan untuk melindungi server dari penyalahgunaan berlebihan" data-t-en="Basic rate limiting added to protect the server from excessive abuse">Rate limiting dasar ditambahkan untuk melindungi server dari penyalahgunaan berlebihan</span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="tl-item">
-      <div class="tl-dot"></div>
-      <div class="tl-version">v2.8</div>
+      <div class="tl-version">v2.8 <span class="tl-badge-new">LATEST</span></div>
       <div class="tl-date"><span data-t-id="1 Agustus 2026" data-t-en="August 1, 2026">1 Agustus 2026</span></div>
       <div class="tl-card">
         <ul class="tl-changes">
@@ -2086,15 +1759,6 @@ async function fetchCatalog(){
     document.getElementById('cat-result').style.display='block';
     prog('cat-prog',100);
     st('cat-status',`✓ Item "${data.name}" ditemukan.`,'ok');
-    if(data.isBundle){
-      if(data.isAnimationBundle){
-        st('cat-status',`⚠️ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.`,'err');
-      } else {
-        st('cat-status',`✓ Bundle "${data.name}" ditemukan (${data.bundleItemCount||0} item di dalamnya).`,'ok');
-      }
-    } else if(data.isBackground){
-      st('cat-status',`ℹ️ "${data.name}" adalah Profile Background (gambar 2D, bukan mesh) — download sebagai gambar tersedia di bawah.`,'ok');
-    }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
   }finally{ btn.disabled=false; }
@@ -2103,37 +1767,24 @@ async function fetchCatalog(){
 function fillCatalogInfo(d){
   document.getElementById('cat-name').textContent    = d.name||'—';
   document.getElementById('cat-id').textContent      = d.assetId||'—';
-  document.getElementById('cat-type').textContent    = d.isBundle ? `${d.isAnimationBundle?'Animation Bundle':'Bundle'} (${d.bundleItemCount||0} item)` : (d.assetType||'—');
+  document.getElementById('cat-type').textContent    = d.assetType||'—';
   document.getElementById('cat-creator').textContent = d.creatorName||'—';
   document.getElementById('cat-price').textContent   = d.price!=null ? `${d.price} Robux` : 'Gratis';
   document.getElementById('cat-link').href           = d.catalogUrl||'#';
   if(d.thumbnailUrl){
     document.getElementById('cat-thumb').innerHTML=`<img src="${d.thumbnailUrl}" alt="${d.name}">`;
   }
-
-  const isAnim = !!d.isAnimationBundle;
-  const isBg = !!d.isBackground;
-  document.getElementById('cat-anim-warning').style.display = isAnim ? 'block' : 'none';
-  // cat-dl-obj-card / cat-dl-gltf-card / cat-dl-image-card are siblings inside
-  // cat-dl-grid, so the grid itself only needs hiding entirely for Animation
-  // Bundles (nothing downloadable at all); for Backgrounds we keep the grid
-  // visible but swap which individual card shows.
-  document.getElementById('cat-dl-grid').style.display = isAnim ? 'none' : 'grid';
-  document.getElementById('cat-dl-obj-card').style.display = isBg ? 'none' : '';
-  document.getElementById('cat-dl-gltf-card').style.display = isBg ? 'none' : '';
-  document.getElementById('cat-dl-image-card').style.display = isBg ? 'block' : 'none';
 }
 
 async function downloadCatalog(format){
   if(!currentAssetId) return;
   st('cat-status',`⏳ Mengunduh data...`,'loading');
   try{
-    const name=document.getElementById('cat-name').textContent||currentAssetId;
     // Selalu minta versi dengan texture (gltf di backend = obj+mtl+texture bundle) sbg sumber konversi
-    // &name= dikirim supaya penamaan file di dalam ZIP dijamin sama persis dengan yang tampil di preview
-    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf&name=${encodeURIComponent(name)}`);
+    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf`);
     if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
+    const name=document.getElementById('cat-name').textContent||currentAssetId;
 
     if(format === 'gltf'){
       if(!window.convertZipToGLB){ throw new Error("Konverter GLB belum siap, coba lagi sebentar."); }
@@ -2150,332 +1801,6 @@ async function downloadCatalog(format){
   }catch(e){ showApiError('cat-status', e.error?e:{message:e.message}); }
 }
 
-async function downloadCatalogImage(){
-  if(!currentAssetId) return;
-  const btn = document.getElementById('cat-dl-image-btn');
-  btn.disabled = true;
-  st('cat-status',`⏳ Mengunduh gambar...`,'loading');
-  try{
-    const name=document.getElementById('cat-name').textContent||currentAssetId;
-    const res=await fetch(`${BASE}/api/catalog/image?asset_id=${currentAssetId}&name=${encodeURIComponent(name)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
-    const blob=await res.blob();
-    const ext = blob.type.includes('jpeg') ? 'jpg' : 'png';
-    const a=Object.assign(document.createElement('a'),{
-      href:URL.createObjectURL(blob),
-      download:`${name}.${ext}`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('cat-status',`✓ Download gambar selesai!`,'ok');
-  }catch(e){
-    st('cat-status','✗ '+e.message,'err');
-  }finally{ btn.disabled=false; }
-}
-
-// ── KATALOG PACKED (BATCH) ──────────────────────────────────────────
-let packedItems = []; // { id, name, thumbnailUrl }
-
-function togglePackedMode(){
-  const el = document.getElementById('cat-packed');
-  const show = el.style.display === 'none';
-  el.style.display = show ? 'block' : 'none';
-  document.getElementById('pk-toggle-btn').innerHTML = show
-    ? '✕ <span>TUTUP PACKED</span>'
-    : '📦 <span data-t-id="PREVIEW CATALOG PACKED" data-t-en="PREVIEW CATALOG PACKED">PREVIEW CATALOG PACKED</span>';
-  if(show) document.getElementById('pk-input').focus();
-}
-
-async function addPackedItem(){
-  const input = document.getElementById('pk-input');
-  const id = parseInt(input.value);
-  if(!id||isNaN(id)){ st('pk-status','Masukkan Asset ID yang valid.','err'); return; }
-  if(packedItems.some(it=>it.id===id)){ st('pk-status','Item sudah ada di daftar.','err'); return; }
-
-  const btn = document.getElementById('pk-add-btn');
-  btn.disabled = true;
-  st('pk-status','Mengambil detail item…','loading');
-  try{
-    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
-    const data = await res.json();
-    if(data.isAnimationBundle){
-      st('pk-status',`✗ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa ditambahkan ke pack.`,'err');
-      return;
-    }
-    packedItems.push({
-      id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl,
-      isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0,
-      isBackground: !!data.isBackground
-    });
-    renderPackedGrid();
-    input.value=''; input.focus();
-    const tag = data.isBundle ? ` (Bundle, ${data.bundleItemCount||0} item)` : (data.isBackground ? ` (Background)` : '');
-    st('pk-status',`✓ "${data.name}"${tag} ditambahkan. (${packedItems.length} item)`,'ok');
-  }catch(e){
-    st('pk-status','✗ '+e.message,'err');
-  }finally{ btn.disabled=false; }
-}
-
-function removePackedItem(id){
-  packedItems = packedItems.filter(it=>it.id!==id);
-  renderPackedGrid();
-  st('pk-status', packedItems.length ? `${packedItems.length} item di daftar.` : 'Belum ada item.', 'idle');
-}
-
-function renderPackedGrid(){
-  const grid = document.getElementById('pk-grid');
-  const previewCard = document.getElementById('pk-preview-card');
-  const dlCard = document.getElementById('pk-download-card');
-  document.getElementById('pk-count').textContent = packedItems.length;
-
-  if(packedItems.length===0){
-    previewCard.style.display='none';
-    dlCard.style.display='none';
-    grid.innerHTML='';
-    return;
-  }
-  previewCard.style.display='block';
-  dlCard.style.display='block';
-
-  grid.innerHTML = packedItems.map(it=>`
-    <div class="packed-item">
-      <button class="packed-remove" onclick="removePackedItem(${it.id})" title="Hapus">×</button>
-      <div class="packed-thumb">${it.thumbnailUrl?`<img src="${it.thumbnailUrl}" alt="${it.name.replace(/"/g,'')}">`:'🧢'}</div>
-      ${it.isBundle?`<div style="font-size:8px;color:var(--amber);font-weight:700;letter-spacing:.04em;margin-bottom:2px">📦 BUNDLE · ${it.bundleItemCount}</div>`:''}
-      ${it.isBackground?`<div style="font-size:8px;color:#8f8;font-weight:700;letter-spacing:.04em;margin-bottom:2px">🖼️ IMAGE</div>`:''}
-      <div class="packed-name">${it.name}</div>
-      <div class="packed-id">#${it.id}</div>
-    </div>
-  `).join('');
-}
-
-async function downloadPackedCatalog(){
-  if(packedItems.length===0) return;
-  const btn = document.getElementById('pk-download-btn');
-  btn.disabled = true;
-  prog('pk-prog', 15);
-  st('pk-status', `⏳ Membungkus ${packedItems.length} item (OBJ+Texture)…`,'loading');
-  try{
-    // Kirim nama yang sudah diambil sewaktu PREVIEW, supaya nama file/folder di ZIP
-    // dijamin sama persis dengan yang tampil di grid — tidak perlu tebak-tebak lagi.
-    const items = packedItems.map(it=>({ id: it.id, name: it.name, isBundle: !!it.isBundle }));
-    const res = await fetch(`${BASE}/api/v2/item-batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items })
-    });
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal membuat ZIP'); }
-    prog('pk-prog', 90);
-    const blob = await res.blob();
-    const a = Object.assign(document.createElement('a'),{
-      href: URL.createObjectURL(blob),
-      download: `catalog_packed_${packedItems.length}items.zip`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    prog('pk-prog', 100);
-    st('pk-status', `✓ Download selesai! ${packedItems.length} item dalam satu ZIP.`,'ok');
-  }catch(e){
-    st('pk-status', '✗ '+e.message, 'err'); prog('pk-prog',0);
-  }finally{ btn.disabled=false; }
-}
-
-// ── 2D ASSETS ────────────────────────────────────────────────────────
-let currentImage2DId = null;
-let currentImage2DName = null;
-
-async function fetchImage2D(){
-  const input = document.getElementById('img2d-input');
-  const id = parseInt(input.value);
-  if(!id||isNaN(id)){ st('img2d-status','Masukkan Asset ID yang valid.','err'); return; }
-
-  const btn = document.getElementById('img2d-btn');
-  btn.disabled = true;
-  st('img2d-status','Mengambil info…','loading'); prog('img2d-prog',30);
-  document.getElementById('img2d-result').style.display='none';
-  document.getElementById('img2d-dl-card').style.display='none';
-  try{
-    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
-    const data = await res.json();
-    prog('img2d-prog',100);
-    currentImage2DId = id;
-    currentImage2DName = data.name || String(id);
-
-    document.getElementById('img2d-name').textContent = data.name||'—';
-    document.getElementById('img2d-id').textContent = data.assetId||id;
-    document.getElementById('img2d-type').textContent = data.isBundle
-      ? `${data.isAnimationBundle?'Animation Bundle':'Bundle'} (${data.bundleItemCount||0} item)`
-      : (data.assetType||'—');
-    document.getElementById('img2d-creator').textContent = data.creatorName||'—';
-    document.getElementById('img2d-price').textContent = data.price!=null ? `${data.price} Robux` : 'Gratis';
-    document.getElementById('img2d-link').href = data.catalogUrl||'#';
-    document.getElementById('img2d-thumb').innerHTML = data.thumbnailUrl
-      ? `<img src="${data.thumbnailUrl}" alt="${data.name}">` : '🖼️';
-    document.getElementById('img2d-result').style.display='block';
-    document.getElementById('img2d-dl-card').style.display='block';
-
-    st('img2d-status',`✓ "${data.name}" ditemukan. Tekan DOWNLOAD IMAGE untuk mengambil gambar aslinya.`,'ok');
-  }catch(e){
-    st('img2d-status','✗ '+e.message,'err'); prog('img2d-prog',0);
-  }finally{ btn.disabled=false; }
-}
-
-async function downloadImage2D(){
-  if(!currentImage2DId) return;
-  const btn = document.getElementById('img2d-dl-btn');
-  btn.disabled = true;
-  st('img2d-status','⏳ Mengunduh gambar…','loading');
-  try{
-    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
-    const blob = await res.blob();
-    const cd = res.headers.get('content-disposition')||'';
-    const m = cd.match(/filename="?([^"]+)"?/);
-    const fname = m ? m[1] : `${currentImage2DName}.png`;
-    const a = Object.assign(document.createElement('a'),{ href: URL.createObjectURL(blob), download: fname });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('img2d-status',`✓ Download selesai!`,'ok');
-  }catch(e){
-    st('img2d-status','✗ '+e.message,'err');
-  }finally{ btn.disabled=false; }
-}
-
-async function downloadFont2D(){
-  if(!currentImage2DId) return;
-  const btn = document.getElementById('img2d-dl-font-btn');
-  btn.disabled = true;
-  st('img2d-status','⏳ Mengunduh font (manifest + semua face)…','loading');
-  try{
-    const res = await fetch(`${BASE}/api/2d/font?id=${currentImage2DId}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh font'); }
-    const blob = await res.blob();
-    const a = Object.assign(document.createElement('a'),{
-      href: URL.createObjectURL(blob),
-      download: `${currentImage2DName}_font.zip`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('img2d-status',`✓ Download font selesai!`,'ok');
-  }catch(e){
-    st('img2d-status','✗ '+e.message+' (item ini mungkin bukan Font)','err');
-  }finally{ btn.disabled=false; }
-}
-
-async function downloadVideo2D(){
-  if(!currentImage2DId) return;
-  const btn = document.getElementById('img2d-dl-video-btn');
-  btn.disabled = true;
-  st('img2d-status','⏳ Mengunduh & menggabungkan segment video… (bisa agak lama)','loading');
-  try{
-    const res = await fetch(`${BASE}/api/2d/video?id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh video'); }
-    const blob = await res.blob();
-    const a = Object.assign(document.createElement('a'),{
-      href: URL.createObjectURL(blob),
-      download: `${currentImage2DName}.ts`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('img2d-status',`✓ Download selesai! File .ts — buka dengan VLC (bukan .mp4 biasa).`,'ok');
-  }catch(e){
-    st('img2d-status','✗ '+e.message+' (item ini mungkin bukan Video)','err');
-  }finally{ btn.disabled=false; }
-}
-
-document.getElementById('img2d-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchImage2D(); });
-
-// ── PACKED 2D ASSETS (BATCH) ────────────────────────────────────────
-let packed2DItems = []; // { id, name, thumbnailUrl }
-
-function toggleImage2DPacked(){
-  const el = document.getElementById('img2d-packed');
-  const show = el.style.display === 'none';
-  el.style.display = show ? 'block' : 'none';
-  document.getElementById('img2d-pk-toggle-btn').innerHTML = show
-    ? '✕ <span>TUTUP PACKED</span>'
-    : '📦 <span data-t-id="PACKED 2D ASSETS" data-t-en="PACKED 2D ASSETS">PACKED 2D ASSETS</span>';
-  if(show) document.getElementById('img2d-pk-input').focus();
-}
-
-async function addPacked2DItem(){
-  const input = document.getElementById('img2d-pk-input');
-  const id = parseInt(input.value);
-  if(!id||isNaN(id)){ st('img2d-pk-status','Masukkan Asset ID yang valid.','err'); return; }
-  if(packed2DItems.some(it=>it.id===id)){ st('img2d-pk-status','Item sudah ada di daftar.','err'); return; }
-
-  const btn = document.getElementById('img2d-pk-add-btn');
-  btn.disabled = true;
-  st('img2d-pk-status','Mengambil detail item…','loading');
-  try{
-    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
-    const data = await res.json();
-    packed2DItems.push({ id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl });
-    renderPacked2DGrid();
-    input.value=''; input.focus();
-    st('img2d-pk-status',`✓ "${data.name}" ditambahkan. (${packed2DItems.length} item)`,'ok');
-  }catch(e){
-    st('img2d-pk-status','✗ '+e.message,'err');
-  }finally{ btn.disabled=false; }
-}
-
-function removePacked2DItem(id){
-  packed2DItems = packed2DItems.filter(it=>it.id!==id);
-  renderPacked2DGrid();
-  st('img2d-pk-status', packed2DItems.length ? `${packed2DItems.length} item di daftar.` : 'Belum ada item.', 'idle');
-}
-
-function renderPacked2DGrid(){
-  const grid = document.getElementById('img2d-pk-grid');
-  const previewCard = document.getElementById('img2d-pk-preview-card');
-  const dlCard = document.getElementById('img2d-pk-download-card');
-  document.getElementById('img2d-pk-count').textContent = packed2DItems.length;
-
-  if(packed2DItems.length===0){
-    previewCard.style.display='none';
-    dlCard.style.display='none';
-    grid.innerHTML='';
-    return;
-  }
-  previewCard.style.display='block';
-  dlCard.style.display='block';
-
-  grid.innerHTML = packed2DItems.map(it=>`
-    <div class="packed-item">
-      <button class="packed-remove" onclick="removePacked2DItem(${it.id})" title="Hapus">×</button>
-      <div class="packed-thumb">${it.thumbnailUrl?`<img src="${it.thumbnailUrl}" alt="${it.name.replace(/"/g,'')}">`:'🖼️'}</div>
-      <div class="packed-name">${it.name}</div>
-      <div class="packed-id">#${it.id}</div>
-    </div>
-  `).join('');
-}
-
-async function downloadPacked2DImages(){
-  if(packed2DItems.length===0) return;
-  const btn = document.getElementById('img2d-pk-download-btn');
-  btn.disabled = true;
-  prog('img2d-pk-prog', 15);
-  st('img2d-pk-status', `⏳ Membungkus ${packed2DItems.length} gambar…`,'loading');
-  try{
-    const items = packed2DItems.map(it=>({ id: it.id, name: it.name }));
-    const res = await fetch(`${BASE}/api/v2/image-batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items })
-    });
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal membuat ZIP'); }
-    prog('img2d-pk-prog', 90);
-    const blob = await res.blob();
-    const a = Object.assign(document.createElement('a'),{
-      href: URL.createObjectURL(blob),
-      download: `image2d_packed_${packed2DItems.length}items.zip`
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    prog('img2d-pk-prog', 100);
-    st('img2d-pk-status', `✓ Download selesai! ${packed2DItems.length} gambar dalam satu ZIP.`,'ok');
-  }catch(e){
-    st('img2d-pk-status', '✗ '+e.message, 'err'); prog('img2d-pk-prog',0);
-  }finally{ btn.disabled=false; }
-}
-
 // ── API TABLE ─────────────────────────────────────────────────────
 const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
@@ -2485,11 +1810,6 @@ const ROUTES=[
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
-  ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
-  ['GET','GET /api/catalog/image?asset_id=','Gambar 2D asli item (Background/Decal/Image — bukan mesh)'],
-  ['POST','POST /api/v2/image-batch','ZIP berisi banyak gambar 2D sekaligus (Decal/Image/Face/GUI/Background)'],
-  ['GET','GET /api/2d/font?id=','ZIP: Font Family manifest + semua file .ttf/.otf per Face'],
-  ['GET','GET /api/2d/video?id=','File .ts hasil gabungan semua segment HLS video (bukan .mp4)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
@@ -2756,7 +2076,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
 document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
-document.getElementById('pk-input').addEventListener('keydown',e=>{ if(e.key==='Enter') addPackedItem(); });
 
 let currentAudioId = null;
 
@@ -2865,19 +2184,14 @@ async function handleRBXMUpload(event){
 
     const badge = document.getElementById("rbxm-support-badge");
     const buildBtn = document.getElementById("rbxm-build-btn");
-    const objZipBtn = document.getElementById("rbxm-objzip-btn");
     if(data.supported){
       badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — siap dikonversi ke GLB';
       buildBtn.disabled = false;
       buildBtn.style.opacity = "1";
-      objZipBtn.disabled = false;
-      objZipBtn.style.opacity = "1";
     } else {
       badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span>';
       buildBtn.disabled = true;
       buildBtn.style.opacity = "0.5";
-      objZipBtn.disabled = true;
-      objZipBtn.style.opacity = "0.5";
     }
 
     document.getElementById("rbxm-filename").textContent = data.filename || file.name;
@@ -2906,16 +2220,12 @@ async function buildFromUpload(){
   // Reuse buildModelGLB - sudah set window.currentModelData di handleRBXMUpload
   const btn = document.getElementById("rbxm-build-btn");
   const statusEl = document.getElementById("rbxm-upload-status");
+  // Redirect status output ke rbxm-upload-status
+  const origStatus = document.getElementById("model-status");
+  const origBuildBtn = document.getElementById("model-build-btn");
+  // Sementara swap element reference supaya buildModelGLB update status yang benar
   btn.disabled = true;
   await window.buildModelGLB(statusEl, btn);
-}
-
-async function downloadOBJZipFromUpload(){
-  // Reuse downloadModelOBJZip - sudah set window.currentModelData di handleRBXMUpload
-  const btn = document.getElementById("rbxm-objzip-btn");
-  const statusEl = document.getElementById("rbxm-upload-status");
-  btn.disabled = true;
-  await window.downloadModelOBJZip(statusEl, btn);
 }
 
 async function downloadRBXM(){
@@ -2965,19 +2275,14 @@ async function fetchModelInfo(){
 
     const badge = document.getElementById("model-support-badge");
     const buildBtn = document.getElementById("model-build-btn");
-    const objZipBtn = document.getElementById("model-objzip-btn");
     if(data.supported){
       badge.innerHTML = '<span style="color:#00ff99">✓ DIDUKUNG</span> — model sederhana, siap dibangun';
       buildBtn.disabled = false;
       buildBtn.style.opacity = "1";
-      objZipBtn.disabled = false;
-      objZipBtn.style.opacity = "1";
     } else {
       badge.innerHTML = '<span style="color:#ff5555">✗ TIDAK DIDUKUNG</span> — di luar scope MVP saat ini';
       buildBtn.disabled = true;
       buildBtn.style.opacity = "0.5";
-      objZipBtn.disabled = true;
-      objZipBtn.style.opacity = "0.5";
     }
 
     document.getElementById("model-meshpart-count").textContent = data.meshPartCount ?? "—";
@@ -3641,106 +2946,68 @@ function drawBakePreview(canvasId, sourceCanvas){
   target.getContext("2d").drawImage(sourceCanvas, 0, 0);
 }
 let bakedCanvases = null;
-async function previewBakeAll(){
+async function previewBakePrisma(){
   if(!texCanvas){ return; }
   const st = document.getElementById("bake-status");
-  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Baking 4 versi app ('+texCanvas.width+'x'+texCanvas.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Baking 3 slot texture ('+texCanvas.width+'x'+texCanvas.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
   await new Promise(r => setTimeout(r, 50));
   const w = texCanvas.width, h = texCanvas.height;
   function getD(id){ return document.getElementById("canvas-"+id).getContext("2d").getImageData(0,0,w,h).data; }
   function newC(){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
-  function packORM(aoData, roughData, metalData){
-    const c=newC(), ctx=c.getContext("2d"), d=ctx.createImageData(w,h);
-    for(let i=0;i<aoData.length;i+=4){
-      d.data[i]  =aoData[i];     // R = Occlusion
-      d.data[i+1]=roughData[i];  // G = Roughness
-      d.data[i+2]=metalData[i];  // B = Metallic
-      d.data[i+3]=255;
-    }
-    ctx.putImageData(d,0,0);
-    return c;
-  }
 
+  // SLOT 1: Albedo + AO + Emissive baked
   const alb=getD("albedo"), ao=getD("ao"), emi=getD("emissive");
-  const nrm=getD("normal"), bmp=getD("bump");
-  const rgh=getD("roughness"), spec=getD("specular"), met=getD("metallic"), curv=getD("curvature");
-
-  // ── BAKED 1: PRISMA 3D (packed for Ibis Paint recombine) ──
-  const p1=newC(), xp1=p1.getContext("2d"), dp1=xp1.createImageData(w,h);
+  const c1=newC(), x1=c1.getContext("2d"), d1=x1.createImageData(w,h);
   for(let i=0;i<alb.length;i+=4){
-    dp1.data[i]  =Math.min(255,(alb[i]  *ao[i]  /255)+emi[i]  *0.2);
-    dp1.data[i+1]=Math.min(255,(alb[i+1]*ao[i+1]/255)+emi[i+1]*0.2);
-    dp1.data[i+2]=Math.min(255,(alb[i+2]*ao[i+2]/255)+emi[i+2]*0.2);
-    dp1.data[i+3]=255;
+    d1.data[i]  =Math.min(255,(alb[i]  *ao[i]  /255)+emi[i]  *0.2);
+    d1.data[i+1]=Math.min(255,(alb[i+1]*ao[i+1]/255)+emi[i+1]*0.2);
+    d1.data[i+2]=Math.min(255,(alb[i+2]*ao[i+2]/255)+emi[i+2]*0.2);
+    d1.data[i+3]=255;
   }
-  xp1.putImageData(dp1,0,0);
+  x1.putImageData(d1,0,0);
+  drawBakePreview("bake-preview-1", c1);
 
-  const p2=newC(), xp2=p2.getContext("2d"), dp2=xp2.createImageData(w,h);
+  // SLOT 2: Normal + Bump blended
+  const nrm=getD("normal"), bmp=getD("bump");
+  const c2=newC(), x2=c2.getContext("2d"), d2=x2.createImageData(w,h);
   for(let i=0;i<nrm.length;i+=4){
-    dp2.data[i]  =Math.min(255,nrm[i]  *0.8+bmp[i]  *0.2);
-    dp2.data[i+1]=Math.min(255,nrm[i+1]*0.8+bmp[i+1]*0.2);
-    dp2.data[i+2]=Math.min(255,nrm[i+2]*0.8+bmp[i+2]*0.2);
-    dp2.data[i+3]=255;
+    d2.data[i]  =Math.min(255,nrm[i]  *0.8+bmp[i]  *0.2);
+    d2.data[i+1]=Math.min(255,nrm[i+1]*0.8+bmp[i+1]*0.2);
+    d2.data[i+2]=Math.min(255,nrm[i+2]*0.8+bmp[i+2]*0.2);
+    d2.data[i+3]=255;
   }
-  xp2.putImageData(dp2,0,0);
+  x2.putImageData(d2,0,0);
+  drawBakePreview("bake-preview-2", c2);
 
-  const p3=newC(), xp3=p3.getContext("2d"), dp3=xp3.createImageData(w,h);
+  // SLOT 3: Roughness + Specular + Metallic + Curvature baked into Reflection
+  const rgh=getD("roughness"), spec=getD("specular"), met=getD("metallic"), curv=getD("curvature");
+  const c3=newC(), x3=c3.getContext("2d"), d3=x3.createImageData(w,h);
   for(let i=0;i<rgh.length;i+=4){
     const refl=255-rgh[i];
     const v=Math.min(255,refl*0.5+spec[i]*0.2+met[i]*0.2+curv[i]*0.1);
-    dp3.data[i]=dp3.data[i+1]=dp3.data[i+2]=v;
-    dp3.data[i+3]=255;
+    d3.data[i]=d3.data[i+1]=d3.data[i+2]=v;
+    d3.data[i+3]=255;
   }
-  xp3.putImageData(dp3,0,0);
-
-  drawBakePreview("bake-p3d-1", p1);
-  drawBakePreview("bake-p3d-2", p2);
-  drawBakePreview("bake-p3d-3", p3);
-
-  // ── BAKED 2: BLENDER (BaseColor + Normal separate, ORM packed) ──
-  const blenderBase = document.getElementById("canvas-albedo");
-  const blenderNormal = document.getElementById("canvas-normal");
-  const blenderORM = packORM(ao, rgh, met);
-  drawBakePreview("bake-blender-1", blenderBase);
-  drawBakePreview("bake-blender-2", blenderNormal);
-  drawBakePreview("bake-blender-3", blenderORM);
-
-  // ── BAKED 3: ROBLOX STUDIO (unpacked, Studio-named slots) ──
-  drawBakePreview("bake-studio-1", document.getElementById("canvas-albedo"));
-  drawBakePreview("bake-studio-2", document.getElementById("canvas-normal"));
-  drawBakePreview("bake-studio-3", document.getElementById("canvas-roughness"));
-  drawBakePreview("bake-studio-4", document.getElementById("canvas-metallic"));
-
-  // ── BAKED 4: UNREAL ENGINE (BaseColor + Normal separate, ORM packed) ──
-  const unrealBase = document.getElementById("canvas-albedo");
-  const unrealNormal = document.getElementById("canvas-normal");
-  const unrealORM = packORM(ao, rgh, met);
-  drawBakePreview("bake-unreal-1", unrealBase);
-  drawBakePreview("bake-unreal-2", unrealNormal);
-  drawBakePreview("bake-unreal-3", unrealORM);
-
+  x3.putImageData(d3,0,0);
+  drawBakePreview("bake-preview-3", c3);
   document.getElementById("bake-preview-wrap").style.display = "block";
 
-  bakedCanvases = {
-    prisma:  { c1:p1, c2:p2, c3:p3 },
-    blender: { base:blenderBase, normal:blenderNormal, orm:blenderORM },
-    unreal:  { base:unrealBase, normal:unrealNormal, orm:unrealORM }
-  };
-
-  st.innerHTML = "✓ 4 versi siap! Pilih yang sesuai software kamu.";
+  bakedCanvases = { c1, c2, c3 };
+  document.getElementById("bake-download-btn").style.display = "block";
+  st.innerHTML = "✓ Preview siap! Klik Download untuk simpan ZIP.";
 }
 
 async function downloadBakePrisma(){
-  if(!bakedCanvases || !bakedCanvases.prisma){ return; }
+  if(!bakedCanvases){ return; }
   const st = document.getElementById("bake-status");
-  st.textContent = "Generating ZIP (Prisma 3D)...";
+  st.textContent = "Generating ZIP...";
   const zip = new JSZip();
-  const { c1, c2, c3 } = bakedCanvases.prisma;
+  const { c1, c2, c3 } = bakedCanvases;
 
   zip.file(texOriginalName+"_1_albedo_baked.png", await new Promise(r=>c1.toBlob(r,"image/png")));
   zip.file(texOriginalName+"_2_normal_baked.png", await new Promise(r=>c2.toBlob(r,"image/png")));
   zip.file(texOriginalName+"_3_reflection_baked.png", await new Promise(r=>c3.toBlob(r,"image/png")));
-  zip.file("README.txt", "PRISMA 3D BAKED TEXTURES\n========================\nBAKED 1a - "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nBAKED 1b - "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nBAKED 1c - "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: Recombine these using Ibis Paint layers inside Prisma 3D.\n");
+  zip.file("README.txt", "BAKED TEXTURE VERSION\n========================\nBAKED 1: "+texOriginalName+"_1_albedo_baked.png (Albedo+AO+Emissive)\nBAKED 2: "+texOriginalName+"_2_normal_baked.png (Normal+Bump)\nBAKED 3: "+texOriginalName+"_3_reflection_baked.png (Roughness+Specular+Metallic+Curvature)\n\nNOTE: This baked version is built for the Prisma 3D + Ibis Paint recombine workflow specifically.\nFor Blender or Roblox Studio, use the individual (unbaked) maps instead.\nFor Unreal Engine, this packing is NOT the ORM format Unreal expects — not supported yet.\n");
 
   const content = await zip.generateAsync({type:"blob"});
   const a = Object.assign(document.createElement("a"),{
@@ -3748,74 +3015,7 @@ async function downloadBakePrisma(){
     download: texOriginalName+"_prisma3d_baked.zip"
   });
   a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ Download selesai! (Prisma 3D)";
-}
-
-async function downloadBakeBlender(){
-  if(!bakedCanvases || !bakedCanvases.blender){ return; }
-  const st = document.getElementById("bake-status");
-  st.textContent = "Generating ZIP (Blender)...";
-  const zip = new JSZip();
-  const { base, normal, orm } = bakedCanvases.blender;
-
-  zip.file(texOriginalName+"_BaseColor.png", await new Promise(r=>base.toBlob(r,"image/png")));
-  zip.file(texOriginalName+"_Normal.png", await new Promise(r=>normal.toBlob(r,"image/png")));
-  zip.file(texOriginalName+"_ORM.png", await new Promise(r=>orm.toBlob(r,"image/png")));
-  zip.file("README.txt", "BLENDER TEXTURE SET\n====================\n"+texOriginalName+"_BaseColor.png -> Principled BSDF Base Color\n"+texOriginalName+"_Normal.png -> Normal Map node (Color Space: Non-Color)\n"+texOriginalName+"_ORM.png -> Separate Color node: R=Occlusion, G=Roughness, B=Metallic\n");
-
-  const content = await zip.generateAsync({type:"blob"});
-  const a = Object.assign(document.createElement("a"),{
-    href: URL.createObjectURL(content),
-    download: texOriginalName+"_blender_baked.zip"
-  });
-  a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ Download selesai! (Blender)";
-}
-
-async function downloadBakeStudio(){
-  if(!bakedCanvases){ return; }
-  const st = document.getElementById("bake-status");
-  st.textContent = "Generating ZIP (Roblox Studio)...";
-  const zip = new JSZip();
-  const color = document.getElementById("canvas-albedo");
-  const normal = document.getElementById("canvas-normal");
-  const roughness = document.getElementById("canvas-roughness");
-  const metalness = document.getElementById("canvas-metallic");
-
-  zip.file(texOriginalName+"_ColorMap.png", await new Promise(r=>color.toBlob(r,"image/png")));
-  zip.file(texOriginalName+"_NormalMap.png", await new Promise(r=>normal.toBlob(r,"image/png")));
-  zip.file(texOriginalName+"_RoughnessMap.png", await new Promise(r=>roughness.toBlob(r,"image/png")));
-  zip.file(texOriginalName+"_MetalnessMap.png", await new Promise(r=>metalness.toBlob(r,"image/png")));
-  zip.file("README.txt", "ROBLOX STUDIO TEXTURE SET\n=========================\nOn a SurfaceAppearance instance, drag each file into its matching slot:\n"+texOriginalName+"_ColorMap.png -> ColorMap\n"+texOriginalName+"_NormalMap.png -> NormalMap\n"+texOriginalName+"_RoughnessMap.png -> RoughnessMap\n"+texOriginalName+"_MetalnessMap.png -> MetalnessMap\n");
-
-  const content = await zip.generateAsync({type:"blob"});
-  const a = Object.assign(document.createElement("a"),{
-    href: URL.createObjectURL(content),
-    download: texOriginalName+"_robloxstudio_baked.zip"
-  });
-  a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ Download selesai! (Roblox Studio)";
-}
-
-async function downloadBakeUnreal(){
-  if(!bakedCanvases || !bakedCanvases.unreal){ return; }
-  const st = document.getElementById("bake-status");
-  st.textContent = "Generating ZIP (Unreal Engine)...";
-  const zip = new JSZip();
-  const { base, normal, orm } = bakedCanvases.unreal;
-
-  zip.file("T_"+texOriginalName+"_D.png", await new Promise(r=>base.toBlob(r,"image/png")));
-  zip.file("T_"+texOriginalName+"_N.png", await new Promise(r=>normal.toBlob(r,"image/png")));
-  zip.file("T_"+texOriginalName+"_ORM.png", await new Promise(r=>orm.toBlob(r,"image/png")));
-  zip.file("README.txt", "UNREAL ENGINE TEXTURE SET\n=========================\nT_"+texOriginalName+"_D.png -> Base Color\nT_"+texOriginalName+"_N.png -> Normal (set texture Compression Settings to Normalmap)\nT_"+texOriginalName+"_ORM.png -> single sample, split via Mask nodes: R=Occlusion, G=Roughness, B=Metallic\n");
-
-  const content = await zip.generateAsync({type:"blob"});
-  const a = Object.assign(document.createElement("a"),{
-    href: URL.createObjectURL(content),
-    download: texOriginalName+"_unrealengine_baked.zip"
-  });
-  a.click(); URL.revokeObjectURL(a.href);
-  st.textContent = "✓ Download selesai! (Unreal Engine)";
+  st.textContent = "✓ Download selesai!";
 }
 </script>
 
@@ -3960,7 +3160,7 @@ function closeNudge(){
 
 // Wrap existing fetch/download functions to track usage
 document.addEventListener('DOMContentLoaded', () => {
-  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar','addPackedItem','fetchImage2D'];
+  const fnNames = ['fetchAvatar','fetchCatalog','fetchAudio','fetchModelInfo','downloadAvatar'];
   fnNames.forEach(name => {
     if(typeof window[name] === 'function'){
       const original = window[name];
