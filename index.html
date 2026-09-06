@@ -508,19 +508,9 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
 
   try{
     const meshParts = data.parts.filter(p => p.className === "MeshPart" && p.meshId);
-    // Parts whose real visible shape comes from a SpecialMesh/FileMesh child (Head, hair/hat
-    // "Handle" accessories, etc) instead of their own Size — the manifest already resolves
-    // these (see part.specialMesh.meshId/textureId), they just weren't being rendered as
-    // anything but a plain colored box before. Render them like a MeshPart, using the
-    // specialMesh's own mesh+texture instead of the Part's bounding-box Size.
-    const specialMeshParts = data.parts.filter(p => p.specialMesh && p.specialMesh.meshId);
-    const boxParts  = data.parts.filter(p =>
-      p.className === "Part" && !(p.specialMesh && p.specialMesh.meshId));
+    const boxParts  = data.parts.filter(p => p.className === "Part");
     const unionParts = data.parts.filter(p => p.className === "UnionOperation" && p.unionAssetId);
-    const uniqueMeshIds = [...new Set([
-      ...meshParts.map(p => p.meshId),
-      ...specialMeshParts.map(p => p.specialMesh.meshId),
-    ])];
+    const uniqueMeshIds = [...new Set(meshParts.map(p => p.meshId))];
     const uniqueUnionIds = [...new Set(unionParts.map(p => p.unionAssetId))];
 
     const objLoader = new OBJLoader();
@@ -589,15 +579,8 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       });
     }
 
-    // Fetch texture images — previously this only looked at MeshParts, so a Part's own
-    // textureId (e.g. Head's face Decal.Texture) or its specialMesh's textureId (e.g. a
-    // hair "Handle" accessory's texture) was resolved by the backend but never actually
-    // downloaded or applied here.
-    const uniqueTextureIds = [...new Set([
-      ...meshParts.map(p => p.textureId),
-      ...specialMeshParts.map(p => p.specialMesh.textureId || p.textureId),
-      ...boxParts.map(p => p.textureId),
-    ].filter(Boolean))];
+    // Fetch texture images untuk MeshPart yang punya TextureID
+    const uniqueTextureIds = [...new Set(meshParts.map(p => p.textureId).filter(Boolean))];
     const textureCache = {};
     if(uniqueTextureIds.length > 0){
       statusEl.textContent = `⏳ Mengunduh ${uniqueTextureIds.length} texture...`;
@@ -633,25 +616,12 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       mesh.quaternion.copy(quat);
     }
 
-    // Roblox parts can be partially or fully transparent (HumanoidRootPart is ALWAYS
-    // Transparency=1, i.e. fully invisible, by design — it's a physics/anchor part, never
-    // meant to be seen). Apply that here instead of always rendering everything opaque.
-    function applyMaterialOpts(matOpts, part){
-      const t = typeof part.transparency === "number" ? part.transparency : 0;
-      if(t > 0){
-        matOpts.transparent = true;
-        matOpts.opacity = Math.max(0, 1 - t);
-      }
-      return matOpts;
-    }
-
     let skippedParts = 0;
     for(const part of meshParts){
-      if(part.transparency >= 1) continue;  // fully invisible, e.g. some MeshPart accessories
       const geom = meshGeomCache[part.meshId];
       if(!geom){ skippedParts++; continue; }
       const [r,g,b] = part.color.value;
-      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
       if(part.textureId && textureCache[part.textureId]){
         matOpts.map = textureCache[part.textureId];
         matOpts.color = new THREE.Color(1,1,1);
@@ -663,41 +633,11 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       root.add(mesh);
     }
 
-    // Parts whose visible geometry comes from a SpecialMesh/FileMesh child (Head, hair/hat
-    // accessories via their "Handle" part, etc). Rendered like a MeshPart using the
-    // specialMesh's own mesh + texture, positioned/rotated using the parent Part's CFrame.
-    // NOTE: we don't yet decode the SpecialMesh's own Scale/Offset properties (the backend
-    // manifest only exposes meshId/textureId for it), so an accessory with a custom
-    // non-default Scale may render at the wrong size — a known follow-up, not covered here.
-    for(const part of specialMeshParts){
-      if(part.transparency >= 1) continue;
-      const geom = meshGeomCache[part.specialMesh.meshId];
-      if(!geom){ skippedParts++; continue; }
-      const [r,g,b] = part.color.value;
-      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
-      const texId = part.specialMesh.textureId || part.textureId;
-      if(texId && textureCache[texId]){
-        matOpts.map = textureCache[texId];
-        matOpts.color = new THREE.Color(1,1,1);
-      }
-      const mat = new THREE.MeshStandardMaterial(matOpts);
-      const mesh = new THREE.Mesh(geom.clone(), mat);
-      applyTransform(mesh, part);
-      mesh.name = part.name || "SpecialMesh";
-      root.add(mesh);
-    }
-
     for(const part of boxParts){
-      if(part.transparency >= 1) continue;  // e.g. HumanoidRootPart — never meant to be visible
       const [sx,sy,sz] = part.size.value;
       const [r,g,b] = part.color.value;
       const geom = new THREE.BoxGeometry(sx, sy, sz);
-      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
-      if(part.textureId && textureCache[part.textureId]){
-        matOpts.map = textureCache[part.textureId];
-        matOpts.color = new THREE.Color(1,1,1);
-      }
-      const mat = new THREE.MeshStandardMaterial(matOpts);
+      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r/255, g/255, b/255) });
       const mesh = new THREE.Mesh(geom, mat);
       applyTransform(mesh, part);
       mesh.name = part.name || "Part";
@@ -705,11 +645,10 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
     }
 
     for(const part of unionParts){
-      if(part.transparency >= 1) continue;
       const geom = unionGeomCache[part.unionAssetId];
       if(!geom){ skippedParts++; continue; }
       const [r,g,b] = part.color.value;
-      const matOpts = applyMaterialOpts({ color: new THREE.Color(r/255, g/255, b/255) }, part);
+      const matOpts = { color: new THREE.Color(r/255, g/255, b/255) };
       if(part.textureId && textureCache[part.textureId]){
         matOpts.map = textureCache[part.textureId];
         matOpts.color = new THREE.Color(1,1,1);
@@ -891,12 +830,12 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
       <div class="tab" onclick="toggleDropdown(event)"><img class="nav-icon" src="/icons/MORE.svg" alt=""> <span data-t-id="LAINNYA ▼" data-t-en="MORE ▼">MORE ▼</span></div>
       <div class="dropdown-menu" id="dropdown-menu" style="display:none">
         <div class="dropdown-item" onclick="switchTab('texture');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/3D TEXTURE.svg" alt=""> <span data-t-id="TEXTURE" data-t-en="TEXTURE">TEXTURE</span></div>
+        <div class="dropdown-item" onclick="switchTab('assets2d');document.getElementById('dropdown-menu').style.display='none'">🖼 <span data-t-id="ASET 2D" data-t-en="2D ASSETS">2D ASSETS</span></div>
         <div class="dropdown-item" onclick="switchTab('viewer3d');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/3D VIEWER.svg" alt=""> <span data-t-id="3D VIEWER" data-t-en="3D VIEWER">3D VIEWER</span></div>
         <a class="dropdown-item" href="/Flipbook" style="text-decoration:none"><img class="nav-icon" src="/icons/FLIPBOOK.svg" alt=""> <span data-t-id="FLIPBOOK" data-t-en="FLIPBOOK">FLIPBOOK</span></a>
         <div class="dropdown-item" onclick="openDiscordModal();document.getElementById('dropdown-menu').style.display='none'">🎮 <span data-t-id="GABUNG DISCORD" data-t-en="JOIN DISCORD">JOIN DISCORD</span></div>
         <a class="dropdown-item" href="/BETA" style="text-decoration:none">🧪 <span data-t-id="BETA / FITUR EKSPERIMENTAL" data-t-en="BETA / EXPERIMENTAL">BETA / EXPERIMENTAL</span></a>
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
-        <div class="dropdown-item" onclick="switchTab('assets2d');document.getElementById('dropdown-menu').style.display='none'"><span data-t-id="ASET 2D" data-t-en="2D ASSETS">ASET 2D</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
       </div>
@@ -1057,33 +996,28 @@ window.buildModelGLB = async function(customStatusEl, customBtn){
   <!-- ── 2D ASSETS PANEL ── -->
   <div class="panel" id="panel-assets2d">
     <div class="card">
-      <div class="label"><span data-t-id="GAMBAR / DECAL" data-t-en="IMAGE / DECAL">GAMBAR / DECAL</span></div>
-      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
-        <span data-t-id="Untuk item tanpa mesh 3D — Background, Decal, atau gambar biasa." data-t-en="For items with no 3D mesh — Backgrounds, Decals, or plain images.">Untuk item tanpa mesh 3D — Background, Decal, atau gambar biasa.</span>
-      </p>
-      <input class="inp" id="img2d-input" type="number" placeholder="Asset ID">
-      <button class="btn" id="img2d-btn" onclick="download2dImage()">⬇ <span data-t-id="DOWNLOAD GAMBAR" data-t-en="DOWNLOAD IMAGE">DOWNLOAD GAMBAR</span></button>
-      <div id="img2d-status" style="margin-top:8px;font-size:9px"></div>
+      <div class="label"><span data-t-id="UNDUH ASET 2D" data-t-en="DOWNLOAD 2D ASSET">UNDUH ASET 2D</span></div>
+      <div class="row">
+        <div style="flex:1;min-width:180px">
+          <input type="number" id="a2d-input" data-t-ph-id="Asset ID (Decal/Image/Font/Video)" data-t-ph-en="Asset ID (Decal/Image/Font/Video)" placeholder="Asset ID (Decal/Image/Font/Video)">
+          <p class="hint"><span data-t-id="Untuk item TANPA mesh 3D — gambar datar, Font Family, atau Video." data-t-en="For items WITHOUT 3D mesh — flat images, Font Families, or Videos.">Untuk item TANPA mesh 3D — gambar datar, Font Family, atau Video.</span></p>
+        </div>
+        <select id="a2d-type" style="flex:0 0 150px;min-width:150px">
+          <option value="image">🖼 Image / Decal</option>
+          <option value="font">🔤 Font Family</option>
+          <option value="video">🎬 Video</option>
+        </select>
+        <button class="btn" id="a2d-btn" onclick="download2DAsset()">⬇ <span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></button>
+      </div>
+      <div class="status-box idle" id="a2d-status"><div class="dot"></div><span id="a2d-msg">Siap.</span></div>
     </div>
 
     <div class="card">
-      <div class="label"><span data-t-id="FONT FAMILY" data-t-en="FONT FAMILY">FONT FAMILY</span></div>
-      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
-        <span data-t-id="Unduh manifest + setiap file .ttf/.otf Face yang direferensikan, dalam satu ZIP." data-t-en="Downloads the manifest plus every referenced Face's .ttf/.otf file, zipped together.">Unduh manifest + setiap file .ttf/.otf Face yang direferensikan, dalam satu ZIP.</span>
-      </p>
-      <input class="inp" id="font2d-input" type="number" placeholder="Font Family Asset ID">
-      <button class="btn" id="font2d-btn" onclick="download2dFont()">⬇ <span data-t-id="DOWNLOAD FONT" data-t-en="DOWNLOAD FONT">DOWNLOAD FONT</span></button>
-      <div id="font2d-status" style="margin-top:8px;font-size:9px"></div>
-    </div>
-
-    <div class="card">
-      <div class="label"><span data-t-id="VIDEO" data-t-en="VIDEO">VIDEO</span></div>
-      <p style="font-size:9px;color:var(--gray);margin-bottom:6px">
-        <span data-t-id="Roblox menyajikan video sebagai manifest HLS, bukan satu file. Ini menggabungkan semua segmen menjadi satu file .ts yang bisa diputar (mis. di VLC)." data-t-en="Roblox serves video as an HLS manifest, not a single file. This concatenates every segment into one playable .ts file (e.g. in VLC).">Roblox menyajikan video sebagai manifest HLS, bukan satu file. Ini menggabungkan semua segmen menjadi satu file .ts yang bisa diputar (mis. di VLC).</span>
-      </p>
-      <input class="inp" id="video2d-input" type="number" placeholder="Video Asset ID">
-      <button class="btn" id="video2d-btn" onclick="download2dVideo()">⬇ <span data-t-id="DOWNLOAD VIDEO" data-t-en="DOWNLOAD VIDEO">DOWNLOAD VIDEO</span></button>
-      <div id="video2d-status" style="margin-top:8px;font-size:9px"></div>
+      <div class="label"><span data-t-id="BATCH GAMBAR (ZIP)" data-t-en="BATCH IMAGES (ZIP)">BATCH GAMBAR (ZIP)</span></div>
+      <p class="hint"><span data-t-id="Satu Asset ID per baris (boleh + nama, dipisah koma). Hanya Image/Decal/GUI/Background — bukan Font/Video." data-t-en="One Asset ID per line (optionally + name, comma-separated). Images/Decals/GUI/Backgrounds only — not Font/Video.">Satu Asset ID per baris (boleh + nama, dipisah koma). Hanya Image/Decal/GUI/Background — bukan Font/Video.</span></p>
+      <textarea id="a2d-batch-input" rows="5" style="width:100%;font-family:var(--font-ui);font-size:12px;background:rgba(0,0,0,.25);color:var(--white);border:1px solid var(--border);border-radius:4px;padding:8px" placeholder="102611803&#10;144080495&#10;144076357"></textarea>
+      <button class="btn btn-green" id="a2d-batch-btn" onclick="batchDownload2D()" style="margin-top:10px">⬇ <span data-t-id="DOWNLOAD ZIP BATCH" data-t-en="DOWNLOAD BATCH ZIP">DOWNLOAD ZIP BATCH</span></button>
+      <div class="status-box idle" id="a2d-batch-status"><div class="dot"></div><span id="a2d-batch-msg">Siap.</span></div>
     </div>
   </div>
 
@@ -1835,6 +1769,60 @@ async function downloadCatalog(format){
   }catch(e){ showApiError('cat-status', e.error?e:{message:e.message}); }
 }
 
+// ── 2D ASSETS ─────────────────────────────────────────────────────
+async function download2DAsset(){
+  const id = document.getElementById('a2d-input').value.trim();
+  const type = document.getElementById('a2d-type').value;
+  if(!id){ st('a2d-status','⚠ Masukkan Asset ID dulu.','err'); return; }
+  st('a2d-status','⏳ Mengunduh...','loading');
+  try{
+    let url;
+    if(type==='image') url = `${BASE}/api/catalog/image?asset_id=${encodeURIComponent(id)}`;
+    else if(type==='font') url = `${BASE}/api/2d/font?id=${encodeURIComponent(id)}`;
+    else url = `${BASE}/api/2d/video?id=${encodeURIComponent(id)}`;
+
+    const res = await fetch(url);
+    if(!res.ok){ const e = await res.json(); throw e; }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = /filename="?([^"]+)"?/.exec(cd);
+    const filename = m ? m[1] : `${id}_${type}`;
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: filename
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('a2d-status','✓ Download selesai!','ok');
+  }catch(e){ showApiError('a2d-status', e.error?e:{message:e.message}); }
+}
+
+async function batchDownload2D(){
+  const raw = document.getElementById('a2d-batch-input').value.trim();
+  if(!raw){ st('a2d-batch-status','⚠ Masukkan minimal 1 Asset ID.','err'); return; }
+  const items = raw.split('\n').map(l=>l.trim()).filter(Boolean).map(line=>{
+    const [idPart,...rest] = line.split(',');
+    return { id: parseInt(idPart.trim(),10), name: rest.join(',').trim() || undefined };
+  }).filter(it=>!isNaN(it.id));
+  if(!items.length){ st('a2d-batch-status','⚠ Tidak ada ID valid.','err'); return; }
+
+  st('a2d-batch-status',`⏳ Memproses ${items.length} item...`,'loading');
+  try{
+    const res = await fetch(`${BASE}/api/v2/image-batch`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items })
+    });
+    if(!res.ok){ const e = await res.json(); throw e; }
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `2d_assets_batch_${items.length}items.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('a2d-batch-status','✓ ZIP batch selesai!','ok');
+  }catch(e){ showApiError('a2d-batch-status', e.error?e:{message:e.message}); }
+}
+
 // ── API TABLE ─────────────────────────────────────────────────────
 const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
@@ -1844,9 +1832,6 @@ const ROUTES=[
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
-  ['GET','GET /api/catalog/image?asset_id=','Gambar 2D mentah (Background/Decal/Image — bukan mesh)'],
-  ['GET','GET /api/2d/font?id=','ZIP Font Family (manifest + setiap file .ttf/.otf Face)'],
-  ['GET','GET /api/2d/video?id=','Video (manifest HLS digabung jadi satu file .ts)'],
   ['GET','GET /health','Health check'],
   ['GET','GET /docs','Swagger UI otomatis (FastAPI)'],
 ];
@@ -2166,67 +2151,6 @@ async function downloadAudio(){
   }catch(e){
     showApiError("audio-status", e);
   }finally{ btn.disabled=false; }
-}
-
-// ── 2D ASSETS (Image/Decal, Font, Video) ───────────────────────────
-// All three backend endpoints return the raw file directly (with a
-// Content-Disposition header carrying the real filename) on success, or a
-// JSON {"error": "..."} on failure — unlike Audio there's no separate
-// info/preview step, so this is a single fetch-blob-and-save per download.
-function _filenameFromContentDisposition(res, fallback){
-  const cd = res.headers.get("Content-Disposition") || "";
-  const m = /filename="?([^";]+)"?/i.exec(cd);
-  return m ? m[1] : fallback;
-}
-
-async function _download2dAsset({inputId, btnId, statusId, url, fallbackName}){
-  const id = document.getElementById(inputId).value.trim();
-  const statusEl = document.getElementById(statusId);
-  if(!id){ statusEl.textContent = "Masukkan Asset ID."; return; }
-  const btn = document.getElementById(btnId);
-  btn.disabled = true;
-  statusEl.textContent = "Mengunduh...";
-  try{
-    const res = await fetch(url(id));
-    if(!res.ok){
-      const e = await res.json().catch(()=>({}));
-      throw new Error(e.error || res.statusText);
-    }
-    const blob = await res.blob();
-    const filename = _filenameFromContentDisposition(res, fallbackName(id));
-    const a = Object.assign(document.createElement("a"),{
-      href: URL.createObjectURL(blob),
-      download: filename
-    });
-    a.click(); URL.revokeObjectURL(a.href);
-    statusEl.textContent = "✓ Download selesai!";
-  }catch(e){
-    showApiError(statusId, e);
-  }finally{ btn.disabled = false; }
-}
-
-async function download2dImage(){
-  await _download2dAsset({
-    inputId: "img2d-input", btnId: "img2d-btn", statusId: "img2d-status",
-    url: id => `${BASE}/api/catalog/image?asset_id=${encodeURIComponent(id)}`,
-    fallbackName: id => `image_${id}.png`,
-  });
-}
-
-async function download2dFont(){
-  await _download2dAsset({
-    inputId: "font2d-input", btnId: "font2d-btn", statusId: "font2d-status",
-    url: id => `${BASE}/api/2d/font?id=${encodeURIComponent(id)}`,
-    fallbackName: id => `font_${id}.zip`,
-  });
-}
-
-async function download2dVideo(){
-  await _download2dAsset({
-    inputId: "video2d-input", btnId: "video2d-btn", statusId: "video2d-status",
-    url: id => `${BASE}/api/2d/video?id=${encodeURIComponent(id)}`,
-    fallbackName: id => `video_${id}.ts`,
-  });
 }
 
 function showApiError(elId, err){
