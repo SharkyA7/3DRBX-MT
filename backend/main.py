@@ -40,9 +40,12 @@ def _parse_v1(data: bytes) -> RobloxMesh:
         line = line.strip()
         if not line:
             continue
-        # Each line is a face: [vx,vy,vz][nx,ny,nz][u,v] repeated 3x
-        tokens = line.replace("[", " ").replace("]", " ").split(",")
-        floats = [float(t.strip()) for t in tokens if t.strip()]
+        # Each line is a face: [vx,vy,vz][nx,ny,nz][u,v] repeated 3x.
+        # Split on commas AND whitespace — some real v1.00 files separate a few
+        # number groups with spaces instead of commas, and a comma-only split
+        # would merge those into one unparseable token (e.g. "-0.00366165  0").
+        tokens = re.split(r"[,\s]+", line.replace("[", " ").replace("]", " ").strip())
+        floats = [float(t) for t in tokens if t]
         # 3 vertices × 8 floats = 24
         if len(floats) < 24:
             continue
