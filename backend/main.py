@@ -48,16 +48,20 @@ def _parse_v1(data: bytes) -> RobloxMesh:
     floats = [float(t) for t in tokens if t]
 
     verts, norms, uvs, faces = [], [], [], []
-    # Walk the flat float stream 24 at a time — each chunk is one face's
-    # 3 vertices × (position xyz, normal xyz, uv) = 3 × 8 = 24 floats.
-    for start in range(0, len(floats) - 23, 24):
-        chunk = floats[start:start+24]
+    # Walk the flat float stream 27 at a time — each chunk is one face's
+    # 3 vertices × (position xyz, normal xyz, uv [u,v,w-padding]) = 3 × 9 = 27
+    # floats. The UV group has a third, always-zero padding component in the
+    # real format (confirmed against independent reverse-engineering docs) —
+    # treating it as 2 floats (24/face) silently misaligns every vertex after
+    # the first, producing scrambled/spiky geometry instead of a parse error.
+    for start in range(0, len(floats) - 26, 27):
+        chunk = floats[start:start+27]
         base = len(verts)
         for i in range(3):
-            o = i * 8
+            o = i * 9
             verts.append((chunk[o],   chunk[o+1], chunk[o+2]))
             norms.append((chunk[o+3], chunk[o+4], chunk[o+5]))
-            uvs.append(  (chunk[o+6], chunk[o+7]))
+            uvs.append(  (chunk[o+6], chunk[o+7]))  # chunk[o+8] is the w padding, unused
         faces.append((base, base+1, base+2))
 
     return RobloxMesh(verts, norms, uvs, faces, version="1.00")
