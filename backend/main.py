@@ -2730,10 +2730,18 @@ def _manifest_from_rust_instances(instances, file_id):
         for child in children_by_parent.get(part_referent, []):
             if child["class_name"] in ("SpecialMesh", "FileMesh"):
                 props = child["properties"]
-                return {
+                mesh_type_num = props.get("MeshType")
+                mesh_type_names = {0:"Head",1:"Torso",2:"Wedge",3:"Prism",4:"Parallelogram",5:"FileMesh",6:"Brick",7:"Sphere",8:"Cylinder"}
+                result = {
                     "meshId": _extract_asset_id_str(props.get("MeshId")),
                     "textureId": _extract_asset_id_str(props.get("TextureId")),
                 }
+                if isinstance(mesh_type_num, int) and mesh_type_num in mesh_type_names:
+                    result["meshType"] = mesh_type_names[mesh_type_num]
+                scale = props.get("Scale")
+                if isinstance(scale, list) and len(scale) == 3:
+                    result["scale"] = scale
+                return result
         return None
 
     # Classic Shirt/Pants clothing system — confirmed via a real Bacon NPC test:
