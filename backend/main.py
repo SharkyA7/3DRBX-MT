@@ -30,31 +30,34 @@ class RobloxMesh:
 # ── PARSERS ───────────────────────────────────────────────────────
 
 def _parse_v1(data: bytes) -> RobloxMesh:
-    """Version 1.00 — plain ASCII."""
-    lines = data.decode("utf-8", errors="replace").splitlines()
-    # line 0: version, line 1: face count, line 2+: face data
-    faces_raw = []
-    verts, norms, uvs, faces = [], [], [], []
+    """Version 1.00 — plain ASCII.
 
-    for line in lines[2:]:
-        line = line.strip()
-        if not line:
-            continue
-        # Each line is a face: [vx,vy,vz][nx,ny,nz][u,v] repeated 3x.
-        # Split on commas AND whitespace — some real v1.00 files separate a few
-        # number groups with spaces instead of commas, and a comma-only split
-        # would merge those into one unparseable token (e.g. "-0.00366165  0").
-        tokens = re.split(r"[,\s]+", line.replace("[", " ").replace("]", " ").strip())
-        floats = [float(t) for t in tokens if t]
-        # 3 vertices × 8 floats = 24
-        if len(floats) < 24:
-            continue
+    NOTE: real v1.00 files don't reliably put one face per line — some files
+    have all face data on a single line (or just a handful of lines), so
+    iterating line-by-line and requiring exactly 24 floats per line silently
+    dropped every face after the first "lucky" line that happened to match.
+    Instead, tokenize the entire post-header body as one continuous stream
+    and chunk it into groups of 24 floats (3 vertices × 8 floats each),
+    regardless of where the original line breaks fall.
+    """
+    text = data.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    # line 0: version, line 1: face count, line 2+: face data (of any line shape)
+    body = " ".join(lines[2:])
+    tokens = re.split(r"[,\s\[\]]+", body.strip())
+    floats = [float(t) for t in tokens if t]
+
+    verts, norms, uvs, faces = [], [], [], []
+    # Walk the flat float stream 24 at a time — each chunk is one face's
+    # 3 vertices × (position xyz, normal xyz, uv) = 3 × 8 = 24 floats.
+    for start in range(0, len(floats) - 23, 24):
+        chunk = floats[start:start+24]
         base = len(verts)
         for i in range(3):
             o = i * 8
-            verts.append((floats[o],   floats[o+1], floats[o+2]))
-            norms.append((floats[o+3], floats[o+4], floats[o+5]))
-            uvs.append(  (floats[o+6], floats[o+7]))
+            verts.append((chunk[o],   chunk[o+1], chunk[o+2]))
+            norms.append((chunk[o+3], chunk[o+4], chunk[o+5]))
+            uvs.append(  (chunk[o+6], chunk[o+7]))
         faces.append((base, base+1, base+2))
 
     return RobloxMesh(verts, norms, uvs, faces, version="1.00")
