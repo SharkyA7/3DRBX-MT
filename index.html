@@ -699,9 +699,12 @@ window.assembleModelScene = async function(data, statusEl){
       }
       const mat = new THREE.MeshStandardMaterial(matOpts);
       const mesh = new THREE.Mesh(geom.clone(), mat);
-      const [sx,sy,sz] = part.size.value;
+      // Real fetched mesh geometry already has its correct absolute size baked
+      // in — only SpecialMesh.Scale should apply here. Part.Size is a box-
+      // fallback concept and multiplying by it too (previous behavior) double-
+      // scaled real geometry, e.g. stretching Head 2x on top of its 1.25x Scale.
       const [msx,msy,msz] = part.specialMesh.scale || [1,1,1];
-      mesh.scale.set(sx*msx, sy*msy, sz*msz);
+      mesh.scale.set(msx, msy, msz);
       applyTransform(mesh, part);
       mesh.name = part.name || "Part";
       root.add(mesh);
