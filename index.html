@@ -1145,10 +1145,20 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <div class="row">
           <div style="flex:1;min-width:180px">
             <input type="number" id="pk-input" data-t-ph-id="Asset ID (misal: 102611803)" data-t-ph-en="Asset ID (e.g: 102611803)" placeholder="Asset ID (misal: 102611803)">
-            <p class="hint"><span data-t-id="Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya." data-t-en="Add IDs one at a time, then FETCH again for the next item.">Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya.</span></p>
           </div>
           <button class="btn" id="pk-add-btn" onclick="addPackedItem()">▶ <span data-t-id="FETCH" data-t-en="FETCH">FETCH</span></button>
         </div>
+        <p class="hint"><span data-t-id="Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya." data-t-en="Add IDs one at a time, then FETCH again for the next item.">Tambahkan ID satu per satu, lalu FETCH lagi untuk item berikutnya.</span></p>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:16px 0">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:9px;color:var(--muted);letter-spacing:.04em"><span data-t-id="ATAU" data-t-en="OR">ATAU</span></span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+
+        <input type="file" id="pk-file-input" accept=".txt,text/plain" style="display:none" onchange="addPackedItemsFromFile(this.files[0]); this.value=''">
+        <button class="btn" type="button" style="width:100%" onclick="document.getElementById('pk-file-input').click()">📄 <span data-t-id="UPLOAD .TXT" data-t-en="UPLOAD .TXT">UPLOAD .TXT</span></button>
+        <p class="hint"><span data-t-id="Satu Asset ID atau link Roblox per baris (catalog/library/bundles). Semua langsung ditambahkan sekaligus." data-t-en="One Asset ID or Roblox link per line (catalog/library/bundles). All added at once.">Satu Asset ID atau link Roblox per baris (catalog/library/bundles). Semua langsung ditambahkan sekaligus.</span></p>
         <div class="status-box idle" id="pk-status"><div class="dot"></div><span id="pk-msg"><span data-t-id="Belum ada item." data-t-en="No items yet.">Belum ada item.</span></span></div>
       </div>
 
@@ -2172,35 +2182,107 @@ function togglePackedMode(){
   if(show) document.getElementById('pk-input').focus();
 }
 
-async function addPackedItem(){
-  const input = document.getElementById('pk-input');
-  const id = parseInt(input.value);
-  if(!id||isNaN(id)){ st('pk-status','Masukkan Asset ID yang valid.','err'); return; }
-  if(packedItems.some(it=>it.id===id)){ st('pk-status','Item sudah ada di daftar.','err'); return; }
-
-  const btn = document.getElementById('pk-add-btn');
-  btn.disabled = true;
-  st('pk-status','Mengambil detail item…','loading');
+// Core "add one item to the pack" logic, shared by the manual FETCH button
+// and the bulk .txt file importer below. Returns {ok, name, error} instead
+// of touching any DOM status element directly, so callers (single vs batch)
+// can report progress however fits their own flow.
+async function addPackedItemById(id){
+  if(!id || isNaN(id)) return { ok:false, error:'ID tidak valid' };
+  if(packedItems.some(it=>it.id===id)) return { ok:false, error:'Item sudah ada di daftar', duplicate:true };
   try{
     const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Item tidak ditemukan'); }
     const data = await res.json();
     if(data.isAnimationBundle){
-      st('pk-status',`✗ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa ditambahkan ke pack.`,'err');
-      return;
+      return { ok:false, error:`"${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D.` };
     }
     packedItems.push({
       id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl,
       isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0,
       isBackground: !!data.isBackground
     });
+    return { ok:true, name: data.name||String(id), isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0, isBackground: !!data.isBackground };
+  }catch(e){
+    return { ok:false, error: e.message };
+  }
+}
+
+async function addPackedItem(){
+  const input = document.getElementById('pk-input');
+  const id = parseInt(input.value);
+  if(!id||isNaN(id)){ st('pk-status','Masukkan Asset ID yang valid.','err'); return; }
+
+  const btn = document.getElementById('pk-add-btn');
+  btn.disabled = true;
+  st('pk-status','Mengambil detail item…','loading');
+  const r = await addPackedItemById(id);
+  if(r.ok){
     renderPackedGrid();
     input.value=''; input.focus();
-    const tag = data.isBundle ? ` (Bundle, ${data.bundleItemCount||0} item)` : (data.isBackground ? ` (Background)` : '');
-    st('pk-status',`✓ "${data.name}"${tag} ditambahkan. (${packedItems.length} item)`,'ok');
+    const tag = r.isBundle ? ` (Bundle, ${r.bundleItemCount||0} item)` : (r.isBackground ? ` (Background)` : '');
+    st('pk-status',`✓ "${r.name}"${tag} ditambahkan. (${packedItems.length} item)`,'ok');
+  }else{
+    st('pk-status', '✗ '+r.error, 'err');
+  }
+  btn.disabled=false;
+}
+
+// Extract a Roblox catalog/library/bundle/asset ID from one line of a .txt
+// file — accepts a bare numeric ID, or a full Roblox URL in any of the
+// common forms (catalog/, library/, bundles/, store/asset/, asset/).
+function extractCatalogIdFromLine(line){
+  line = line.trim();
+  if(!line || line.startsWith('#')) return null; // blank line / comment
+  if(/^\d+$/.test(line)) return parseInt(line, 10);
+  const m = line.match(/(?:catalog|library|bundles|asset)\/(\d+)/i);
+  if(m) return parseInt(m[1], 10);
+  const m2 = line.match(/\d{4,}/); // fallback: longest bare digit run on the line
+  return m2 ? parseInt(m2[0], 10) : null;
+}
+
+async function addPackedItemsFromFile(file){
+  if(!file) return;
+  st('pk-status', 'Membaca file…', 'loading');
+  let text;
+  try{
+    text = await file.text();
   }catch(e){
-    st('pk-status','✗ '+e.message,'err');
-  }finally{ btn.disabled=false; }
+    st('pk-status', '✗ Gagal membaca file: '+e.message, 'err');
+    return;
+  }
+
+  const ids = [];
+  for(const rawLine of text.split(/\r?\n/)){
+    const id = extractCatalogIdFromLine(rawLine);
+    if(id!==null && !ids.includes(id)) ids.push(id);
+  }
+  if(ids.length===0){
+    st('pk-status', '✗ Tidak ada Asset ID/link valid yang ditemukan di file.', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('pk-add-btn');
+  const fileBtn = document.querySelector('button[onclick*="pk-file-input"]');
+  btn.disabled = true;
+  if(fileBtn) fileBtn.disabled = true;
+
+  let added = 0, skipped = 0, failed = 0;
+  for(let i=0; i<ids.length; i++){
+    st('pk-status', `⏳ Memproses ${i+1}/${ids.length} item dari file…`, 'loading');
+    const r = await addPackedItemById(ids[i]);
+    if(r.ok) added++;
+    else if(r.duplicate) skipped++;
+    else failed++;
+  }
+  renderPackedGrid();
+
+  const parts = [`✓ ${added} item ditambahkan`];
+  if(skipped) parts.push(`${skipped} sudah ada`);
+  if(failed) parts.push(`${failed} gagal`);
+  st('pk-status', parts.join(', ') + ` dari ${ids.length} baris. (${packedItems.length} total di daftar)`, added>0 ? 'ok' : 'err');
+
+  btn.disabled = false;
+  if(fileBtn) fileBtn.disabled = false;
 }
 
 function removePackedItem(id){
