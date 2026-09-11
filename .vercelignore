@@ -1,0 +1,16 @@
+# This one directory alone was 137MB of stale Rust build cache (Cargo's
+# `target/`), not referenced by vercel.json's builds at all, and the main
+# cause of Vercel storage bloat. backend/rbx_parser.wasm (the actual runtime
+# artifact the Python backend uses) lives outside this folder and is untouched.
+wasm-model-parser/target/
+
+# Not referenced by any deployed vercel.json build -- an unused/experimental
+# sibling project, kept in the repo but not part of this site's deployment.
+rust-model-parser/
+
+# Confirmed unused by index.html/beta.html/flipbook.html -- promo asset, not
+# served by the live site.
+NEW BANNER V5.gif
+
+.git
+*.zip
