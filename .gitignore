@@ -12,3 +12,11 @@ model_test
 test.ogg
 test_model.rbxm
 test*.zip
+
+# Rust build artifacts -- never commit these, they're 100+ MB of regenerable
+# compiled output and were the main cause of Vercel storage bloat.
+# NOTE: does NOT touch backend/rbx_parser.wasm -- that's a real deployed
+# runtime artifact, not a build cache byproduct, so it's intentionally kept.
+target/
+**/target/
+Cargo.lock
