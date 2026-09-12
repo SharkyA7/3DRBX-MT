@@ -1709,6 +1709,21 @@ def api_2d_video():
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh video: {e}"}), 502
 
+def _resolve_real_clothing_texture(raw_bytes):
+    """For Shirt/Pants/Decal-type assets, assetdelivery returns a small XML/binary
+    wrapper (e.g. <Item class="Shirt">...<Content name="ShirtTemplate">
+    <url>rbxassetid://123</url>...) pointing at the REAL flat texture image as a
+    separate asset — not actual mesh geometry, and not the same thing as the
+    item's rendered thumbnail. Returns the real texture asset ID string, or None
+    if this doesn't look like one of these wrapper types (e.g. it's a genuine
+    .mesh accessory, where callers should fall back to the thumbnail approximation)."""
+    try:
+        text = raw_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate|Texture)"[^>]*>\s*<url>rbxassetid://(\d+)</url>', text)
+    return m.group(1) if m else None
+
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
     aid = request.args.get("asset_id","")
@@ -1729,11 +1744,22 @@ def catalog_download_full():
         raw_r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
         raw   = raw_r.content
 
-        # Thumbnail
-        try:
-            th  = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
-            tu  = (th.get("data") or [{}])[0].get("imageUrl")
-        except: tu = None
+        # Real texture first (Shirt/Pants/Decal wrapper -> actual flat image asset).
+        # A thumbnail is a rendered PREVIEW (e.g. a mannequin wearing the shirt) --
+        # baking that onto the mesh as if it were the texture is what produced the
+        # "whole rendered character" result instead of the actual clothing texture.
+        # Only fall back to the thumbnail approximation when this genuinely isn't
+        # one of those wrapper types (e.g. a real mesh accessory with no separate
+        # texture asset we can resolve this way).
+        tu = None
+        real_tex_id = _resolve_real_clothing_texture(raw)
+        if real_tex_id:
+            tu = f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}"
+        else:
+            try:
+                th  = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
+                tu  = (th.get("data") or [{}])[0].get("imageUrl")
+            except: tu = None
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
