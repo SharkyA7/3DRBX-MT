@@ -1710,18 +1710,38 @@ def api_2d_video():
         return jsonify({"error": f"Gagal mengunduh video: {e}"}), 502
 
 def _resolve_real_clothing_texture(raw_bytes):
-    """For Shirt/Pants/Decal-type assets, assetdelivery returns a small XML/binary
-    wrapper (e.g. <Item class="Shirt">...<Content name="ShirtTemplate">
-    <url>rbxassetid://123</url>...) pointing at the REAL flat texture image as a
-    separate asset — not actual mesh geometry, and not the same thing as the
-    item's rendered thumbnail. Returns the real texture asset ID string, or None
-    if this doesn't look like one of these wrapper types (e.g. it's a genuine
-    .mesh accessory, where callers should fall back to the thumbnail approximation)."""
+    """Resolve the REAL flat texture for an asset that isn't itself a raw image --
+    covers both Roblox clothing systems, since they store the real texture
+    completely differently and neither is the item's rendered thumbnail:
+
+    - Classic Shirt/Pants: a small XML wrapper with <Content name="ShirtTemplate">
+      or "PantsTemplate" pointing at the fixed-layout body-paint template image
+      (front/back/limbs cross layout) as a separate asset.
+    - Modern Layered Clothing (actual MeshPart geometry with its own custom UV
+      unwrap, not the classic template shape at all): the real texture is the
+      MeshPart's SurfaceAppearance child's ColorMap -- same resolution priority
+      already proven correct in resolve_texture() for the 3D Model Assets flow.
+    - Decal.Texture: same idea for plain classic Decal-type assets.
+
+    Priority: SurfaceAppearance.ColorMap > Decal.Texture > Shirt/PantsTemplate --
+    matches resolve_texture()'s priority order (SurfaceAppearance is the modern
+    system Roblox has been migrating clothing to; a Decal is more specific than a
+    whole-body template). Returns the real texture asset ID string, or None if
+    this doesn't look like any of these wrapper types (e.g. it's a genuine .mesh
+    accessory, where callers should fall back to the thumbnail approximation)."""
     try:
         text = raw_bytes.decode("utf-8", errors="ignore")
     except Exception:
         return None
-    m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate|Texture)"[^>]*>\s*<url>rbxassetid://(\d+)</url>', text)
+    # Roblox has used two different URL formats for these Content/url references
+    # across different export ages -- newer XML uses rbxassetid://N, but plenty of
+    # real assets (like this one) still use the older full
+    # http://www.roblox.com/asset/?id=N form. Match either, or this silently finds
+    # nothing and falls all the way back to the thumbnail for no reason.
+    asset_url_id = r'(?:rbxassetid://|(?:https?://)?(?:www\.)?roblox\.com/asset/?\?id=)(\d+)'
+    m = re.search(r'<Content name="ColorMap"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
+    if m: return m.group(1)
+    m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate|Texture)"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
     return m.group(1) if m else None
 
 @app.get("/api/catalog/download-full")
@@ -1769,7 +1789,19 @@ def catalog_download_full():
 
                 if fmt == "gltf" and tu:
                     # GLTF: OBJ + MTL + texture PNG
-                    tex = s.get(tu, timeout=15).content
+                    try:
+                        tex = s.get(tu, timeout=15).content
+                    except Exception:
+                        # Resolved texture URL failed to fetch (deleted asset, network
+                        # blip, etc) -- fall back to the old thumbnail approach rather
+                        # than losing the texture entirely / mislabeling this as a mesh
+                        # parse failure below.
+                        try:
+                            th = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png", timeout=10).json()
+                            fallback_url = (th.get("data") or [{}])[0].get("imageUrl")
+                            tex = s.get(fallback_url, timeout=15).content if fallback_url else b""
+                        except Exception:
+                            tex = b""
                     zf.writestr(f"textures/{safe}.png", tex)
                     mtl_t = "newmtl default\nKd 0.8 0.8 0.8\nmap_Kd textures/" + safe + ".png\n"
                 else:
@@ -1969,9 +2001,24 @@ def _fetch_asset_image_bytes(file_id, s):
         if r.status_code == 200 and ctype.startswith("image/"):
             ext = "jpg" if "jpeg" in ctype else "png"
             return r.content, ctype, ext
+        # 1b) Not a raw image -- for Shirt/Pants/Decal, assetdelivery instead returns
+        # a small XML wrapper pointing at the REAL flat template texture as a separate
+        # asset (same fix as catalog_download_full's thumbnail-vs-real-texture bug).
+        # Resolve that and fetch the actual template PNG before falling back below.
+        if r.status_code == 200:
+            real_tex_id = _resolve_real_clothing_texture(r.content)
+            if real_tex_id:
+                r2 = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}", timeout=20)
+                ctype2 = r2.headers.get("content-type","")
+                if r2.status_code == 200 and ctype2.startswith("image/"):
+                    ext2 = "jpg" if "jpeg" in ctype2 else "png"
+                    return r2.content, ctype2, ext2
     except: pass
 
-    # 2) Fallback — largest available rendered thumbnail from Roblox's CDN
+    # 2) Fallback — largest available rendered thumbnail from Roblox's CDN. Only
+    #    reached for asset types with no resolvable template (e.g. genuine mesh
+    #    accessories) — an approximation, not the real texture, same tradeoff
+    #    documented at the top of this function's docstring.
     for size in ["1200x1200","768x768","420x420"]:
         try:
             th = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={file_id}&size={size}&format=Png", timeout=15).json()
