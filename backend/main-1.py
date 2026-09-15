@@ -1,0 +1,3930 @@
+from flask import Flask, jsonify, request, Response, redirect
+import httpx, os, io, zipfile, time, json, struct, requests, secrets
+import lz4.block, re
+from urllib.parse import urlparse, urljoin
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def safe_filename(name):
+    return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
+
+def safe_error(e, status=500):
+    """Log the real exception server-side, return a generic message to the client
+    so internal details (paths, library internals, stack traces) never leak out."""
+    print(f"[ERROR] {type(e).__name__}: {e}")
+    return jsonify({"error": "Internal server error, please try again later."}), status
+
+# ── INLINED MESH CONVERTER (avoids services import issue on Vercel) ──
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class RobloxMesh:
+    vertices: list   # list of (x, y, z)
+    normals:  list   # list of (nx, ny, nz)
+    uvs:      list   # list of (u, v)
+    faces:    list   # list of (i0, i1, i2)
+    version:  str    = "unknown"
+    name:     str    = "mesh"
+
+
+# ── PARSERS ───────────────────────────────────────────────────────
+
+def _parse_v1(data: bytes) -> RobloxMesh:
+    """Version 1.00 — plain ASCII.
+
+    NOTE: real v1.00 files don't reliably put one face per line — some files
+    have all face data on a single line (or just a handful of lines), so
+    iterating line-by-line and requiring exactly 24 floats per line silently
+    dropped every face after the first "lucky" line that happened to match.
+    Instead, tokenize the entire post-header body as one continuous stream
+    and chunk it into groups of 24 floats (3 vertices × 8 floats each),
+    regardless of where the original line breaks fall.
+    """
+    text = data.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    # line 0: version, line 1: face count, line 2+: face data (of any line shape)
+    body = " ".join(lines[2:])
+    tokens = re.split(r"[,\s\[\]]+", body.strip())
+    floats = [float(t) for t in tokens if t]
+
+    verts, norms, uvs, faces = [], [], [], []
+    # Walk the flat float stream 27 at a time — each chunk is one face's
+    # 3 vertices × (position xyz, normal xyz, uv [u,v,w-padding]) = 3 × 9 = 27
+    # floats. The UV group has a third, always-zero padding component in the
+    # real format (confirmed against independent reverse-engineering docs) —
+    # treating it as 2 floats (24/face) silently misaligns every vertex after
+    # the first, producing scrambled/spiky geometry instead of a parse error.
+    for start in range(0, len(floats) - 26, 27):
+        chunk = floats[start:start+27]
+        base = len(verts)
+        for i in range(3):
+            o = i * 9
+            verts.append((chunk[o],   chunk[o+1], chunk[o+2]))
+            norms.append((chunk[o+3], chunk[o+4], chunk[o+5]))
+            uvs.append(  (chunk[o+6], chunk[o+7]))  # chunk[o+8] is the w padding, unused
+        faces.append((base, base+1, base+2))
+
+    return RobloxMesh(verts, norms, uvs, faces, version="1.00")
+
+
+def _parse_v2(data: bytes) -> RobloxMesh:
+    """Version 2.00 — binary MeshHeader immediately follows the fixed 13-byte
+    "version 2.00\\n" line. There is NO ASCII/newline-terminated header line here —
+    the header (sizeof_MeshHeader: uint16, sizeof_Vertex: uint8, sizeof_Face: uint8,
+    numVerts: uint32, numFaces: uint32 = 12 bytes total) is raw binary.
+    Reading it with buf.readline().decode() (the old approach) is wrong: readline()
+    stops at the first 0x0A byte, which shows up constantly inside ordinary binary
+    vertex floats, so it silently swallows real vertex bytes into a bogus "header
+    line" and then throws a UnicodeDecodeError trying to decode them as UTF-8.
+    Ref: devforum.roblox.com/t/roblox-mesh-format/326114,
+         github.com/pkhead/rbx-mesh2obj (mesh_v2::MeshHeader)."""
+    pos = data.index(b"\n") + 1  # skip "version 2.00\n" (13 bytes, but be tolerant of length)
+    sizeof_header, sizeof_vertex, sizeof_face = struct.unpack_from("<HBB", data, pos)
+    num_verts, num_faces = struct.unpack_from("<II", data, pos + 4)
+
+    p = pos + sizeof_header
+    verts, norms, uvs, faces = [], [], [], []
+
+    for _ in range(num_verts):
+        # px py pz  nx ny nz  u v  (+ optional trailing color bytes we don't read)
+        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", data, p)
+        verts.append((px, py, pz))
+        norms.append((nx, ny, nz))
+        uvs.append((u, 1.0 - v))   # flip V axis
+        p += sizeof_vertex
+
+    for _ in range(num_faces):
+        i0, i1, i2 = struct.unpack_from("<III", data, p)
+        faces.append((i0, i1, i2))
+        p += sizeof_face
+
+    return RobloxMesh(verts, norms, uvs, faces, version="2.00")
+
+
+def _parse_v3(data: bytes) -> RobloxMesh:
+    """Version 3.00 — binary MeshHeader immediately follows the fixed 13-byte
+    "version 3.00\\n" line. Per MaximumADHD's official writeup
+    (devforum.roblox.com/t/version-300-of-mesh-format-has-no-public-documentation/287887),
+    the v3 MeshHeader is 7 consecutive uint16 fields (14 bytes total):
+      sizeof_MeshHeader, sizeof_MeshVertex, sizeof_MeshFace, sizeof_MeshLOD,
+      numLODs, numVerts, numFaces.
+    As with v2, this is raw binary — NOT an ASCII line — so it must never be read
+    with buf.readline().decode()."""
+    pos = data.index(b"\n") + 1
+    (sizeof_header, sizeof_vertex, sizeof_face, sizeof_lod,
+     num_lods, num_verts, num_faces) = struct.unpack_from("<HHHHHHH", data, pos)
+
+    p = pos + sizeof_header
+    verts, norms, uvs, faces = [], [], [], []
+
+    for _ in range(num_verts):
+        px, py, pz, nx, ny, nz, u, v = struct.unpack_from("<ffffffff", data, p)
+        verts.append((px, py, pz))
+        norms.append((nx, ny, nz))
+        uvs.append((u, 1.0 - v))
+        p += sizeof_vertex
+
+    for _ in range(num_faces):
+        i0, i1, i2 = struct.unpack_from("<III", data, p)
+        faces.append((i0, i1, i2))
+        p += sizeof_face
+
+    return RobloxMesh(verts, norms, uvs, faces, version="3.00")
+
+
+
+def _parse_v4(data: bytes) -> "RobloxMesh":
+    """Version 4.0x — binary header (verified): 24-byte header dgn LOD/bone/subset fields,
+    40-byte vertex (9 float pos/normal/uv + 4 byte RGBA color), 12-byte face (3x uint32).
+    LOD offsets array (numLods x uint32) adalah BOUNDARY KUMULATIF, bukan length:
+    LOD0 = faces[offsets[0]:offsets[1]] (level paling detail).
+    Ref: devforum.roblox.com/t/roblox-mesh-format/326114
+    """
+    pos = data.index(b"\n") + 1  # skip version line (dynamic length)
+    header_size = struct.unpack("<H", data[pos:pos+2])[0]
+    num_verts = struct.unpack("<I", data[pos+4:pos+8])[0]
+    num_faces = struct.unpack("<I", data[pos+8:pos+12])[0]
+    num_lods = struct.unpack("<H", data[pos+12:pos+14])[0]
+
+    vstart = pos + header_size
+    vertices, normals, uvs = [], [], []
+    p = vstart
+    for _ in range(num_verts):
+        px,py,pz,nx,ny,nz,tu,tv,tw = struct.unpack("<9f", data[p:p+36])
+        vertices.append((px,py,pz))
+        normals.append((nx,ny,nz))
+        uvs.append((tu, 1.0-tv))
+        p += 40
+
+    fstart = p
+    faces_all = []
+    for _ in range(num_faces):
+        a,b,c = struct.unpack("<3I", data[p:p+12])
+        faces_all.append((a,b,c))
+        p += 12
+
+    lod_offsets = []
+    for _ in range(num_lods):
+        lod_offsets.append(struct.unpack("<I", data[p:p+4])[0])
+        p += 4
+
+    if len(lod_offsets) >= 2:
+        faces = faces_all[lod_offsets[0]:lod_offsets[1]]
+    else:
+        faces = faces_all
+
+    return RobloxMesh(vertices=vertices, normals=normals, uvs=uvs, faces=faces, version="4.0x")
+
+
+def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
+    """
+    Deteksi versi dan parse mesh Roblox.
+    Raises ValueError jika format tidak dikenal.
+    """
+    if not data:
+        raise ValueError("Data mesh kosong")
+
+    header = data[:16].decode("utf-8", errors="replace")
+
+    if "version 1." in header:
+        mesh = _parse_v1(data)
+    elif "version 2." in header:
+        mesh = _parse_v2(data)
+    elif "version 4." in header or "version 5." in header:
+        # v4.xx/v5.xx - binary header verified, LOD0 extraction
+        try:
+            mesh = _parse_v4(data)
+        except Exception as e:
+            # NOTE: previously had unreachable v3/v2 fallback code after this raise
+            # (dead code — a `raise` always exits immediately, so it never ran).
+            # Raising here surfaces the real v4 parse failure instead of silently
+            # producing garbage geometry from a mismatched parser.
+            raise ValueError(f"v4 parse failed: {type(e).__name__}: {e}") from e
+    elif "version 3." in header:
+        try:
+            mesh = _parse_v3(data)
+        except Exception:
+            mesh = _parse_v2(data)
+    else:
+        raise ValueError(f"Format mesh Roblox tidak dikenal: {header[:20]!r}")
+
+    mesh.name = name
+    return mesh
+
+
+# ── EXPORTERS ─────────────────────────────────────────────────────
+
+def mesh_to_obj(mesh: RobloxMesh, mtl_name: Optional[str] = None) -> str:
+    """Konversi RobloxMesh ke format OBJ string."""
+    lines = [
+        f"# Roblox Mesh — {mesh.name}",
+        f"# Version: {mesh.version}",
+        f"# Vertices: {len(mesh.vertices)}  Faces: {len(mesh.faces)}",
+        "",
+    ]
+    if mtl_name:
+        lines += [f"mtllib {mtl_name}.mtl", f"usemtl default", ""]
+
+    lines.append(f"o {mesh.name}")
+
+    for x, y, z in mesh.vertices:
+        lines.append(f"v {x:.6f} {y:.6f} {z:.6f}")
+
+    lines.append("")
+    for u, v in mesh.uvs:
+        lines.append(f"vt {u:.6f} {v:.6f}")
+
+    lines.append("")
+    for nx, ny, nz in mesh.normals:
+        lines.append(f"vn {nx:.6f} {ny:.6f} {nz:.6f}")
+
+    lines.append("")
+    for i0, i1, i2 in mesh.faces:
+        # OBJ adalah 1-indexed, format: v/vt/vn
+        a, b, c = i0+1, i1+1, i2+1
+        lines.append(f"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}")
+
+    return "\n".join(lines)
+
+
+def mesh_to_gltf(mesh: RobloxMesh) -> dict:
+    """Konversi RobloxMesh ke GLTF 2.0 dict (bisa di-json.dumps langsung)."""
+    import base64
+
+    # Flatten arrays
+    pos_data = b""
+    for x, y, z in mesh.vertices:
+        pos_data += struct.pack("<fff", x, y, z)
+
+    norm_data = b""
+    for nx, ny, nz in mesh.normals:
+        norm_data += struct.pack("<fff", nx, ny, nz)
+
+    uv_data = b""
+    for u, v in mesh.uvs:
+        uv_data += struct.pack("<ff", u, v)
+
+    idx_data = b""
+    for i0, i1, i2 in mesh.faces:
+        idx_data += struct.pack("<III", i0, i1, i2)
+
+    def b64(b: bytes) -> str:
+        return "data:application/octet-stream;base64," + base64.b64encode(b).decode()
+
+    n_verts = len(mesh.vertices)
+    n_faces = len(mesh.faces)
+
+    min_pos = [min(v[i] for v in mesh.vertices) for i in range(3)]
+    max_pos = [max(v[i] for v in mesh.vertices) for i in range(3)]
+
+    gltf = {
+        "asset": {"version": "2.0", "generator": "RobloxDownloader/1.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0, "name": mesh.name}],
+        "meshes": [{
+            "name": mesh.name,
+            "primitives": [{
+                "attributes": {
+                    "POSITION":   0,
+                    "NORMAL":     1,
+                    "TEXCOORD_0": 2,
+                },
+                "indices": 3,
+                "mode": 4,   # TRIANGLES
+            }]
+        }],
+        "accessors": [
+            # 0 POSITION
+            {"bufferView": 0, "componentType": 5126, "count": n_verts,
+             "type": "VEC3", "min": min_pos, "max": max_pos},
+            # 1 NORMAL
+            {"bufferView": 1, "componentType": 5126, "count": n_verts, "type": "VEC3"},
+            # 2 TEXCOORD_0
+            {"bufferView": 2, "componentType": 5126, "count": n_verts, "type": "VEC2"},
+            # 3 INDICES
+            {"bufferView": 3, "componentType": 5125, "count": n_faces * 3, "type": "SCALAR"},
+        ],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0,                      "byteLength": len(pos_data),  "target": 34962},
+            {"buffer": 1, "byteOffset": 0,                      "byteLength": len(norm_data), "target": 34962},
+            {"buffer": 2, "byteOffset": 0,                      "byteLength": len(uv_data),   "target": 34962},
+            {"buffer": 3, "byteOffset": 0,                      "byteLength": len(idx_data),  "target": 34963},
+        ],
+        "buffers": [
+            {"uri": b64(pos_data),  "byteLength": len(pos_data)},
+            {"uri": b64(norm_data), "byteLength": len(norm_data)},
+            {"uri": b64(uv_data),   "byteLength": len(uv_data)},
+            {"uri": b64(idx_data),  "byteLength": len(idx_data)},
+        ],
+    }
+    return gltf
+
+
+def default_mtl(name: str = "default") -> str:
+    return (
+        f"newmtl {name}\n"
+        "Ka 0.1 0.1 0.1\n"
+        "Kd 0.8 0.8 0.8\n"
+        "Ks 0.05 0.05 0.05\n"
+        "Ns 10\n"
+        "d 1\n"
+    )
+from dotenv import load_dotenv
+
+load_dotenv()
+app = Flask(__name__)
+
+# CORS - izinkan semua request dari browser
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+COOKIE  = os.getenv("ROBLOX_COOKIE","")
+
+# ── ROBLOX OAUTH 2.0 CONFIG ──────────────────────────────────────
+OAUTH_CLIENT_ID     = os.getenv("ROBLOX_OAUTH_CLIENT_ID", "")
+OAUTH_CLIENT_SECRET = os.getenv("ROBLOX_OAUTH_CLIENT_SECRET", "")
+OAUTH_REDIRECT_URI  = os.getenv("ROBLOX_OAUTH_REDIRECT_URI", "https://getrbx3d.qzz.io/auth/callback")
+OAUTH_SCOPES        = "openid profile asset:read"
+OAUTH_AUTH_URL      = "https://apis.roblox.com/oauth/v1/authorize"
+OAUTH_TOKEN_URL     = "https://apis.roblox.com/oauth/v1/token"
+OAUTH_USERINFO_URL  = "https://apis.roblox.com/oauth/v1/userinfo"
+_cache = {}
+CACHE_TTL = 300
+
+def cache_get(key):
+    if key in _cache:
+        val, ts = _cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+def cache_set(key, val):
+    _cache[key] = (val, time.time())
+
+# ── Best-effort in-memory rate limiting ─────────────────────────────
+# NOTE: Vercel serverless containers are ephemeral, so this resets on cold starts
+# and isn't shared across containers — it's not a bulletproof/distributed limiter.
+# What it DOES protect against: one client rapid-firing many requests against a
+# single warm container in a short window (e.g. a script hammering /item-batch),
+# which is exactly the pattern that risks getting this server's outbound IP
+# flagged by Roblox's Cloudflare protection — which would break the tool for
+# every user, not just the one doing it. For real distributed rate limiting
+# you'd want Vercel Edge Config / Upstash Redis or similar.
+_rate_buckets = {}
+
+def get_client_ip():
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+def check_rate_limit(bucket_name, limit, window_s):
+    """Returns a (response, status) tuple to return immediately if the caller is
+    over the limit, or None if they're clear to proceed."""
+    key = f"{bucket_name}:{get_client_ip()}"
+    now = time.time()
+    bucket = _rate_buckets.setdefault(key, [])
+    while bucket and now - bucket[0] > window_s:
+        bucket.pop(0)
+    if len(bucket) >= limit:
+        retry_after = int(window_s - (now - bucket[0])) + 1
+        return jsonify({"error": f"Terlalu banyak permintaan. Coba lagi dalam {retry_after} detik."}), 429
+    bucket.append(now)
+    return None
+
+API_KEY = os.getenv("ROBLOX_API_KEY","")
+# Optional standalone Rust parsing service (see /rust-model-parser) — a real
+# rbx-dom-based .rbxm/.rbxmx parser that correctly handles SurfaceAppearance/PBR
+# materials, unlike the hand-rolled Python parser below. Purely additive: if this
+# isn't set, or the service errors, model_info() falls back to the Python parser
+# unchanged. Set to the deployed URL of that separate Vercel project, e.g.
+# "https://your-parser-name.vercel.app" (no trailing slash).
+MODEL_PARSER_URL = os.getenv("ROBLOX_MODEL_PARSER_URL","").rstrip("/")
+TIMEOUT = 15
+
+def oc_headers():
+    """Headers for a genuine Open Cloud (apis.roblox.com) request. Per Roblox's own
+    published OpenAPI spec, endpoints like /assets/v1/assets/{id} only accept
+    x-api-key or OAuth2 — cookie auth is explicitly NOT a valid option for them,
+    unlike the classic legacy endpoints (catalog.roblox.com, users.roblox.com, etc.)
+    that the rest of this app calls. Without this header those calls silently 401."""
+    return {"x-api-key": API_KEY} if API_KEY else {}
+
+def fetch_asset_raw_bytes(asset_id, s, timeout=25):
+    """Fetch a Roblox asset's raw file content (.rbxm/.mesh/.png/etc — whatever that
+    asset ID actually is). Tries the newer, officially-supported Open Cloud Asset
+    Delivery API first (apis.roblox.com/asset-delivery-api — needs ROBLOX_API_KEY
+    scoped with legacy-asset:manage), then falls back to the older cookie-authenticated
+    assetdelivery.roblox.com domain — so this keeps working even if the key isn't
+    configured, just without the extra resilience the Open Cloud path provides.
+    Raises on total failure (both paths exhausted).
+
+    IMPORTANT: the Open Cloud endpoint doesn't always return raw bytes directly —
+    for some assets it returns a small JSON wrapper like
+    {"location": "https://contentdelivery.roblox.com/v1/bytes/...", ...} that has
+    to be followed with a second request to get the actual file. Confirmed via
+    live testing: earlier code was treating that JSON wrapper itself as if it were
+    the file, which silently corrupted every download through this path (varying,
+    tiny byte counts, "Invalid file header" downstream — nothing was ever actually
+    fetching real content)."""
+    if API_KEY:
+        try:
+            r = s.get(f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{asset_id}",
+                       headers=oc_headers(), timeout=timeout)
+            if r.status_code == 200 and r.content:
+                ctype = r.headers.get("content-type", "")
+                looks_like_json = ctype.startswith("application/json") or r.content[:1] == b"{"
+                if looks_like_json:
+                    try:
+                        loc = r.json().get("location")
+                    except Exception:
+                        loc = None
+                    if loc:
+                        r2 = s.get(loc, timeout=timeout)
+                        if r2.status_code == 200 and r2.content:
+                            return r2.content
+                    # JSON but no usable location — fall through to legacy path below
+                else:
+                    return r.content
+        except Exception:
+            pass
+    r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={asset_id}", timeout=timeout)
+    r.raise_for_status()
+    return r.content
+
+# ── FONTS ─────────────────────────────────────────────────────────
+# A Roblox Font asset ID points to a "Family" JSON manifest listing every
+# weight/style ("Face"), each of which references ANOTHER asset ID — the actual
+# font binary (.ttf/.otf). Field casing isn't 100% consistent across sources, so
+# every lookup below checks multiple plausible key names defensively.
+def _extract_font_faces(family_json):
+    """Return [{'name','weight','style','asset_id'}] from a parsed Family JSON dict.
+    Returns [] if this doesn't look like a font family at all."""
+    faces_raw = family_json.get("faces") or family_json.get("Faces") or []
+    if not isinstance(faces_raw, list): return []
+    out = []
+    for f in faces_raw:
+        if not isinstance(f, dict): continue
+        aid_raw = f.get("assetId") or f.get("AssetId") or f.get("asset_id")
+        if not aid_raw: continue
+        m = re.search(r"(\d+)", str(aid_raw))
+        if not m: continue
+        out.append({
+            "name": f.get("name") or f.get("Name") or "Face",
+            "weight": f.get("weight") or f.get("Weight") or "",
+            "style": f.get("style") or f.get("Style") or "",
+            "asset_id": int(m.group(1)),
+        })
+    return out
+
+def fetch_font_package(file_id, s):
+    """Fetch a Font Family asset: the manifest JSON + every referenced Face's actual
+    font file. Returns (family_name, files:[(filename, bytes), ...]). Raises if this
+    asset ID isn't a font family at all (so callers can try something else)."""
+    raw = fetch_asset_raw_bytes(file_id, s, timeout=20)
+    try:
+        family = json.loads(raw)
+    except Exception:
+        raise Exception("Bukan Font Family JSON yang valid")
+    faces = _extract_font_faces(family)
+    if not faces:
+        raise Exception("Tidak ada Face ditemukan di Font Family ini")
+
+    family_name = family.get("name") or family.get("Name") or f"Font_{file_id}"
+    safe_family = "".join(c if c.isalnum() or c in " _-" else "_" for c in family_name).strip() or str(file_id)
+    files = [(f"{safe_family}_family.json", raw)]
+
+    for face in faces:
+        try:
+            font_bytes = fetch_asset_raw_bytes(face["asset_id"], s, timeout=20)
+        except Exception:
+            continue
+        # Sniff TTF/OTF/TTC by magic bytes rather than trusting any extension hint
+        if font_bytes[:4] in (b"OTTO",):
+            ext = "otf"
+        elif font_bytes[:4] in (b"\x00\x01\x00\x00", b"true", b"ttcf"):
+            ext = "ttf"
+        else:
+            ext = "ttf"  # most Roblox faces are TTF; safe default if sniff is inconclusive
+        style_part = "_".join(x for x in (face["weight"], face["style"]) if x) or face["name"]
+        safe_style = "".join(c if c.isalnum() or c in " _-" else "_" for c in style_part).strip()
+        files.append((f"{safe_family}_{safe_style}_{face['asset_id']}.{ext}", font_bytes))
+
+    if len(files) < 2:
+        raise Exception("Semua Face gagal diunduh")
+    return family_name, files
+
+# ── VIDEOS ────────────────────────────────────────────────────────
+# A Roblox Video asset ID resolves to an HLS manifest (.m3u8), not a playable file
+# directly — there's a master playlist listing quality variants, each pointing to a
+# media playlist that lists the actual .ts segment URLs. We pick the highest-bitrate
+# variant, download every segment, and concatenate them in order (MPEG-TS is designed
+# to be concatenation-safe). The result plays in VLC/ffmpeg-based players, but isn't a
+# polished single .mp4 — that would need an actual ffmpeg remux, which isn't something
+# to bundle into a lightweight Vercel Python function.
+MAX_VIDEO_SEGMENTS = 400     # safety cap so a huge video can't blow the function's time/memory budget
+MAX_VIDEO_BYTES = 180 * 1024 * 1024  # ~180MB cap, well under typical serverless response limits
+
+def _parse_m3u8(text, base_url):
+    """Return list of absolute URIs for every non-comment line in an m3u8 playlist,
+    resolving relative URIs against base_url."""
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"): continue
+        out.append(line if line.startswith("http") else urljoin(base_url, line))
+    return out
+
+def fetch_video_ts(file_id, s):
+    """Fetch a Video asset, resolve its HLS manifest chain, download and concatenate
+    every segment. Returns (raw_ts_bytes, segment_count). Raises on failure or if the
+    asset isn't actually an HLS manifest at all."""
+    manifest_url = None
+    manifest_text = None
+    if API_KEY:
+        try:
+            oc_url = f"https://apis.roblox.com/asset-delivery-api/v1/assetId/{file_id}"
+            r = s.get(oc_url, headers=oc_headers(), timeout=20)
+            if r.status_code == 200 and r.text.lstrip().startswith("#EXTM3U"):
+                manifest_url, manifest_text = oc_url, r.text
+        except Exception: pass
+    if manifest_text is None:
+        legacy_url = f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}"
+        r = s.get(legacy_url, timeout=20)
+        r.raise_for_status()
+        if not r.text.lstrip().startswith("#EXTM3U"):
+            raise Exception("Bukan Video (HLS manifest tidak ditemukan)")
+        manifest_url, manifest_text = legacy_url, r.text
+
+    # Master playlist? (lists quality variants, each itself an .m3u8) — pick the
+    # highest-bandwidth one. A media playlist (segments directly) has no
+    # #EXT-X-STREAM-INF lines, so this loop just won't find any and we fall through.
+    variant_url, best_bw = None, -1
+    lines = manifest_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("#EXT-X-STREAM-INF"):
+            m = re.search(r"BANDWIDTH=(\d+)", line)
+            bw = int(m.group(1)) if m else 0
+            if i + 1 < len(lines) and bw > best_bw:
+                nxt = lines[i+1].strip()
+                if nxt and not nxt.startswith("#"):
+                    variant_url = nxt if nxt.startswith("http") else urljoin(manifest_url, nxt)
+                    best_bw = bw
+    if variant_url:
+        r = s.get(variant_url, timeout=20)
+        r.raise_for_status()
+        manifest_url, manifest_text = variant_url, r.text
+
+    segment_urls = _parse_m3u8(manifest_text, manifest_url)
+    if not segment_urls:
+        raise Exception("Manifest video kosong — tidak ada segment ditemukan")
+    if len(segment_urls) > MAX_VIDEO_SEGMENTS:
+        raise Exception(f"Video terlalu panjang untuk diproses (>{MAX_VIDEO_SEGMENTS} segment).")
+
+    segments = [None] * len(segment_urls)
+    total_bytes = [0]
+    def _dl(i, url):
+        r = s.get(url, timeout=20)
+        r.raise_for_status()
+        return i, r.content
+    with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+        futs = [ex.submit(_dl, i, u) for i, u in enumerate(segment_urls)]
+        for fut in as_completed(futs):
+            i, content = fut.result()
+            segments[i] = content
+            total_bytes[0] += len(content)
+            if total_bytes[0] > MAX_VIDEO_BYTES:
+                raise Exception("Video terlalu besar untuk diproses di server ini.")
+
+    if any(seg is None for seg in segments):
+        raise Exception("Sebagian segment video gagal diunduh")
+    return b"".join(segments), len(segments)
+
+
+def parse_rbxmx(data):
+    """Parse RBXMX (XML format) Roblox model file.
+    Jauh lebih sederhana dari binary RBXM - semua nilai langsung terbaca sebagai teks.
+    Return: dict dengan format sama seperti parse_rbxm_binary (compatible dengan model_convert/model_info)
+    """
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(data.decode('utf-8', 'replace'))
+
+    TARGET_CLASSES = {'MeshPart', 'Part', 'UnionOperation'}
+    counts = {'MeshPart': 0, 'Part': 0, 'UnionOperation': 0}
+    parts = []
+    animation_classes_found = set()
+
+    def get_text(props, tag, attr_name):
+        el = props.find(f"{tag}[@name='{attr_name}']")
+        return el.text.strip() if el is not None and el.text else None
+
+    def get_float(props, tag, attr_name):
+        t = get_text(props, tag, attr_name)
+        try: return float(t) if t else 0.0
+        except: return 0.0
+
+    def parse_color3uint8(props):
+        el = props.find("Color3uint8[@name='Color3uint8']")
+        if el is None:
+            return [163, 162, 165]
+        try:
+            # Format: single integer e.g. "10724005" = 0xA39965 = R:163 G:153 B:101
+            val = int(el.text.strip())
+            r = (val >> 16) & 0xFF
+            g = (val >> 8) & 0xFF
+            b = val & 0xFF
+            return [r, g, b]
+        except:
+            return [163, 162, 165]
+
+    def parse_cframe(props, cf_name='CFrame'):
+        cf = props.find(f"CoordinateFrame[@name='{cf_name}']")
+        if cf is None:
+            return [0.0, 0.0, 0.0], [1,0,0,0,1,0,0,0,1], "identity-fallback"
+        try:
+            x = float(cf.find('X').text or 0)
+            y = float(cf.find('Y').text or 0)
+            z = float(cf.find('Z').text or 0)
+            r = [float(cf.find(f'R{i}{j}').text or (1 if i==j else 0)) for i in range(3) for j in range(3)]
+            return [x,y,z], r, "decoded"
+        except:
+            return [0.0,0.0,0.0], [1,0,0,0,1,0,0,0,1], "identity-fallback"
+
+    def parse_vector3(props, attr_name):
+        el = props.find(f"Vector3[@name='{attr_name}']")
+        if el is None:
+            return [1.0, 1.0, 1.0]
+        try:
+            return [float(el.find('X').text or 1), float(el.find('Y').text or 1), float(el.find('Z').text or 1)]
+        except:
+            return [1.0, 1.0, 1.0]
+
+    for item in root.iter('Item'):
+        cls = item.get('class')
+        if cls in ANIMATION_CLASSES:
+            animation_classes_found.add(cls)
+        if cls not in TARGET_CLASSES:
+            continue
+        counts[cls] = counts.get(cls, 0) + 1
+        props = item.find('Properties')
+        if props is None:
+            continue
+
+        name = get_text(props, 'string', 'Name') or cls
+        pos, rot_val, rot_status = parse_cframe(props, 'CFrame')
+        size = parse_vector3(props, 'size')
+        color = parse_color3uint8(props)
+
+        mesh_id = None
+        texture_id = None
+        if cls == 'MeshPart':
+            mesh_id = get_text(props, 'string', 'MeshId')
+            texture_id = get_text(props, 'string', 'TextureID')
+
+        parts.append({
+            "name": name,
+            "className": cls,
+            "meshId": mesh_id,
+            "textureId": texture_id,
+            "position": {"status": "decoded", "value": [round(v,4) for v in pos]},
+            "size": {"status": "decoded", "value": [round(v,4) for v in size]},
+            "rotation": {"status": rot_status, "value": [round(v,6) for v in rot_val], "rawRotationId": None},
+            "color": {"status": "decoded", "value": color}
+        })
+
+    return {
+        "meshPartCount": counts['MeshPart'],
+        "partCount": counts['Part'],
+        "unionCount": counts['UnionOperation'],
+        "parts": parts,
+        "animationClassesFound": sorted(animation_classes_found)
+    }
+
+
+
+# ── CSGMDL V5 PARSER (Union/CSG geometry) ────────────────────────
+# Format reverse-engineered from krakow10/rbx_mesh (Rust)
+# V5 magic: obfuscated "CSGMDL\x05\x00\x00\x00" XOR NOISE
+# Body after magic: RAW (no XOR), unlike V2/V4
+
+CSGMDL_V5_MAGIC = b"\x15\x7d\x29\x15\x75\x6c\x35\x04\x34\x69"
+CSGMDL_V4_MAGIC = b"\x15\x7d\x29\x15\x75\x6c\x34\x04\x34\x69"
+CSGMDL_V2_MAGIC = b"\x15\x7d\x29\x15\x75\x6c\x32\x04\x34\x69"
+
+CSGMDL_OBFUSCATION_NOISE = bytes([
+    86,46,110,88,49,32,48,4,52,105,12,119,12,1,94,0,26,96,55,105,29,82,43,7,79,36,89,101,83,4,122
+])
+
+def _csgmdl_deobfuscate(data, start_offset):
+    """XOR deobfuscation for V2/V4 body (NOT needed for V5 body)."""
+    result = bytearray(data)
+    noise = CSGMDL_OBFUSCATION_NOISE
+    for i in range(len(result)):
+        result[i] ^= noise[(start_offset + i) % 31]
+    return bytes(result)
+
+def _decode_csgmdl_faces_v5(vertex_data, expected_count):
+    """Decode delta-encoded face indices (state machine from v5.rs)."""
+    indices = []
+    it = iter(vertex_data)
+    index_out = 0
+    for _ in range(expected_count):
+        v0 = next(it)
+        if v0 < 64:
+            offset = v0
+        elif v0 < 128:
+            offset = v0 - 128
+        else:
+            v1 = next(it)
+            v2 = next(it)
+            offset = int.from_bytes([v2, v1, v0 - 128, 0], 'little', signed=True)
+        index_out = (index_out + offset) & 0xFFFFFFFF
+        indices.append(index_out & 0x007FFFFF)
+    return indices
+
+def parse_csgmdl(data):
+    """Parse CSGMDL Union geometry (V2/V4/V5).
+    Returns dict: {version, vertices:[(x,y,z),...], faces:[(a,b,c),...], vertex_count, face_count}
+    Raises ValueError if format not recognized or parse fails.
+    """
+    if len(data) < 10:
+        raise ValueError("Data terlalu kecil untuk CSGMDL")
+
+    magic = data[:10]
+
+    if magic == CSGMDL_V5_MAGIC:
+        return _parse_csgmdl_v5(data)
+    elif magic == CSGMDL_V4_MAGIC:
+        return _parse_csgmdl_v2_v4(data, version=4)
+    elif magic == CSGMDL_V2_MAGIC:
+        return _parse_csgmdl_v2_v4(data, version=2)
+    else:
+        raise ValueError(f"Magic CSGMDL tidak dikenal: {magic[:10].hex()}")
+
+def _parse_csgmdl_v5(data):
+    """Parse CSGMDL V5 - body is NOT obfuscated after magic."""
+    p = 10  # skip magic
+
+    pos_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    positions = []
+    for _ in range(pos_count):
+        x, y, z = struct.unpack("<3f", data[p:p+12]); p += 12
+        positions.append((x, y, z))
+
+    normals_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    normals_len = struct.unpack("<I", data[p:p+4])[0]; p += 4
+    p += normals_count * 6  # QuantizedF32x3 = [i16;3] = 6 bytes
+
+    color_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    p += color_count * 4
+
+    normal_id_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    p += normal_id_count  # u8 each
+
+    tex_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    p += tex_count * 8  # [f32;2] = 8 bytes
+
+    tangents_count = struct.unpack("<H", data[p:p+2])[0]; p += 2
+    tangents_len = struct.unpack("<I", data[p:p+4])[0]; p += 4
+    p += tangents_count * 6
+
+    # Faces5
+    vertex_count = struct.unpack("<I", data[p:p+4])[0]; p += 4
+    vertex_data_len = struct.unpack("<I", data[p:p+4])[0]; p += 4
+    vertex_data = data[p:p+vertex_data_len]; p += vertex_data_len
+
+    range_marker_count = data[p]; p += 1
+    range_markers = []
+    for _ in range(range_marker_count):
+        range_markers.append(struct.unpack("<I", data[p:p+4])[0]); p += 4
+
+    indices = _decode_csgmdl_faces_v5(vertex_data, vertex_count)
+
+    # Use LOD0 = indices[range_markers[0]:range_markers[1]] if available
+    if len(range_markers) >= 2:
+        faces_indices = indices[range_markers[0]:range_markers[1]]
+    else:
+        faces_indices = indices
+
+    faces = [(faces_indices[i], faces_indices[i+1], faces_indices[i+2])
+             for i in range(0, len(faces_indices)-2, 3)]
+
+    return {
+        "version": "V5",
+        "vertices": positions,
+        "faces": faces,
+        "vertex_count": len(positions),
+        "face_count": len(faces)
+    }
+
+def _parse_csgmdl_v2_v4(data, version):
+    """Parse CSGMDL V2/V4 - body IS obfuscated after magic (XOR with noise)."""
+    raw = _csgmdl_deobfuscate(data[10:], start_offset=10)
+    p = 0
+
+    # Hash: 32 bytes
+    p += 32
+
+    # Mesh2: vertex_count u32, magic 84 u32, vertices, face_count u32, faces
+    vertex_count = struct.unpack("<I", raw[p:p+4])[0]; p += 4
+    magic84 = struct.unpack("<I", raw[p:p+4])[0]; p += 4  # should be 84
+
+    # Vertex = pos[f32;3] + norm[f32;3] + color[u8;4] + normal_id u32 + tex[f32;2]
+    #        + tangent magic 0u128 (16 bytes) + magic 0u128 (16 bytes) = 84 bytes total
+    positions = []
+    for _ in range(vertex_count):
+        x, y, z = struct.unpack("<3f", raw[p:p+12])
+        positions.append((x, y, z))
+        p += 84  # full vertex size
+
+    face_count_raw = struct.unpack("<I", raw[p:p+4])[0]; p += 4
+    face_count = face_count_raw // 3
+    faces = []
+    for _ in range(face_count):
+        a, b, c = struct.unpack("<3I", raw[p:p+12])
+        faces.append((a, b, c)); p += 12
+
+    if version == 4:
+        unknown_count = struct.unpack("<I", raw[p:p+4])[0]; p += 4
+        p += unknown_count * 4
+
+    return {
+        "version": f"V{version}",
+        "vertices": positions,
+        "faces": faces,
+        "vertex_count": len(positions),
+        "face_count": len(faces)
+    }
+
+def csgmdl_to_obj(mesh_data, name="union_mesh"):
+    """Convert parsed CSGMDL data to OBJ string."""
+    lines = [f"# CSG Union mesh - {mesh_data['version']} ({mesh_data['vertex_count']} verts, {mesh_data['face_count']} faces)"]
+    lines.append(f"o {name}")
+    for x, y, z in mesh_data["vertices"]:
+        lines.append(f"v {x:.6f} {y:.6f} {z:.6f}")
+    for a, b, c in mesh_data["faces"]:
+        lines.append(f"f {a+1} {b+1} {c+1}")
+    return "\n".join(lines)
+
+
+# ── INLINED RBXM PARSER (avoids services.rbxm_parser import issue on Vercel) ──
+class RBXMParseError(Exception):
+    pass
+
+
+def parse_chunks(data):
+    if data[:8] != b"<roblox!":
+        raise RBXMParseError("Bukan format RBXM binary (mungkin XML/rbxmx atau tipe asset lain)")
+    num_types = struct.unpack("<I", data[16:20])[0]
+    num_instances = struct.unpack("<I", data[20:24])[0]
+
+    offset = 32
+    chunks = []
+    while offset < len(data):
+        name = data[offset:offset+4].rstrip(b"\x00").decode("ascii", "replace")
+        cl = struct.unpack("<I", data[offset+4:offset+8])[0]
+        ul = struct.unpack("<I", data[offset+8:offset+12])[0]
+        bs = offset + 16
+        if cl == 0:
+            body = data[bs:bs+ul]
+            be = bs + ul
+        else:
+            body = lz4.block.decompress(data[bs:bs+cl], uncompressed_size=ul)
+            be = bs + cl
+        chunks.append((name, body))
+        offset = be
+        if name == "END":
+            break
+    return chunks, num_types, num_instances
+
+
+def _read_interleaved_be_u32(buf, count):
+    out = []
+    for i in range(count):
+        b0, b1, b2, b3 = buf[i], buf[count+i], buf[2*count+i], buf[3*count+i]
+        out.append((b0 << 24) | (b1 << 16) | (b2 << 8) | b3)
+    return out
+
+
+def _ror1(u32):
+    return (u32 >> 1) | ((u32 & 1) << 31)
+
+
+def decode_f32_array(buf, count):
+    """VERIFIED: interleaved byte-plane transpose + ROR1 bit rotation -> BE float32."""
+    raw = _read_interleaved_be_u32(buf, count)
+    return [struct.unpack(">f", struct.pack(">I", _ror1(v)))[0] for v in raw]
+
+
+def read_referent_array(buf, count):
+    """VERIFIED: used for INST instance ID lists."""
+    raw = _read_interleaved_be_u32(buf, count)
+    out = []
+    last = 0
+    for v in raw:
+        sv = v if v < 2**31 else v - 2**32
+        last = (last + sv) & 0xFFFFFFFF
+        out.append(last if last < 2**31 else last - 2**32)
+    return out
+
+
+def parse_inst_chunks(chunks):
+    """VERIFIED. Returns {type_id: {class_name, count, referents, is_service}}"""
+    type_map = {}
+    for name, body in chunks:
+        if name != "INST":
+            continue
+        pos = 0
+        type_id = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        nl = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        class_name = body[pos:pos+nl].decode("utf-8"); pos += nl
+        is_service = body[pos]; pos += 1
+        n = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        referents = []
+        if n > 0:
+            referents = read_referent_array(body[pos:pos+n*4], n)
+        type_map[type_id] = {"class_name": class_name, "count": n, "referents": referents, "is_service": is_service}
+    return type_map
+
+
+def find_prop_chunk(chunks, type_id, prop_name):
+    for name, body in chunks:
+        if name != "PROP":
+            continue
+        pos = 0
+        tid = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        nl = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        pname = body[pos:pos+nl].decode("utf-8", "replace"); pos += nl
+        dtype = body[pos]; pos += 1
+        if tid == type_id and pname == prop_name:
+            return dtype, body[pos:]
+    return None, None
+
+
+def decode_string_array(raw, count):
+    """VERIFIED: sequential length-prefixed UTF8."""
+    pos = 0
+    out = []
+    for _ in range(count):
+        slen = struct.unpack("<I", raw[pos:pos+4])[0]; pos += 4
+        out.append(raw[pos:pos+slen].decode("utf-8", "replace"))
+        pos += slen
+    return out
+
+
+# Property type byte values, per rbx-dom's binary format spec ordering.
+# PROP_TYPE_STRING is exercised constantly by this codebase (Name, MeshId in most files) so it's effectively
+# VERIFIED. PROP_TYPE_SHARED_STRING is UNVERIFIED here - inferred from the public spec's enum ordering, not
+# confirmed against a real file in this environment (no network access to fetch a live asset and test).
+PROP_TYPE_STRING = 0x01
+PROP_TYPE_SHARED_STRING = 0x1C
+
+
+def parse_shared_strings(chunks):
+    """UNVERIFIED (best-effort per rbx-dom binary.md "SSTR" chunk spec, not tested against a live file here).
+    Layout: version:u32, num_entries:u32, then per entry: md5_hash[16 bytes] (unused for lookup - shared
+    strings are referenced by table index, not hash), length:u32, data[length] (raw string bytes, plain
+    sequential - not interleaved, since SSTR is a single flat table rather than a per-instance property array).
+    Returns an ordered list of raw bytes, or [] if there's no SSTR chunk (older/simpler files won't have one)."""
+    for name, body in chunks:
+        if name != "SSTR":
+            continue
+        try:
+            pos = 0
+            _version = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+            num_entries = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+            entries = []
+            for _ in range(num_entries):
+                pos += 16  # md5 hash, not needed for index-based lookup
+                length = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                entries.append(body[pos:pos+length])
+                pos += length
+            return entries
+        except Exception:
+            # Malformed/unexpected SSTR layout - degrade to "no shared strings" rather than crash the parse.
+            return []
+    return []
+
+
+def decode_shared_string_array(raw, count, sstrings):
+    """UNVERIFIED (best-effort, not tested against a live file here - no network access in this environment).
+    Assumed layout: plain interleaved u32 indices (same byte-plane-transpose convention used elsewhere for
+    fixed-size property arrays in this format, no delta/zigzag) into the SSTR table built by
+    parse_shared_strings(). Returns [''] * count on any decode failure so callers can treat it as "no value"
+    rather than propagating a crash or garbage bytes."""
+    if not sstrings:
+        return [""] * count
+    try:
+        idxs = _read_interleaved_be_u32(raw, count)
+    except Exception:
+        return [""] * count
+    out = []
+    for idx in idxs:
+        if 0 <= idx < len(sstrings):
+            try:
+                out.append(sstrings[idx].decode("utf-8", "replace"))
+            except Exception:
+                out.append("")
+        else:
+            out.append("")
+    return out
+
+
+def decode_string_like_prop(chunks, type_id, prop_name, count, sstrings):
+    """dtype-aware replacement for blindly calling decode_string_array() on MeshId/TextureID/AssetId.
+    Previously this codebase assumed every 'string-like' property was PROP_TYPE_STRING, which silently fed
+    raw SharedString-table-index bytes into the literal-string decoder whenever Studio deduped a repeated
+    value (this is the likely cause of TextureID resolving to garbage / failing to download, while MeshId -
+    rarely deduped since meshes are usually unique per-part - kept working).
+    Returns (values, dtype) - values is list[str|None] length count; dtype is exposed to the API response
+    for debugging/reporting since the SharedString path here is unverified."""
+    dtype, raw = find_prop_chunk(chunks, type_id, prop_name)
+    if raw is None:
+        return [None] * count, dtype
+    if dtype == PROP_TYPE_STRING:
+        vals = decode_string_array(raw, count)
+    elif dtype == PROP_TYPE_SHARED_STRING:
+        vals = decode_shared_string_array(raw, count, sstrings)
+    else:
+        # Unrecognized type for what should be a string-like prop - don't guess and feed garbage downstream,
+        # just report no value so the frontend skips it cleanly instead of hitting a bogus download.
+        vals = [None] * count
+    return [v if v else None for v in vals], dtype
+
+
+def decode_vector3_array(raw, count):
+    """VERIFIED: 3x interleaved+ROR1 f32 arrays -> (x,y,z) tuples."""
+    plane = count * 4
+    xs = decode_f32_array(raw[0:plane], count)
+    ys = decode_f32_array(raw[plane:plane*2], count)
+    zs = decode_f32_array(raw[plane*2:plane*3], count)
+    return list(zip(xs, ys, zs))
+
+
+def decode_color3uint8_array(raw, count):
+    """UNVERIFIED layout - best-effort sequential RGB triplets."""
+    out = []
+    for i in range(count):
+        if i*3+2 < len(raw):
+            out.append((raw[i*3], raw[i*3+1], raw[i*3+2]))
+        else:
+            out.append((163, 162, 165))
+    return out
+
+
+# Official 24-entry special rotation ID table (rbx-dom binary.md spec, "Version 0").
+# Rotations in degrees, applied in composite order Y -> X -> Z.
+ROTATION_ID_TABLE = {
+    0x02: (0, 0, 0),     0x03: (90, 0, 0),    0x05: (0, 180, 180), 0x06: (-90, 0, 0),
+    0x07: (0, 180, 90),  0x09: (0, 90, 90),   0x0a: (0, 0, 90),    0x0c: (0, -90, 90),
+    0x0d: (-90, -90, 0), 0x0e: (0, -90, 0),   0x10: (90, -90, 0),  0x11: (0, 90, 180),
+    0x14: (0, 180, 0),   0x15: (-90, -180, 0),0x17: (0, 0, 180),   0x18: (90, 180, 0),
+    0x19: (0, 0, -90),   0x1b: (0, -90, -90), 0x1c: (0, -180, -90),0x1e: (0, 90, -90),
+    0x1f: (90, 90, 0),   0x20: (0, 90, 0),    0x22: (-90, 90, 0),  0x23: (0, -90, 180),
+}
+
+def _euler_yxz_to_matrix(rx_deg, ry_deg, rz_deg):
+    """Build 3x3 rotation matrix from Euler angles, composite order Y->X->Z (R = Rz @ Rx @ Ry)."""
+    import math
+    rx, ry, rz = math.radians(rx_deg), math.radians(ry_deg), math.radians(rz_deg)
+    cx, sx = math.cos(rx), math.sin(rx)
+    cy, sy = math.cos(ry), math.sin(ry)
+    cz, sz = math.cos(rz), math.sin(rz)
+    Rx = [[1,0,0],[0,cx,-sx],[0,sx,cx]]
+    Ry = [[cy,0,sy],[0,1,0],[-sy,0,cy]]
+    Rz = [[cz,-sz,0],[sz,cz,0],[0,0,1]]
+    def matmul(A,B):
+        return [[sum(A[i][k]*B[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+    R = matmul(matmul(Rz, Rx), Ry)
+    return [R[0][0],R[0][1],R[0][2], R[1][0],R[1][1],R[1][2], R[2][0],R[2][1],R[2][2]]
+
+
+def decode_cframe_full(raw, count):
+    """
+    VERIFIED CORRECT (confirmed via official rbx-dom spec + empirical byte-accounting match).
+    Structure is SEQUENTIAL per-instance: [ID_0][matrix_0 if ID_0==0][ID_1][matrix_1 if ID_1==0]...
+    followed by a separate Position Vector3 array (interleaved+Roblox-float, trailing count*12 bytes).
+    Raw matrix (ID==0) is plain little-endian sequential float32, NOT interleaved/transformed.
+    ID!=0 uses the 24-entry ROTATION_ID_TABLE (official spec) converted to a matrix via Euler angles.
+    Returns: positions (list of (x,y,z)), rotations (list of dicts: status/value/rawRotationId)
+    """
+    p = 0
+    rotation_ids = []
+    raw_matrices = {}
+    for i in range(count):
+        rid = raw[p]; p += 1
+        rotation_ids.append(rid)
+        if rid == 0:
+            raw_matrices[i] = raw[p:p+36]
+            p += 36
+
+    pos_block = raw[-(count * 12):]
+    positions = decode_vector3_array(pos_block, count)
+
+    rotations = []
+    for i in range(count):
+        rid = rotation_ids[i]
+        if rid == 0:
+            m = raw_matrices[i]
+            vals = [struct.unpack("<f", m[j*4:j*4+4])[0] for j in range(9)]
+            rotations.append({"status": "decoded", "value": [round(v,6) for v in vals], "rawRotationId": 0})
+        elif rid in ROTATION_ID_TABLE:
+            rx, ry, rz = ROTATION_ID_TABLE[rid]
+            vals = _euler_yxz_to_matrix(rx, ry, rz)
+            rotations.append({"status": "decoded", "value": [round(v,6) for v in vals], "rawRotationId": rid})
+        else:
+            rotations.append({"status": "unknown-id", "value": [1,0,0,0,1,0,0,0,1], "rawRotationId": rid})
+
+    return positions, rotations
+
+
+def decode_bool_array(raw, count):
+    return [bool(b) for b in raw[:count]]
+
+
+# ── PART SHAPE + SPECIALMESH LINKING ────────────────────────────────
+# VERIFIED against a real R6 rig .rbxm: Part.shape is stored as a
+# byte-plane-transposed uint32 array (same trick as decode_f32_array,
+# minus the ROR1 rotation). Enum.PartType only has 3 members and this
+# has been stable for years: Ball=0, Block=1, Cylinder=2.
+_PART_SHAPE_NAMES = {0: "Ball", 1: "Block", 2: "Cylinder"}
+
+# Classes that only ever show up in animation/pose assets (KeyframeSequence packs,
+# baked rig previews, etc). If any of these are present, the file isn't a static
+# Model/prop at all -- it's an animation asset that happens to embed a dummy rig
+# (usually named things like "Thumbnail [delete me]") to preview the keyframes.
+# The Model Assets pipeline only understands MeshPart/Part/UnionOperation geometry,
+# so instead of silently rendering that dummy rig's raw saved Part CFrames (which
+# produces a scattered pile of boxes frozen mid-pose), we detect and reject it with
+# an explicit reason.
+ANIMATION_CLASSES = {"KeyframeSequence", "Keyframe", "Pose", "Motor6D", "Animation"}
+
+
+def detect_animation_classes(type_map):
+    """type_map: {type_id: {"class_name": str, "count": int, ...}} from parse_inst_chunks.
+    Returns sorted list of animation-only class names present, or [] if none."""
+    found = {info["class_name"] for info in type_map.values() if info["class_name"] in ANIMATION_CLASSES}
+    return sorted(found)
+
+def decode_part_shapes_and_meshes(chunks, type_map):
+    """Returns (shape_by_referent, specialmesh_by_part_referent).
+
+    Most rigs (R6/legacy R15) give body parts a plain className="Part"
+    with Shape=Block, and rely on a child SpecialMesh instance to define
+    the *actual* visual shape (built-in Head mesh, or a custom FileMesh
+    asset). Without decoding SpecialMesh + the PRNT (parent) chunk, we
+    have no way to know a Part has an overriding mesh at all — every
+    Part just falls back to a plain box using its bounding-box size,
+    which is why rigs render as chunky overlapping cubes.
+    Only MeshType 0 (Head) and 5 (FileMesh) are verified against a real
+    file; anything else is left as None so the caller can fall back to
+    the existing box-render behavior instead of guessing.
+    """
+    MESHTYPE_NAMES = {0: "Head", 5: "FileMesh"}
+
+    shape_by_referent = {}
+    specialmesh_by_part = {}
+
+    part_tid = specialmesh_tid = None
+    for tid, info in type_map.items():
+        if info["class_name"] == "Part": part_tid = tid
+        elif info["class_name"] == "SpecialMesh": specialmesh_tid = tid
+
+    if part_tid is not None:
+        referents = type_map[part_tid]["referents"]
+        count = len(referents)
+        if count > 0:
+            _, shape_raw = find_prop_chunk(chunks, part_tid, "shape")
+            if shape_raw:
+                raw_vals = _read_interleaved_be_u32(shape_raw, count)
+                for ref, v in zip(referents, raw_vals):
+                    shape_by_referent[ref] = _PART_SHAPE_NAMES.get(v, "Block")
+
+    if specialmesh_tid is not None and part_tid is not None:
+        sm_referents = type_map[specialmesh_tid]["referents"]
+        count = len(sm_referents)
+        if count > 0:
+            _, meshid_raw = find_prop_chunk(chunks, specialmesh_tid, "MeshId")
+            mesh_ids = decode_string_array(meshid_raw, count) if meshid_raw else [""] * count
+
+            _, texid_raw = find_prop_chunk(chunks, specialmesh_tid, "TextureId")
+            texture_ids = decode_string_array(texid_raw, count) if texid_raw else [""] * count
+
+            _, meshtype_raw = find_prop_chunk(chunks, specialmesh_tid, "MeshType")
+            mesh_types = _read_interleaved_be_u32(meshtype_raw, count) if meshtype_raw else [1] * count
+
+            _, scale_raw = find_prop_chunk(chunks, specialmesh_tid, "Scale")
+            scales = decode_vector3_array(scale_raw, count) if scale_raw else [(1.0, 1.0, 1.0)] * count
+
+            _, offset_raw = find_prop_chunk(chunks, specialmesh_tid, "Offset")
+            offsets = decode_vector3_array(offset_raw, count) if offset_raw else [(0.0, 0.0, 0.0)] * count
+
+            child_to_parent = {}
+            for name, body in chunks:
+                if name == "PRNT":
+                    pos = 1
+                    pcount = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                    children = read_referent_array(body[pos:pos+pcount*4], pcount); pos += pcount*4
+                    parents  = read_referent_array(body[pos:pos+pcount*4], pcount)
+                    child_to_parent = dict(zip(children, parents))
+                    break
+
+            part_referents_set = set(type_map[part_tid]["referents"])
+
+            for i, ref in enumerate(sm_referents):
+                parent_ref = child_to_parent.get(ref)
+                if parent_ref in part_referents_set:
+                    mtype_name = MESHTYPE_NAMES.get(mesh_types[i])
+                    if mtype_name is None:
+                        continue  # unverified MeshType — skip rather than guess
+                    specialmesh_by_part[parent_ref] = {
+                        "meshType": mtype_name,
+                        "meshId": mesh_ids[i] or None,
+                        "textureId": texture_ids[i] or None,
+                        "scale": [round(v, 4) for v in scales[i]],
+                        "offset": [round(v, 4) for v in offsets[i]],
+                    }
+
+    return shape_by_referent, specialmesh_by_part
+
+
+# Cloudscraper dengan cookie Roblox
+import cloudscraper as _cs
+_scraper = None
+def get_scraper():
+    global _scraper
+    if _scraper is None:
+        _scraper = _cs.create_scraper()
+        if COOKIE:
+            _scraper.cookies.set(".ROBLOSECURITY", COOKIE, domain=".roblox.com")
+    return _scraper
+
+def handle_roblox_error(e, context="request"):
+    """Generate pesan error yang jelas untuk 401/403/timeout dari Roblox API"""
+    msg = str(e)
+    if "401" in msg or "Unauthorized" in msg:
+        return jsonify({
+            "error": f"Cookie Roblox tidak valid atau sudah expired (401). Update ROBLOX_COOKIE di environment variables.",
+            "code": "COOKIE_EXPIRED",
+            "context": context
+        }), 401
+    if "403" in msg or "Forbidden" in msg:
+        return jsonify({
+            "error": f"Akses ditolak oleh Roblox CDN (403). Bisa karena rate limit atau Cloudflare challenge gagal. Coba lagi dalam beberapa saat.",
+            "code": "CLOUDFLARE_BLOCKED",
+            "context": context
+        }), 403
+    if "timeout" in msg.lower() or "timed out" in msg.lower():
+        return jsonify({
+            "error": f"Request ke Roblox timeout. Server Roblox lambat merespons, coba lagi.",
+            "code": "TIMEOUT",
+            "context": context
+        }), 504
+    return jsonify({"error": msg, "context": context}), 500
+
+def hdr(auth=False):
+    h = {"User-Agent":"Mozilla/5.0","Accept":"application/json"}
+    if auth and COOKIE: h["Cookie"] = f".ROBLOSECURITY={COOKIE}"
+    if API_KEY: h["x-api-key"] = API_KEY
+    return h
+
+def rget(url):
+    # Cookie hanya untuk assetdelivery (download asset privat)
+    needs_auth = "assetdelivery.roblox.com" in url or "rbxcdn.com" in url
+    with httpx.Client(timeout=TIMEOUT,follow_redirects=True) as c:
+        r = c.get(url,headers=hdr(auth=needs_auth)); r.raise_for_status(); return r.json()
+
+def rget_bytes(url):
+    needs_auth = "assetdelivery.roblox.com" in url or "rbxcdn.com" in url
+    with httpx.Client(timeout=30,follow_redirects=True) as c:
+        r = c.get(url,headers=hdr(auth=needs_auth)); r.raise_for_status(); return r.content
+
+def rpost(url,body):
+    with httpx.Client(timeout=TIMEOUT) as c:
+        r = c.post(url,json=body,headers=hdr()); r.raise_for_status(); return r.json()
+
+def resolve(user):
+    if user.isdigit(): return int(user)
+    d = rpost("https://users.roblox.com/v1/usernames/users",{"usernames":[user],"excludeBannedUsers":False})
+    u = d.get("data",[])
+    if not u: raise ValueError(f"Username '{user}' tidak ditemukan")
+    return u[0]["id"]
+
+def rget_cdn(url):
+    """Download file dari Roblox CDN pakai cloudscraper"""
+    s = get_scraper()
+    r = s.get(url, timeout=30)
+    r.raise_for_status()
+    return r.content
+
+def get_3d_manifest(uid, retries=3):
+    url = f"https://thumbnails.roblox.com/v1/users/avatar-3d?userId={uid}"
+    for i in range(retries):
+        try:
+            s = get_scraper()
+            r = s.get(url, timeout=15)
+            if r.status_code != 200:
+                print(f"[3d manifest] status {r.status_code}: {r.text[:100]}")
+                time.sleep(1)
+                continue
+            d = r.json()
+            print(f"[3d manifest] response: {str(d)[:150]}")
+
+            # Format 1: {"state":"Completed","imageUrl":"..."}
+            if d.get("state") == "Completed" and d.get("imageUrl"):
+                return d["imageUrl"]
+
+            # Format 2: {"data":[{"state":"Completed","imageUrl":"..."}]}
+            item = (d.get("data") or [None])[0]
+            if item and item.get("state") == "Completed":
+                return item["imageUrl"]
+            if item and item.get("state") == "Blocked":
+                return None
+
+            time.sleep(3)
+        except Exception as e:
+            print(f"[3d manifest attempt {i+1}] {e}")
+            time.sleep(2)
+    return None
+
+COLORS={1:"#F2F3F3",21:"#C4281C",23:"#0D69AC",24:"#F5CD2F",26:"#1B2A35",
+        37:"#4B9748",101:"#DA867A",102:"#6E99CA",194:"#A3A2A5",208:"#C8C8C8",
+        1001:"#FFCC99",1004:"#E8A87C",1006:"#C07A55",1008:"#7A4428"}
+
+def bc(cid):
+    h=COLORS.get(cid,"#A3A2A5").lstrip("#")
+    return tuple(int(h[i:i+2],16)/255 for i in(0,2,4))
+
+def procedural(av,name):
+    sc=av.get("scales",{}); bco=av.get("bodyColors",{})
+    rt=av.get("playerAvatarType","R6")
+    W=sc.get("width",1);H=sc.get("height",1);HD=sc.get("head",1);D=sc.get("depth",1)
+    p=[]
+    if rt!="R15":
+        p=[("Head",bco.get("headColorId",1004),0,5.6*H,0,1.2*HD,1.2*HD,1.2*HD),
+           ("Torso",bco.get("torsoColorId",23),0,3*H,0,2*W,2*H,D),
+           ("LArm",bco.get("leftArmColorId",1004),-1.5*W,3*H,0,W,2*H,D),
+           ("RArm",bco.get("rightArmColorId",1004),1.5*W,3*H,0,W,2*H,D),
+           ("LLeg",bco.get("leftLegColorId",194),-0.5*W,H,0,W,2*H,D),
+           ("RLeg",bco.get("rightLegColorId",194),0.5*W,H,0,W,2*H,D)]
+    else:
+        p=[("Head",bco.get("headColorId",1004),0,6.6*H,0,1.2*HD,1.2*HD,1.1*HD),
+           ("UpTorso",bco.get("torsoColorId",23),0,5.3*H,0,2*W,1.4*H,D),
+           ("LoTorso",bco.get("torsoColorId",23),0,4.2*H,0,1.8*W,0.9*H,0.9*D),
+           ("LUpArm",bco.get("leftArmColorId",1004),-1.5*W,5.3*H,0,0.9*W,1.2*H,0.9*D),
+           ("LLoArm",bco.get("leftArmColorId",1004),-1.5*W,3.85*H,0,0.85*W,1.1*H,0.85*D),
+           ("RUpArm",bco.get("rightArmColorId",1004),1.5*W,5.3*H,0,0.9*W,1.2*H,0.9*D),
+           ("RLoArm",bco.get("rightArmColorId",1004),1.5*W,3.85*H,0,0.85*W,1.1*H,0.85*D),
+           ("LUpLeg",bco.get("leftLegColorId",194),-0.55*W,3.1*H,0,0.9*W,1.3*H,0.9*D),
+           ("LLoLeg",bco.get("leftLegColorId",194),-0.55*W,1.65*H,0,0.85*W,1.2*H,0.85*D),
+           ("RUpLeg",bco.get("rightLegColorId",194),0.55*W,3.1*H,0,0.9*W,1.3*H,0.9*D),
+           ("RLoLeg",bco.get("rightLegColorId",194),0.55*W,1.65*H,0,0.85*W,1.2*H,0.85*D)]
+    def box(cx,cy,cz,w,h,d):
+        hx,hy,hz=w/2,h/2,d/2
+        v=[(cx-hx,cy-hy,cz-hz),(cx+hx,cy-hy,cz-hz),(cx+hx,cy+hy,cz-hz),(cx-hx,cy+hy,cz-hz),
+           (cx-hx,cy-hy,cz+hz),(cx+hx,cy-hy,cz+hz),(cx+hx,cy+hy,cz+hz),(cx-hx,cy+hy,cz+hz)]
+        f=[(1,2,3,4),(5,8,7,6),(1,5,6,2),(2,6,7,3),(3,7,8,4),(4,8,5,1)]
+        return v,f
+    obj=["# "+name,"mtllib avatar.mtl",""]; mtl=["# Materials",""]; mats=set(); vo=1
+    for pn,cid,cx,cy,cz,pw,ph,pd in p:
+        r,g,b=bc(cid); mat=f"m{cid}"
+        if mat not in mats:
+            mats.add(mat); mtl+=[f"newmtl {mat}",f"Kd {r:.4f} {g:.4f} {b:.4f}",""]
+        verts,faces=box(cx,cy,cz,pw,ph,pd)
+        obj+=[f"o {pn}",f"usemtl {mat}"]
+        for vx,vy,vz in verts: obj.append(f"v {vx:.5f} {vy:.5f} {vz:.5f}")
+        for face in faces: obj.append("f "+" ".join(str(vo+i-1) for i in face))
+        obj.append(""); vo+=len(verts)
+    return "\n".join(obj),"\n".join(mtl)
+
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return jsonify({"status":"ok","cookie_set":bool(COOKIE),"maintenance":MAINTENANCE})
+
+
+@app.get("/api/audio/ping")
+def audio_ping():
+    return jsonify({"status":"audio ok"})
+@app.get("/api/avatar/info")
+def avatar_info():
+    user=request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    try:
+        cached=cache_get(f"info_{user}")
+        if cached: return jsonify(cached)
+        uid=resolve(user)
+        info=rget(f"https://users.roblox.com/v1/users/{uid}")
+        av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+        result={"userId":uid,"username":info.get("name"),"displayName":info.get("displayName"),
+            "created":info.get("created"),"rigType":av.get("playerAvatarType"),
+            "scales":av.get("scales"),"bodyColors":av.get("bodyColors"),
+            "assets":av.get("assets",[]),
+            "thumbnailUrl":(th.get("data") or [{}])[0].get("imageUrl"),
+            "profileUrl":f"https://www.roblox.com/users/{uid}/profile"}
+        cache_set(f"info_{user}",result)
+        return jsonify(result)
+    except Exception as e: return safe_error(e)
+
+@app.get("/api/avatar/3d-urls")
+def avatar_3d_urls():
+    user=request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    try:
+        uid=resolve(user)
+        url=get_3d_manifest(uid)
+        if not url: return jsonify({"error":"3D thumbnail tidak tersedia","hints":["Coba lagi dalam 30 detik","Avatar mungkin R6"]}),503
+        m=rget(url)
+        return jsonify({"userId":uid,"objUrl":m.get("obj"),"mtlUrl":m.get("mtl"),"textures":m.get("textures",[])})
+    except Exception as e: return safe_error(e)
+
+def fix_url(url):
+    if url and not url.startswith("http"):
+        return f"https://t2.rbxcdn.com/{url}"
+    return url
+
+@app.get("/api/avatar/download-full")
+def avatar_download_full():
+    user=request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    rl = check_rate_limit("avatar-download", limit=15, window_s=60)
+    if rl: return rl
+    try:
+        uid=resolve(user)
+        info=rget(f"https://users.roblox.com/v1/users/{uid}")
+        name=info.get("name",str(uid))
+        manifest_url=get_3d_manifest(uid)
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            if manifest_url:
+                m=rget(manifest_url)
+                if m.get("obj"): zf.writestr(f"{name}.obj",rget_cdn(fix_url(m["obj"])))
+                if m.get("mtl"): zf.writestr(f"{name}.mtl",rget_cdn(fix_url(m["mtl"])))
+                for i,tx in enumerate(m.get("textures",[])):
+                    try: zf.writestr(f"textures/texture_{i}.png",rget_cdn(fix_url(tx)))
+                    except: pass
+                zf.writestr("README.txt",f"Avatar: {name}\nImport {name}.obj\nTextures ada di folder textures/\nDi Prisma 3D: Import OBJ -> Material -> load texture\nDi Nomad Sculpt: Import -> OBJ -> Material -> Base Color -> pilih texture")
+            else:
+                av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+                obj_t,mtl_t=procedural(av,name)
+                zf.writestr(f"{name}.obj",obj_t)
+                zf.writestr(f"{name}.mtl",mtl_t)
+                try:
+                    th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+                    tu=(th.get("data") or [{}])[0].get("imageUrl")
+                    if tu: zf.writestr(f"textures/{name}_preview.png",rget_bytes(tu))
+                except: pass
+                zf.writestr("README.txt",f"Avatar: {name} (Procedural)\nOBJ: geometry dengan warna dasar\nTextures: preview thumbnail di textures/\nDi Prisma 3D: Import OBJ -> Material -> load texture\nDi Nomad Sculpt: Import -> OBJ")
+        buf.seek(0)
+        return Response(buf.read(),mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{name}_full.zip"'})
+    except Exception as e: return safe_error(e)
+
+@app.get("/api/avatar/procedural-download")
+def avatar_procedural_download():
+    user=request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    rl = check_rate_limit("avatar-download", limit=15, window_s=60)
+    if rl: return rl
+    try:
+        uid=resolve(user)
+        av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        info=rget(f"https://users.roblox.com/v1/users/{uid}")
+        name=info.get("name",str(uid))
+        obj_t,mtl_t=procedural(av,name)
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{name}.obj",obj_t)
+            zf.writestr(f"{name}.mtl",mtl_t)
+            try:
+                th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+                tu=(th.get("data") or [{}])[0].get("imageUrl")
+                if tu: zf.writestr(f"textures/{name}_preview.png",rget_bytes(tu))
+            except: pass
+        buf.seek(0)
+        return Response(buf.read(),mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{name}_procedural.zip"'})
+    except Exception as e: return safe_error(e)
+
+@app.get("/api/catalog/info")
+def catalog_info():
+    aid = request.args.get("asset_id","")
+    if not aid: return jsonify({"error":"asset_id required"}),400
+    try:
+        aid_int = int(aid)
+    except ValueError:
+        return jsonify({"error":"asset_id harus berupa angka"}),400
+
+    cache_key = f"catinfo_{aid_int}"
+    cached = cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    try:
+        s   = get_scraper()
+        item = {}
+
+        # Coba 3 endpoint berbeda
+        endpoints = [
+            f"https://catalog.roblox.com/v1/catalog/items/{aid_int}/details?itemType=Asset",
+            f"https://economy.roblox.com/v2/assets/{aid_int}/details",
+            f"https://apis.roblox.com/assets/v1/assets/{aid_int}",
+        ]
+        for ep in endpoints:
+            try:
+                # Open Cloud (apis.roblox.com) needs x-api-key — the cookie-based
+                # cloudscraper session alone isn't accepted for this one per Roblox's spec.
+                extra_headers = oc_headers() if "apis.roblox.com" in ep else {}
+                r = s.get(ep, headers=extra_headers, timeout=10)
+                if r.status_code == 200:
+                    item = r.json(); break
+            except: continue
+
+        # Fallback POST
+        if not item:
+            try:
+                d = rpost("https://catalog.roblox.com/v1/catalog/items/details",
+                          {"items":[{"itemType":"Asset","id":aid_int}]})
+                item = (d.get("data") or [{}])[0]
+            except: pass
+
+        if not item:
+            # Bukan Asset — coba sebagai Bundle
+            bundle = _resolve_bundle(aid_int, s)
+            if bundle:
+                thumb = _bundle_thumbnail(aid_int, s)
+                result = {
+                    "assetId": aid_int,
+                    "isBundle": True,
+                    "isAnimationBundle": bundle.get("isAnimationBundle", False),
+                    "name": bundle["name"],
+                    "assetType": "Animation Bundle" if bundle.get("isAnimationBundle") else "Bundle",
+                    "assetTypeId": None,
+                    "creatorName": bundle.get("creatorName",""),
+                    "price": bundle.get("price"),
+                    "thumbnailUrl": thumb,
+                    "catalogUrl": f"https://www.roblox.com/bundles/{aid_int}",
+                    "bundleItemCount": len(bundle["asset_ids"]),
+                }
+                cache_set(cache_key, result)
+                return jsonify(result)
+
+            # Bukan Bundle juga — coba anggap sebagai aset gambar datar (mis. Avatar
+            # Background) yang belum/tidak dikenali endpoint metadata klasik di atas.
+            # Kalau thumbnail-nya ada, item ini nyata — tawarkan sebagai download PNG.
+            try:
+                th2    = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid_int}&size=420x420&format=Png",timeout=10).json()
+                thumb2 = (th2.get("data") or [{}])[0].get("imageUrl")
+            except: thumb2 = None
+            if thumb2:
+                name2 = _resolve_item_name(aid_int, s) or f"Asset {aid_int}"
+                result = {
+                    "assetId": aid_int,
+                    "isBackground": True,
+                    "name": name2,
+                    "assetType": "Profile Background",
+                    "assetTypeId": ASSET_TYPE_AVATAR_BACKGROUND,
+                    "creatorName": "",
+                    "price": None,
+                    "thumbnailUrl": thumb2,
+                    "catalogUrl": f"https://www.roblox.com/catalog/{aid_int}",
+                }
+                cache_set(cache_key, result)
+                return jsonify(result)
+            return jsonify({"error":f"Asset {aid} tidak ditemukan atau tidak dapat diakses"}),404
+
+        # Thumbnail
+        try:
+            th    = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
+            thumb = (th.get("data") or [{}])[0].get("imageUrl")
+        except: thumb = None
+
+        name    = item.get("name") or item.get("displayName") or f"Asset {aid}"
+        creator = item.get("creatorName") or item.get("creator",{}).get("name","")
+        price   = item.get("price") or item.get("priceInRobux")
+        atype   = item.get("assetType") or item.get("assetTypeId")
+        is_bg   = _is_background_item(item)
+
+        result = {"assetId":aid_int,"name":name,
+            "assetType":"Profile Background" if is_bg else atype,
+            "isBackground": is_bg,
+            "creatorName":creator,"price":price,
+            "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"}
+        cache_set(cache_key, result)
+        return jsonify(result)
+    except Exception as e: return safe_error(e)
+
+@app.get("/api/catalog/image")
+def catalog_image():
+    """Download the raw 2D image for a catalog asset — for items with no 3D mesh at
+    all (Profile/Avatar Backgrounds, Decals, plain Images), where OBJ export isn't
+    possible because there's no geometry, but the item is genuinely just a picture."""
+    aid = request.args.get("asset_id","")
+    known_name = (request.args.get("name") or "").strip() or None
+    if not aid: return jsonify({"error":"asset_id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"asset_id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        return Response(content, mimetype=ctype or "image/png",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh gambar: {e}"}), 502
+
+@app.get("/api/2d/font")
+def api_2d_font():
+    """Download a Font Family asset — the manifest JSON plus every referenced Face's
+    actual font file (.ttf/.otf), packed into one ZIP."""
+    aid = request.args.get("id","")
+    if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        family_name, files = fetch_font_package(file_id, s)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in family_name).strip() or str(file_id)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            _write_package_to_zip(zf, None, files)
+            zf.writestr("README.txt",
+                f"Font Family: {family_name}\n"
+                f"Berisi {len(files)-1} Face (weight/style) + manifest JSON aslinya.\n\n"
+                "Import .ttf/.otf ke aplikasi font manapun, atau pakai langsung di\n"
+                "Roblox Studio lewat Font.fromId() dengan ID Family ini."
+            )
+        buf.seek(0)
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}_font.zip"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh font: {e}"}), 502
+
+@app.get("/api/2d/video")
+def api_2d_video():
+    """Download a Video asset. Roblox serves videos as an HLS manifest, not a single
+    file — this resolves the manifest chain, downloads every segment, and concatenates
+    them into one .ts file (MPEG-TS is concatenation-safe by design). Plays in VLC and
+    most ffmpeg-based players. NOT a polished re-muxed .mp4 — that needs an actual
+    ffmpeg pass, which this lightweight endpoint deliberately doesn't attempt."""
+    aid = request.args.get("id","")
+    known_name = (request.args.get("name") or "").strip() or None
+    if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=10, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, seg_count = fetch_video_ts(file_id, s)
+        return Response(content, mimetype="video/mp2t",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.ts"'})
+    except Exception as e:
+        return jsonify({"error": f"Gagal mengunduh video: {e}"}), 502
+
+def _resolve_real_clothing_texture(raw_bytes):
+    """Resolve the REAL flat texture for an asset that isn't itself a raw image --
+    covers both Roblox clothing systems, since they store the real texture
+    completely differently and neither is the item's rendered thumbnail:
+
+    - Classic Shirt/Pants: a small XML wrapper with <Content name="ShirtTemplate">
+      or "PantsTemplate" pointing at the fixed-layout body-paint template image
+      (front/back/limbs cross layout) as a separate asset.
+    - Modern Layered Clothing (actual MeshPart geometry with its own custom UV
+      unwrap, not the classic template shape at all): the real texture is the
+      MeshPart's SurfaceAppearance child's ColorMap -- same resolution priority
+      already proven correct in resolve_texture() for the 3D Model Assets flow.
+    - Decal.Texture: same idea for plain classic Decal-type assets.
+
+    Priority: SurfaceAppearance.ColorMap > Decal.Texture > Shirt/PantsTemplate --
+    matches resolve_texture()'s priority order (SurfaceAppearance is the modern
+    system Roblox has been migrating clothing to; a Decal is more specific than a
+    whole-body template). Returns the real texture asset ID string, or None if
+    this doesn't look like any of these wrapper types (e.g. it's a genuine .mesh
+    accessory, where callers should fall back to the thumbnail approximation)."""
+    try:
+        text = raw_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    m = re.search(r'<Content name="ColorMap"[^>]*>\s*<url>rbxassetid://(\d+)</url>', text)
+    if m: return m.group(1)
+    m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate|Texture)"[^>]*>\s*<url>rbxassetid://(\d+)</url>', text)
+    return m.group(1) if m else None
+
+@app.get("/api/catalog/download-full")
+def catalog_download_full():
+    aid = request.args.get("asset_id","")
+    fmt = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
+    if not aid: return jsonify({"error":"asset_id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        s = get_scraper()
+        r = s.post("https://catalog.roblox.com/v1/catalog/items/details", json={"items":[{"itemType":"Asset","id":int(aid)}]}, timeout=10)
+        d = r.json()
+        item = (d.get("data") or [{}])[0]
+        if not item: return jsonify({"error":f"Asset {aid} tidak ditemukan"}),404
+        name = item.get("name",f"asset_{aid}")
+        safe = "".join(c if c.isalnum() or c in" _-" else "_" for c in name).strip()
+
+        # Download asset pakai scraper (bypass Cloudflare 403)
+        raw_r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
+        raw   = raw_r.content
+
+        # Real texture first (Shirt/Pants/Decal wrapper -> actual flat image asset).
+        # A thumbnail is a rendered PREVIEW (e.g. a mannequin wearing the shirt) --
+        # baking that onto the mesh as if it were the texture is what produced the
+        # "whole rendered character" result instead of the actual clothing texture.
+        # Only fall back to the thumbnail approximation when this genuinely isn't
+        # one of those wrapper types (e.g. a real mesh accessory with no separate
+        # texture asset we can resolve this way).
+        tu = None
+        real_tex_id = _resolve_real_clothing_texture(raw)
+        if real_tex_id:
+            tu = f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}"
+        else:
+            try:
+                th  = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
+                tu  = (th.get("data") or [{}])[0].get("imageUrl")
+            except: tu = None
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            try:
+                mesh  = parse_mesh(raw, name=safe)
+                obj_t = mesh_to_obj(mesh, mtl_name=safe)
+
+                if fmt == "gltf" and tu:
+                    # GLTF: OBJ + MTL + texture PNG
+                    try:
+                        tex = s.get(tu, timeout=15).content
+                    except Exception:
+                        # Resolved texture URL failed to fetch (deleted asset, network
+                        # blip, etc) -- fall back to the old thumbnail approach rather
+                        # than losing the texture entirely / mislabeling this as a mesh
+                        # parse failure below.
+                        try:
+                            th = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png", timeout=10).json()
+                            fallback_url = (th.get("data") or [{}])[0].get("imageUrl")
+                            tex = s.get(fallback_url, timeout=15).content if fallback_url else b""
+                        except Exception:
+                            tex = b""
+                    zf.writestr(f"textures/{safe}.png", tex)
+                    mtl_t = "newmtl default\nKd 0.8 0.8 0.8\nmap_Kd textures/" + safe + ".png\n"
+                else:
+                    # OBJ: geometry + material tanpa texture
+                    mtl_t = "newmtl default\nKd 0.8 0.8 0.8\nKa 0.1 0.1 0.1\n"
+
+                zf.writestr(f"{safe}.obj", obj_t)
+                zf.writestr(f"{safe}.mtl", mtl_t)
+
+            except Exception as me:
+                # Fallback: simpan raw mesh + thumbnail
+                ext = ".png" if raw[:4]==b"\x89PNG" else ".mesh"
+                zf.writestr(f"{safe}{ext}", raw)
+                if tu and fmt=="gltf":
+                    try: zf.writestr(f"textures/{safe}_preview.png", s.get(tu,timeout=10).content)
+                    except: pass
+                zf.writestr("PARSE_ERROR.txt", f"Mesh parse gagal: {me}\nFile mentah disertakan.")
+
+            zf.writestr("README.txt",
+                f"Item  : {name}\nFormat: {fmt.upper()}\n\n"
+                f"NOMAD SCULPT:\n  Files > Import > {safe}.obj\n"
+                + (f"  Material > Base Color > textures/{safe}.png\n" if fmt=="gltf" else "")
+                + f"\nPRISMA 3D:\n  + > Import > OBJ > {safe}.obj\n"
+                + (f"  Material > Texture > textures/{safe}.png" if fmt=="gltf" else "")
+            )
+
+        buf.seek(0)
+        fname = f"{safe}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return safe_error(e)
+
+# Set True saat maintenance
+MAINTENANCE = os.getenv("MAINTENANCE","false").lower() == "true"
+
+@app.get("/")
+def frontend():
+    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    if MAINTENANCE:
+        mp = os.path.join(os.path.dirname(__file__),"maintenance.html")
+        if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
+    p = os.path.join(base,"index.html")
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    return "<h1>Roblox Downloader</h1>"
+
+@app.get("/Flipbook")
+@app.get("/flipbook")
+def flipbook_page():
+    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    p = os.path.join(base,"flipbook.html")
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    return "<h1>Flipbook page not found</h1>",404
+
+@app.get("/maintenance")
+def maintenance_preview():
+    """Preview maintenance page langsung"""
+    p=os.path.join(os.path.dirname(__file__),"maintenance.html")
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    return "Maintenance page not found",404
+
+
+@app.get("/api/avatar/smart-download")
+def avatar_smart_download():
+    user = request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    try:
+        uid  = resolve(user)
+        info = rget(f"https://users.roblox.com/v1/users/{uid}")
+        av   = rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        name = info.get("name",str(uid))
+        rig  = av.get("playerAvatarType","R6")
+        buf  = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            method = ""
+            manifest_url = None
+            for _ in range(5):
+                try:
+                    d = rget(f"https://thumbnails.roblox.com/v1/users/avatar-3d?userId={uid}")
+                    item = (d.get("data") or [None])[0]
+                    if item and item.get("state")=="Completed":
+                        manifest_url = item["imageUrl"]; break
+                    if item and item.get("state")=="Blocked": break
+                    time.sleep(3)
+                except Exception as e:
+                    if "401" in str(e) or "403" in str(e): break
+                    time.sleep(2)
+
+            if manifest_url:
+                try:
+                    m = rget(manifest_url)
+                    obj_url = m.get("obj"); mtl_url = m.get("mtl"); txs = m.get("textures",[])
+                    if obj_url: zf.writestr(f"{name}.obj", rget_bytes(obj_url)); method="real"
+                    if mtl_url:
+                        mt = rget_bytes(mtl_url).decode("utf-8","replace")
+                        for i in range(len(txs)):
+                            mt = re.sub(r"map_Kd\s+\S+", f"map_Kd textures/texture_{i}.png", mt, count=1)
+                        zf.writestr(f"{name}.mtl", mt)
+                    for i,tx in enumerate(txs):
+                        try: zf.writestr(f"textures/texture_{i}.png", rget_cdn(fix_url(tx)))
+                        except: pass
+                except: manifest_url = None
+
+            if not manifest_url:
+                obj_t,mtl_t = procedural(av,name)
+                mtl_t += f"\nmap_Kd textures/{name}_skin.png"
+                zf.writestr(f"{name}.obj", obj_t)
+                zf.writestr(f"{name}.mtl", mtl_t)
+                method = f"procedural_{rig}"
+                try:
+                    th = rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+                    tu = (th.get("data") or [{}])[0].get("imageUrl")
+                    if tu: zf.writestr(f"textures/{name}_skin.png", rget_bytes(tu))
+                except: pass
+
+            WEAR={"Hat","HairAccessory","FaceAccessory","NeckAccessory","WaistAccessory","BackAccessory","Shirt","Pants","Face"}
+            for asset in av.get("assets",[]):
+                if asset.get("assetType",{}).get("name","") in WEAR:
+                    try:
+                        raw = rget_bytes(f"https://assetdelivery.roblox.com/v1/asset/?id={asset['id']}")
+                        safe = "".join(c if c.isalnum() else "_" for c in asset["name"][:25])
+                        ext = ".png" if raw[:4]==b"\x89PNG" else ".mesh"
+                        zf.writestr(f"accessories/{safe}{ext}", raw)
+                    except: pass
+
+            zf.writestr("README.txt",
+                f"Avatar: {name} | Rig: {rig} | Method: {method}\n\n"
+                f"NOMAD SCULPT:\n  Files > Import > {name}.obj\n  Material > Base Color > textures/\n\n"
+                f"PRISMA 3D:\n  + > Import > OBJ > {name}.obj\n  Material > Texture > textures/\n\n"
+                f"{'NOTE: Procedural model (R6 tidak didukung Roblox 3D API)' if 'procedural' in method else 'Real mesh dari Roblox CDN'}")
+        buf.seek(0)
+        return Response(buf.read(),mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
+    except Exception as e: return safe_error(e)
+
+def get_hash_url(h):
+    """Port dari global.js Faizdzn - convert hash ke rbxcdn URL"""
+    st = 31
+    for ch in h:
+        st ^= ord(ch)
+    return f"https://t{st % 8}.rbxcdn.com/{h}"
+
+def get_obj_urls(manifest):
+    """Convert semua hash di manifest ke URL CDN yang benar"""
+    obj_url = get_hash_url(manifest["obj"]) if not manifest["obj"].startswith("http") else manifest["obj"]
+    mtl_url = get_hash_url(manifest["mtl"]) if not manifest["mtl"].startswith("http") else manifest["mtl"]
+    tex_hashes = manifest.get("textures", [])
+    tex_urls   = [get_hash_url(h) if not h.startswith("http") else h for h in tex_hashes]
+    return obj_url, mtl_url, tex_hashes, tex_urls
+
+def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
+    """Replace hash di MTL dengan nama file yang benar (port dari str_replace JS)"""
+    for h, fname in zip(tex_hashes, tex_filenames):
+        mtl_text = mtl_text.replace(h, fname)
+    return mtl_text
+
+# ── SHARED: single-asset mesh fetch + bundle resolution ────────────
+def _resolve_item_name(file_id, s):
+    """Robustly resolve an Asset's display name — mirrors catalog_info's multi-endpoint
+    approach using cloudscraper (s), instead of a plain HTTP POST that Cloudflare tends
+    to silently block. Cached for CACHE_TTL since names rarely change. Returns the name,
+    or None if every attempt fails."""
+    ck = f"itemname_{file_id}"
+    cached = cache_get(ck)
+    if cached: return cached
+    endpoints = [
+        f"https://catalog.roblox.com/v1/catalog/items/{file_id}/details?itemType=Asset",
+        f"https://economy.roblox.com/v2/assets/{file_id}/details",
+        f"https://apis.roblox.com/assets/v1/assets/{file_id}",
+    ]
+    for ep in endpoints:
+        try:
+            extra_headers = oc_headers() if "apis.roblox.com" in ep else {}
+            r = s.get(ep, headers=extra_headers, timeout=10)
+            if r.status_code == 200:
+                name = r.json().get("name") or r.json().get("displayName")
+                if name: cache_set(ck, name); return name
+        except: continue
+    try:
+        r = s.post("https://catalog.roblox.com/v1/catalog/items/details",
+                    json={"items":[{"itemType":"Asset","id":file_id}]}, timeout=10)
+        if r.status_code == 200:
+            name = (r.json().get("data") or [{}])[0].get("name")
+            if name: cache_set(ck, name); return name
+    except: pass
+    return None
+
+def _fetch_asset_image_bytes(file_id, s):
+    """Get the best-available raw 2D image for a catalog asset — used for items that
+    have no 3D mesh at all (e.g. the new Profile/Avatar Backgrounds, Decals, Images),
+    where OBJ export isn't possible but the item IS just a picture.
+    Returns (content_bytes, content_type, extension). Raises if nothing works."""
+    # 1) Try raw asset delivery — for classic Decal/Image assets this serves the
+    #    actual original file bytes, not a re-rendered thumbnail.
+    try:
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=20)
+        ctype = r.headers.get("content-type","")
+        if r.status_code == 200 and ctype.startswith("image/"):
+            ext = "jpg" if "jpeg" in ctype else "png"
+            return r.content, ctype, ext
+        # 1b) Not a raw image -- for Shirt/Pants/Decal, assetdelivery instead returns
+        # a small XML wrapper pointing at the REAL flat template texture as a separate
+        # asset (same fix as catalog_download_full's thumbnail-vs-real-texture bug).
+        # Resolve that and fetch the actual template PNG before falling back below.
+        if r.status_code == 200:
+            real_tex_id = _resolve_real_clothing_texture(r.content)
+            if real_tex_id:
+                r2 = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}", timeout=20)
+                ctype2 = r2.headers.get("content-type","")
+                if r2.status_code == 200 and ctype2.startswith("image/"):
+                    ext2 = "jpg" if "jpeg" in ctype2 else "png"
+                    return r2.content, ctype2, ext2
+    except: pass
+
+    # 2) Fallback — largest available rendered thumbnail from Roblox's CDN. Only
+    #    reached for asset types with no resolvable template (e.g. genuine mesh
+    #    accessories) — an approximation, not the real texture, same tradeoff
+    #    documented at the top of this function's docstring.
+    for size in ["1200x1200","768x768","420x420"]:
+        try:
+            th = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={file_id}&size={size}&format=Png", timeout=15).json()
+            entry = (th.get("data") or [{}])[0]
+            if entry.get("state") == "Completed" and entry.get("imageUrl"):
+                ir = s.get(entry["imageUrl"], timeout=20)
+                if ir.status_code == 200:
+                    return ir.content, ir.headers.get("content-type","image/png"), "png"
+        except: continue
+
+    raise Exception("Tidak bisa mengambil gambar untuk item ini")
+
+def _fetch_asset_mesh(file_id, s, known_name=None):
+    """Fetch one Asset's name + real OBJ/MTL/texture data. Raises on failure.
+    Pass known_name (e.g. from the frontend's earlier /api/catalog/info lookup)
+    to skip name resolution entirely and guarantee it matches what the user saw."""
+    item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+    r3d = s.get(f"https://thumbnails.roblox.com/v1/assets-thumbnail-3d?assetId={file_id}", timeout=15)
+    if r3d.status_code != 200:
+        raise Exception(f"3D thumbnail error {r3d.status_code}")
+    manifest_url = r3d.json().get("imageUrl")
+    if not manifest_url:
+        raise Exception("item ini tidak punya model 3D")
+
+    manifest = s.get(manifest_url, timeout=15).json()
+    obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(manifest)
+    tex_names = [f"{safe_name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
+
+    obj_data  = s.get(obj_url, timeout=30).text
+    mtl_raw   = s.get(mtl_url, timeout=15).text
+    mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
+    return item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls
+
+def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
+    """Like _fetch_asset_mesh, but also downloads texture bytes and returns everything
+    as plain in-memory data — (item_name, safe_name, files:[(filename, content), ...]).
+    Does NO zipfile I/O, so it's safe to call concurrently from a worker thread; the
+    caller writes the returned files into the ZIP afterwards on the main thread."""
+    item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
+    files = [(f"{safe_name}.obj", obj_data), (f"{safe_name}.mtl", mtl_fixed)]
+    if include_textures:
+        for i, tex_url in enumerate(tex_urls):
+            try:
+                tb = s.get(tex_url, timeout=20)
+                if tb.status_code == 200:
+                    files.append((tex_names[i], tb.content))
+            except: pass
+    return item_name, safe_name, files
+
+def _write_package_to_zip(zf, folder, files):
+    prefix = f"{folder}/" if folder else ""
+    for fname, content in files:
+        zf.writestr(f"{prefix}{fname}", content)
+
+def _resolve_bundle(bundle_id, s):
+    """Return {'name','creatorName','price','asset_ids','bundleType','isAnimationBundle'}
+    if bundle_id is a valid Bundle, else None.
+    Cached for CACHE_TTL — bundle composition rarely changes.
+
+    bundleType comes straight from Roblox: known values are 'BodyParts' (real 3D
+    meshes — heads, body parts, etc.) and 'AvatarAnimations' (keyframe/motion data,
+    no mesh at all — playing it back on the catalog page shows a generic default
+    rig, which is NOT the actual animation and isn't worth exporting as OBJ)."""
+    ck = f"bundle_{bundle_id}"
+    cached = cache_get(ck)
+    if cached is not None: return cached or None  # cache_set(ck, False) marks a confirmed non-bundle
+    try:
+        r = s.get(f"https://catalog.roblox.com/v1/bundles/{bundle_id}/details", timeout=10)
+        if r.status_code != 200:
+            cache_set(ck, False); return None
+        bd = r.json()
+        asset_ids = [it.get("id") for it in bd.get("items", []) if it.get("type") == "Asset" and it.get("id")]
+        bundle_type = bd.get("bundleType")
+        result = {
+            "name": bd.get("name") or f"Bundle {bundle_id}",
+            "creatorName": (bd.get("creator") or {}).get("name",""),
+            "price": bd.get("price"),
+            "asset_ids": asset_ids,
+            "bundleType": bundle_type,
+            "isAnimationBundle": bundle_type == "AvatarAnimations",
+        }
+        cache_set(ck, result)
+        return result
+    except Exception:
+        return None
+
+def _bundle_thumbnail(bundle_id, s):
+    try:
+        th = s.get(f"https://thumbnails.roblox.com/v1/bundles/thumbnails?bundleIds={bundle_id}&size=420x420&format=Png", timeout=10).json()
+        return (th.get("data") or [{}])[0].get("imageUrl")
+    except Exception:
+        return None
+
+# ── Flat 2D assets (e.g. Profile/Avatar Backgrounds) ────────────────
+# Roblox added AssetType.AvatarBackground (numeric ID 92) in mid-2026 for the new
+# Avatar Backgrounds / profile personalization feature. These are flat images shown
+# behind the 3D avatar on a profile page — there is no mesh, no UV, nothing to export
+# as OBJ. Source: Roblox engine API history (AssetType.AvatarBackground : 92).
+ASSET_TYPE_AVATAR_BACKGROUND = 92
+
+def _is_background_item(item):
+    """Best-effort check of a catalog item-details response for AvatarBackground.
+    Different Roblox endpoints shape this field differently (assetType / assetTypeId /
+    AssetTypeId, numeric or string), so check every plausible key."""
+    for k in ("assetType", "assetTypeId", "AssetTypeId", "assetTypeName"):
+        v = item.get(k)
+        if v is None: continue
+        if str(v) == str(ASSET_TYPE_AVATAR_BACKGROUND): return True
+        if "avatarbackground" in str(v).lower().replace(" ", ""): return True
+    return False
+
+@app.get("/api/v2/avatar")
+def avatar_v2():
+    """Avatar download - real mesh + UV texture"""
+    user   = request.args.get("user","")
+    fmt    = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
+    if not user: return jsonify({"error":"user required"}),400
+    try:
+        uid  = resolve(user)
+        info = rget(f"https://users.roblox.com/v1/users/{uid}")
+        av   = rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        name = info.get("name", str(uid))
+        rig  = av.get("playerAvatarType","R6")
+        s    = get_scraper()
+
+        manifest_url = get_3d_manifest(uid)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            if manifest_url:
+                # Fetch manifest JSON
+                m = s.get(manifest_url, timeout=15).json()
+
+                # Convert hash -> CDN URL
+                obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(m)
+                tex_names = [f"{name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
+
+                # Download OBJ
+                obj_data = s.get(obj_url, timeout=30).text
+
+                # Download MTL + fix texture paths
+                mtl_raw   = s.get(mtl_url, timeout=15).text
+                mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
+
+                zf.writestr(f"{name}.obj", obj_data)
+                zf.writestr(f"{name}.mtl", mtl_fixed)
+
+                # GLTF mode: include textures. OBJ mode: geometry only
+                if fmt == "gltf":
+                    for i, tex_url in enumerate(tex_urls):
+                        try:
+                            tb = s.get(tex_url, timeout=20)
+                            if tb.status_code == 200:
+                                zf.writestr(tex_names[i], tb.content)
+                        except: pass
+
+                method = "real_mesh"
+            else:
+                # Fallback procedural
+                obj_t, mtl_t = procedural(av, name)
+                mtl_t += f"\nmap_Kd {name}_skin.png"
+                zf.writestr(f"{name}.obj", obj_t)
+                zf.writestr(f"{name}.mtl", mtl_t)
+                try:
+                    th  = rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+                    thu = (th.get("data") or [{}])[0].get("imageUrl")
+                    if thu: zf.writestr(f"{name}_skin.png", rget_bytes(thu))
+                except: pass
+                method = f"procedural_{rig}"
+
+            zf.writestr("README.txt",
+                f"Avatar : {name}\nRig    : {rig}\nMethod : {method}\n\n"
+                f"NOMAD SCULPT:\n  Files > Import > {name}.obj\n"
+                f"  Tap mesh > Material > Base Color > load texture PNG\n\n"
+                f"PRISMA 3D:\n  + > Import > OBJ > {name}.obj\n"
+                f"  Material > Texture > pilih texture PNG")
+
+        buf.seek(0)
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
+    except Exception as e: return handle_roblox_error(e, "avatar_download")
+
+BATCH_WORKERS = 6  # concurrent Roblox fetches per request — enough to cut wall time
+                    # meaningfully within Vercel's function timeout, low enough not to
+                    # look like abuse to Roblox's Cloudflare protection
+
+@app.get("/api/v2/item")
+def item_v2():
+    """Item/Bundle download - cloudscraper + format OBJ/GLTF (Faizdzn method).
+    If the ID isn't a plain Asset, falls back to resolving it as a Bundle and
+    packs every component asset into the same ZIP — components are fetched
+    concurrently to stay well inside the serverless timeout window.
+    Optional ?name= lets the frontend pass the name it already resolved
+    (e.g. from /api/catalog/info) so it's guaranteed to match what the user saw."""
+    aid = request.args.get("id","")
+    fmt = request.args.get("format","gltf").lower()
+    known_name = (request.args.get("name") or "").strip() or None
+    if not aid: return jsonify({"error":"id required"}),400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+        s = get_scraper()
+        is_bundle = False
+        is_image = False
+        bundle_results = []
+
+        try:
+            item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=(fmt=="gltf"))
+        except Exception as e:
+            err = str(e)
+            bundle = _resolve_bundle(file_id, s)
+            if not bundle:
+                # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
+                try:
+                    img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+                    item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+                    safe_name_img = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+                    files = [(f"{safe_name_img}.{img_ext}", img_bytes)]
+                    is_image = True
+                except Exception:
+                    return jsonify({"error": f"Gagal mengunduh item: {err}"}), 502
+            elif bundle.get("isAnimationBundle"):
+                return jsonify({"error": f"'{bundle['name']}' adalah Animation Bundle (paket animasi), bukan mesh 3D. Animasi hanya berisi data gerakan/keyframe, tidak ada geometri untuk diekspor sebagai OBJ — jadi tidak bisa diunduh lewat fitur ini."}), 422
+            elif not bundle["asset_ids"]:
+                return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen Asset yang bisa diunduh."}), 502
+            else:
+                is_bundle = True
+                item_name = known_name or bundle["name"]
+                files = []
+                with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
+                    futs = {ex.submit(_fetch_asset_package, cid, s, None, (fmt=="gltf")): cid for cid in bundle["asset_ids"]}
+                    for fut in as_completed(futs):
+                        cid = futs[fut]
+                        try:
+                            cname, csafe, cfiles = fut.result()
+                            files.extend(cfiles)
+                            bundle_results.append((cname, True, None))
+                        except Exception as ce:
+                            bundle_results.append((f"Asset {cid}", False, str(ce)))
+                if not any(r[1] for r in bundle_results):
+                    return jsonify({"error": f"Semua komponen bundle '{item_name}' gagal diunduh."}), 502
+
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+
+        if is_image:
+            readme = (
+                f"Item  : {item_name}\n"
+                f"Tipe  : Aset gambar datar (mis. Avatar/Profile Background) — BUKAN mesh 3D.\n"
+                f"Ini adalah gambar PNG biasa, bukan sesuatu yang bisa diimport sebagai OBJ ke\n"
+                f"Nomad Sculpt/Prisma 3D/Blender. Buka saja file .png-nya langsung."
+            )
+        else:
+            readme = f"Item  : {item_name}\nFormat: {fmt.upper()}\n"
+            if is_bundle:
+                readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
+                    f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
+                ) + "\n"
+            readme += (
+                f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
+                f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
+            )
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            _write_package_to_zip(zf, None, files)
+            zf.writestr("README.txt", readme)
+
+        buf.seek(0)
+        fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return handle_roblox_error(e, "catalog_item_download")
+
+MAX_BATCH_ITEMS = 25
+
+def _resolve_batch_entry(raw_id, known_name, s):
+    """Worker function — runs in a thread. Resolves one entry (asset or bundle)
+    entirely in memory (no zipfile I/O, which isn't thread-safe). Never raises;
+    always returns a result dict describing what happened."""
+    try:
+        file_id = int(raw_id)
+    except ValueError:
+        return {"raw_id": raw_id, "kind": "invalid", "error": "ID tidak valid"}
+
+    try:
+        item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=True)
+        return {"raw_id": raw_id, "kind": "asset", "id": file_id, "name": item_name, "safe_name": safe_name, "files": files}
+    except Exception as e:
+        asset_err = str(e)
+
+    bundle = _resolve_bundle(file_id, s)
+    if not bundle or not bundle["asset_ids"]:
+        # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
+        try:
+            img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+            item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+            safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+            return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
+                    "safe_name": safe_name, "files": [(f"{safe_name}.{img_ext}", img_bytes)]}
+        except Exception:
+            return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": asset_err}
+
+    bundle_display_name = known_name or bundle["name"]
+    if bundle.get("isAnimationBundle"):
+        return {"raw_id": raw_id, "kind": "error", "id": file_id,
+                "error": f"'{bundle_display_name}' adalah Animation Bundle (paket animasi) — tidak punya mesh 3D, hanya data gerakan/keyframe. Tidak bisa diekspor sebagai OBJ."}
+
+    comp_results = []
+    # Bundles usually have only 2-5 components, so a small sequential loop within this
+    # already-parallel worker is fine — avoids nested thread pools.
+    for comp_id in bundle["asset_ids"]:
+        try:
+            cname, csafe, cfiles = _fetch_asset_package(comp_id, s, include_textures=True)
+            comp_results.append({"name": cname, "files": cfiles, "ok": True})
+        except Exception as ce:
+            comp_results.append({"name": f"Asset {comp_id}", "files": [], "ok": False, "error": str(ce)})
+    return {"raw_id": raw_id, "kind": "bundle", "id": file_id, "name": bundle_display_name, "components": comp_results}
+
+@app.route("/api/v2/item-batch", methods=["GET","POST"])
+def item_batch_v2():
+    """Packed catalog download - multiple items (or bundles), ONE zip, each in its own folder.
+    Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion.
+    If an ID isn't a plain Asset, it's resolved as a Bundle and its components are packed
+    into a subfolder together.
+
+    Entries are resolved CONCURRENTLY (up to BATCH_WORKERS at a time) since each one needs
+    several sequential Roblox round-trips — doing 25 of those one-at-a-time risks blowing
+    past the serverless function's timeout. ZIP writing itself stays single-threaded
+    (zipfile isn't safe for concurrent writes), so fetching and writing are split into
+    two phases: fetch-in-parallel, then write-in-order.
+
+    Preferred: POST JSON {"items":[{"id":123,"name":"Exact Name","isBundle":false}, ...]}
+    — names come from the frontend's earlier /api/catalog/info lookup (the Packed Catalog
+    preview), so folder/file names are guaranteed to match exactly what the user saw,
+    instead of re-resolving the name here.
+    Legacy: GET ?ids=1,2,3 still works, resolving names server-side."""
+    entries = []  # list of (id_str, known_name_or_None)
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        for it in (body.get("items") or []):
+            iid = it.get("id")
+            if iid is None: continue
+            entries.append((str(iid), (it.get("name") or "").strip() or None))
+    else:
+        ids_param = request.args.get("ids","")
+        for raw_id in [x.strip() for x in ids_param.split(",") if x.strip()]:
+            entries.append((raw_id, None))
+
+    if not entries: return jsonify({"error":"ids/items required"}),400
+    if len(entries) > MAX_BATCH_ITEMS:
+        return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
+
+    rl = check_rate_limit("item-batch", limit=5, window_s=300)
+    if rl: return rl
+
+    try:
+        s = get_scraper()
+
+        # Phase 1: resolve every entry concurrently (network I/O only, no zip writes)
+        results_by_raw_id = {}
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+            futs = {ex.submit(_resolve_batch_entry, raw_id, known_name, s): raw_id for raw_id, known_name in entries}
+            for fut in as_completed(futs):
+                raw_id = futs[fut]
+                try:
+                    results_by_raw_id[raw_id] = fut.result()
+                except Exception as e:
+                    results_by_raw_id[raw_id] = {"raw_id": raw_id, "kind": "error", "error": str(e)}
+        ordered_results = [results_by_raw_id[raw_id] for raw_id, _ in entries]
+
+        # Phase 2: write everything into the ZIP in order, single-threaded
+        buf = io.BytesIO()
+        log_lines = []
+        used_folders = set()
+
+        def unique_folder(base):
+            n = base; i = 2
+            while n in used_folders: n = f"{base}_{i}"; i += 1
+            used_folders.add(n)
+            return n
+
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            for res in ordered_results:
+                if res["kind"] == "invalid":
+                    log_lines.append(f"- {res['raw_id']}: GAGAL - {res['error']}")
+                elif res["kind"] == "error":
+                    log_lines.append(f"- ID {res['raw_id']}: GAGAL - {res['error']}")
+                elif res["kind"] == "asset":
+                    folder = unique_folder(f"{res['safe_name']}_{res['id']}")
+                    _write_package_to_zip(zf, folder, res["files"])
+                    log_lines.append(f"- {res['name']} (ID {res['id']}): OK -> {folder}/")
+                elif res["kind"] == "image":
+                    folder = unique_folder(f"{res['safe_name']}_{res['id']}_IMAGE")
+                    _write_package_to_zip(zf, folder, res["files"])
+                    log_lines.append(f"- {res['name']} (ID {res['id']}, gambar datar/Background — bukan mesh): OK -> {folder}/")
+                elif res["kind"] == "bundle":
+                    safe_bname = "".join(c if c.isalnum() or c in " _-" else "_" for c in res["name"]).strip() or str(res["id"])
+                    folder = unique_folder(f"{safe_bname}_{res['id']}_BUNDLE")
+                    any_ok = False
+                    names_summary = []
+                    for comp in res["components"]:
+                        if comp["ok"]:
+                            _write_package_to_zip(zf, folder, comp["files"])
+                            names_summary.append(comp["name"])
+                            any_ok = True
+                        else:
+                            names_summary.append(f"{comp['name']} (gagal)")
+                    if any_ok:
+                        log_lines.append(f"- {res['name']} (Bundle ID {res['id']}): OK -> {folder}/ [{', '.join(names_summary)}]")
+                    else:
+                        log_lines.append(f"- {res['name']} (Bundle ID {res['id']}): GAGAL - semua komponen gagal")
+
+            zf.writestr("README.txt",
+                "CATALOG PACKED DOWNLOAD\n" + "=" * 30 + "\n\n" +
+                "\n".join(log_lines) +
+                "\n\nSetiap item/bundle ada di folder sendiri (OBJ + MTL + texture PNG).\n\n"
+                "NOMAD SCULPT:\n  Files > Import > buka folder item > pilih file .obj\n"
+                "PRISMA 3D:\n  + > Import > OBJ > pilih file .obj di dalam folder item"
+            )
+
+        if not used_folders:
+            return jsonify({"error":"Semua item gagal diproses."}),502
+
+        buf.seek(0)
+        fname = f"catalog_packed_{len(used_folders)}items.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return handle_roblox_error(e, "catalog_item_batch_download")
+
+def _resolve_image_batch_entry(raw_id, known_name, s):
+    """Worker for the 2D Assets batch — fetches ONE flat image asset (Decal, Image,
+    Face, GUI, Background, Texture) entirely in memory. No mesh/bundle fallback chain
+    at all, unlike the Catalog batch — the whole point of this endpoint is the caller
+    already knows it wants an image, so we skip straight to the image fetch."""
+    try:
+        file_id = int(raw_id)
+    except ValueError:
+        return {"raw_id": raw_id, "kind": "invalid", "error": "ID tidak valid"}
+    try:
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
+        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
+                "files": [(f"{safe_name}.{ext}", content)]}
+    except Exception as e:
+        return {"raw_id": raw_id, "kind": "error", "id": file_id, "error": str(e)}
+
+@app.route("/api/v2/image-batch", methods=["POST"])
+def image_batch_v2():
+    """Packed 2D Assets download — many flat images (Decal/Image/Face/GUI/Background/
+    Texture, any mix) fetched concurrently, packed into ONE zip. No mesh/bundle
+    handling at all — for that, use /api/v2/item-batch instead.
+    Body: {"items":[{"id":123,"name":"Exact Name"}, ...]}"""
+    body = request.get_json(silent=True) or {}
+    entries = []
+    for it in (body.get("items") or []):
+        iid = it.get("id")
+        if iid is None: continue
+        entries.append((str(iid), (it.get("name") or "").strip() or None))
+
+    if not entries: return jsonify({"error":"items required"}),400
+    if len(entries) > MAX_BATCH_ITEMS:
+        return jsonify({"error":f"Maksimum {MAX_BATCH_ITEMS} item per batch."}),400
+
+    rl = check_rate_limit("item-batch", limit=5, window_s=300)
+    if rl: return rl
+
+    try:
+        s = get_scraper()
+        results_by_raw_id = {}
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as ex:
+            futs = {ex.submit(_resolve_image_batch_entry, raw_id, known_name, s): raw_id for raw_id, known_name in entries}
+            for fut in as_completed(futs):
+                raw_id = futs[fut]
+                try:
+                    results_by_raw_id[raw_id] = fut.result()
+                except Exception as e:
+                    results_by_raw_id[raw_id] = {"raw_id": raw_id, "kind": "error", "error": str(e)}
+        ordered_results = [results_by_raw_id[raw_id] for raw_id, _ in entries]
+
+        buf = io.BytesIO()
+        log_lines = []
+        used_names = set()
+
+        def unique_name(base):
+            n = base; i = 2
+            while n in used_names: n = f"{base}_{i}"; i += 1
+            used_names.add(n)
+            return n
+
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            for res in ordered_results:
+                if res["kind"] in ("invalid","error"):
+                    log_lines.append(f"- ID {res['raw_id']}: GAGAL - {res.get('error','?')}")
+                    continue
+                fname, content = res["files"][0]
+                stem, _, extpart = fname.rpartition(".")
+                final = unique_name(f"{stem}_{res['id']}") + "." + extpart
+                zf.writestr(final, content)
+                log_lines.append(f"- {res['name']} (ID {res['id']}): OK -> {final}")
+
+            zf.writestr("README.txt",
+                "PACKED 2D ASSETS DOWNLOAD\n" + "=" * 30 + "\n\n" + "\n".join(log_lines)
+            )
+
+        if not used_names:
+            return jsonify({"error":"Semua item gagal diproses."}),502
+
+        buf.seek(0)
+        fname = f"image2d_packed_{len(used_names)}items.zip"
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+    except Exception as e: return handle_roblox_error(e, "image_batch_download")
+
+@app.get("/api/proxy/avatar-3d")
+def proxy_avatar_3d():
+    """Proxy endpoint - browser call ini, server fetch ke Roblox pakai cookie"""
+    uid = request.args.get("uid","")
+    if not uid: return jsonify({"error":"uid required"}),400
+    try:
+        h = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Referer": "https://www.roblox.com/",
+        }
+        # Jangan kirim cookie ke thumbnail - menyebabkan 401
+        with httpx.Client(timeout=15, follow_redirects=True) as c:
+            r = c.get(f"https://thumbnails.roblox.com/v1/users/avatar-3d?userId={uid}", headers=h)
+            if r.is_success: return jsonify(r.json()), r.status_code
+        # Fallback allorigins
+        proxy = f"https://api.allorigins.win/get?url=https://thumbnails.roblox.com/v1/users/avatar-3d?userId={uid}"
+        with httpx.Client(timeout=15) as c:
+            r = c.get(proxy)
+            import json as _j
+            return jsonify(_j.loads(r.json()["contents"])), 200
+    except Exception as e:
+        return safe_error(e)
+
+@app.get("/api/proxy/fetch")
+def proxy_fetch():
+    """General proxy - browser minta server untuk fetch URL apapun dari Roblox CDN"""
+    url = request.args.get("url","")
+    if not url: return jsonify({"error":"url required"}),400
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return jsonify({"error":"invalid url"}),400
+    if parsed.scheme not in ("http","https"):
+        return jsonify({"error":"invalid url scheme"}),403
+    host = (parsed.hostname or "").lower()
+    is_allowed_host = (
+        host == "roblox.com" or host.endswith(".roblox.com") or
+        host == "rbxcdn.com" or host.endswith(".rbxcdn.com")
+    )
+    if not is_allowed_host:
+        return jsonify({"error":"only roblox domains allowed"}),403
+    try:
+        h = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.roblox.com/",
+        }
+        if COOKIE: h["Cookie"] = f".ROBLOSECURITY={COOKIE}"
+        fmt = request.args.get("fmt","json")
+        with httpx.Client(timeout=20, follow_redirects=True) as c:
+            r = c.get(url, headers=h)
+            if fmt == "bytes":
+                import base64
+                return jsonify({"b64": base64.b64encode(r.content).decode()})
+            return jsonify(r.json())
+    except Exception as e:
+        return safe_error(e)
+
+
+@app.get("/api/audio/info")
+def audio_info():
+    aid = request.args.get("id","")
+    if not aid: return jsonify({"error":"id required"}),400
+    try:
+        d = rget(f"https://economy.roblox.com/v2/assets/{aid}/details")
+        if d.get("AssetTypeId") != 3:
+            return jsonify({"error":"Bukan audio asset"}),400
+        creator = d.get("Creator",{})
+        return jsonify({
+            "assetId": int(aid),
+            "name": d.get("Name",""),
+            "creator": creator.get("Name",""),
+            "creatorId": creator.get("CreatorTargetId"),
+            "creatorType": creator.get("CreatorType",""),
+            "created": d.get("Created",""),
+            "robloxUrl": f"https://www.roblox.com/library/{aid}"
+        })
+    except Exception as e: return safe_error(e)
+
+@app.get("/api/audio/download")
+def audio_download():
+    aid = request.args.get("id","")
+    if not aid: return jsonify({"error":"id required"}),400
+    try:
+        d = rget(f"https://economy.roblox.com/v2/assets/{aid}/details")
+        if d.get("AssetTypeId") != 3:
+            return jsonify({"error":"Bukan audio asset"}),400
+        creator = d.get("Creator",{})
+        name = d.get("Name", str(aid))
+        safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in name).strip()
+
+        # Download audio
+        import gzip
+        s = get_scraper()
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
+        raw = r.content
+        try:
+            raw = gzip.decompress(raw)
+        except: pass
+
+        # Build ZIP
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{safe}.ogg", raw)
+            zf.writestr("INFO.txt",
+                f"Audio: {name}\n"
+                f"Asset ID: {aid}\n"
+                f"Creator: {creator.get('Name','')}\n"
+                f"Creator ID: {creator.get('CreatorTargetId','')}\n"
+                f"Creator Type: {creator.get('CreatorType','')}\n"
+                f"Roblox URL: https://www.roblox.com/library/{aid}\n"
+            )
+            zf.writestr("WARNING.txt",
+                "⚠ COPYRIGHT WARNING\n"
+                "====================\n"
+                "This audio file may be protected by copyright.\n"
+                "Only use audio you own or have permission to use.\n"
+                "Do not redistribute without the creator's permission.\n"
+                "The developer of this tool is not responsible for misuse.\n"
+            )
+        buf.seek(0)
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe}_audio.zip"'})
+    except Exception as e: return handle_roblox_error(e, "audio_download")
+
+# Railway / production WSGI entry point
+application = app
+
+@app.get("/api/audio/test")
+def audio_test():
+    return jsonify({"status":"audio ok"})
+
+# ── Rust-based model parser integration (optional, additive) ───────
+def _extract_asset_id_str(value):
+    """Pull a numeric Roblox asset ID out of whatever string shape a Content/Ref
+    property came through as from the Rust parser (e.g. 'rbxassetid://123',
+    or a Rust Debug-formatted struct string) — same defensive regex approach
+    already used elsewhere in this file for exactly this kind of inconsistency."""
+    if not value: return None
+    m = re.search(r"(\d{4,})", str(value))
+    return m.group(1) if m else None
+
+_PART_TYPE_BY_ENUM = {0: "Ball", 1: "Block", 2: "Cylinder"}  # Enum.PartType
+
+def _parse_model_via_rust_service(raw_bytes):
+    """POST raw .rbxm/.rbxmx bytes to the standalone Rust parser service and
+    return its 'instances' list. Raises if the service isn't configured, is
+    unreachable, or returns an error — callers should catch and fall back to
+    the Python parser below."""
+    if not MODEL_PARSER_URL:
+        raise Exception("ROBLOX_MODEL_PARSER_URL tidak diset")
+    r = requests.post(f"{MODEL_PARSER_URL}/api/parse_model", data=raw_bytes, timeout=25)
+    r.raise_for_status()
+    body = r.json()
+    if "instances" not in body:
+        raise Exception(body.get("error", "Response tidak valid dari parser service"))
+    return body["instances"]
+
+@app.get("/api/debug/model-parser-check")
+def debug_model_parser_check():
+    """TEMPORARY — verify the standalone Rust parser service is actually being
+    reached and working, since model_info() silently falls back to the old Python
+    parser on ANY failure here — meaning a 422 in the app could be coming from
+    either path with no way to tell from the outside. Visit this URL directly in a
+    browser (phone-friendly) with ?id=<assetId>. Remove once confirmed working."""
+    aid = request.args.get("id", "4446576906")  # defaults to the Noob NPC model we've been testing
+    result = {"MODEL_PARSER_URL_configured": bool(MODEL_PARSER_URL), "MODEL_PARSER_URL": MODEL_PARSER_URL or None}
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({**result, "ok": False, "reason": "id harus angka"}), 200
+    try:
+        s = get_scraper()
+        try:
+            raw = fetch_asset_raw_bytes(file_id, s, timeout=25)
+            result["asset_fetch_ok"] = True
+            result["asset_bytes"] = len(raw)
+            # Show exactly what came back — byte counts varying between calls for
+            # the same asset ID suggests this might not be real file content at
+            # all (an error page, a JSON indirection, etc.), so let's actually see it.
+            result["asset_first_16_bytes_hex"] = raw[:16].hex()
+            try:
+                result["asset_preview_as_text"] = raw[:300].decode("utf-8", errors="replace")
+            except Exception:
+                result["asset_preview_as_text"] = None
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "fetch_asset", "reason": str(e)}), 200
+
+        try:
+            rust_url = f"{MODEL_PARSER_URL}/api/parse_model"
+            r = requests.post(rust_url, data=raw, timeout=25)
+            result["rust_http_status"] = r.status_code
+            result["rust_url_tested"] = rust_url
+            try:
+                body = r.json()
+            except Exception:
+                return jsonify({**result, "ok": False, "stage": "rust_response_not_json", "raw_response_preview": r.text[:500]}), 200
+            if "instances" not in body:
+                return jsonify({**result, "ok": False, "stage": "rust_returned_error", "rust_body": body}), 200
+            result["instance_count"] = len(body["instances"])
+            result["sample_instance"] = body["instances"][0] if body["instances"] else None
+            # The actual data we need this time: every Decal/SurfaceAppearance
+            # instance's raw properties, unfiltered — so we can see exactly what
+            # shape the texture reference comes through as, instead of guessing.
+            result["texture_bearing_instances"] = [
+                {"class_name": i["class_name"], "name": i["name"], "referent": i["referent"],
+                 "parent_referent": i["parent_referent"], "properties": i["properties"]}
+                for i in body["instances"] if i["class_name"] in (
+                    "Decal", "SurfaceAppearance", "Texture",
+                    # Classic clothing system — a completely different mechanism
+                    # from Decal/SurfaceAppearance: paints a texture across the
+                    # WHOLE body via a fixed UV template, not per-part at all.
+                    # Wasn't checked before — the Bacon NPC's shirt/pants are the
+                    # actual reason to add this.
+                    "Shirt", "Pants", "ShirtGraphic",
+                )
+            ]
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "rust_service_unreachable", "reason": str(e)}), 200
+
+        try:
+            manifest = _manifest_from_rust_instances(body["instances"], file_id)
+            result["manifest_supported"] = manifest.get("supported")
+            result["manifest_reasons"] = manifest.get("reasons")
+            result["manifest_total_parts"] = manifest.get("totalParts")
+            # Show what textureId (if any) got resolved for every part, so we can
+            # see whether resolution failed entirely vs. failed for a specific part.
+            result["parts_texture_summary"] = [
+                {"name": p.get("name"), "className": p.get("className"),
+                 "textureId": p.get("textureId"), "textureIdType": p.get("textureIdType")}
+                for p in manifest.get("parts", [])
+            ]
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "manifest_conversion", "reason": str(e)}), 200
+
+        return jsonify({**result, "ok": True}), 200
+    except Exception as e:
+        return jsonify({**result, "ok": False, "stage": "unexpected", "reason": str(e)}), 200
+
+_ANIMATION_CLASSES = {"Animation", "AnimationController", "Humanoid", "Motor6D", "Motor", "AnimationTrack"}
+
+def _manifest_from_rust_instances(instances, file_id):
+    """Convert the Rust parser's flat instance list into the SAME manifest shape
+    model_info() has always returned, so the frontend needs zero changes. This is
+    also where the actual SurfaceAppearance fix lives: a MeshPart's texture now
+    prefers its SurfaceAppearance child's ColorMap (the modern PBR material Roblox
+    uses instead of a flat TextureID) when present, falling back to legacy
+    TextureID otherwise — this is exactly the gap that caused the "blocky, no
+    texture" results reported earlier."""
+    by_referent = {inst["referent"]: inst for inst in instances}
+    children_by_parent = {}
+    for inst in instances:
+        children_by_parent.setdefault(inst.get("parent_referent"), []).append(inst)
+
+    def resolve_texture(part_referent):
+        """Texture resolution priority: SurfaceAppearance (modern PBR) > Decal
+        (classic face/logo texturing, e.g. a Noob's face) > caller falls back to
+        legacy TextureID after this. Decal was a real gap — found while checking a
+        real Noob NPC test render that came back correctly textureless-and-blocky
+        for its arm (accurate — Parts have no texture) but was ALSO missing its
+        face, which this fixes."""
+        for child in children_by_parent.get(part_referent, []):
+            if child["class_name"] == "SurfaceAppearance":
+                props = child["properties"]
+                for key in ("ColorMap", "NormalMap", "MetalnessMap", "RoughnessMap"):
+                    aid = _extract_asset_id_str(props.get(key))
+                    if aid: return aid, "SurfaceAppearance." + key
+        for child in children_by_parent.get(part_referent, []):
+            if child["class_name"] == "Decal":
+                aid = _extract_asset_id_str(child["properties"].get("Texture"))
+                if aid: return aid, "Decal.Texture"
+        return None, None
+
+    def special_mesh(part_referent):
+        for child in children_by_parent.get(part_referent, []):
+            if child["class_name"] in ("SpecialMesh", "FileMesh"):
+                props = child["properties"]
+                mesh_type_num = props.get("MeshType")
+                mesh_type_names = {0:"Head",1:"Torso",2:"Wedge",3:"Prism",4:"Parallelogram",5:"FileMesh",6:"Brick",7:"Sphere",8:"Cylinder"}
+                result = {
+                    "meshId": _extract_asset_id_str(props.get("MeshId")),
+                    "textureId": _extract_asset_id_str(props.get("TextureId")),
+                }
+                if isinstance(mesh_type_num, int) and mesh_type_num in mesh_type_names:
+                    result["meshType"] = mesh_type_names[mesh_type_num]
+                scale = props.get("Scale")
+                if isinstance(scale, list) and len(scale) == 3:
+                    result["scale"] = scale
+                return result
+        return None
+
+    # Classic Shirt/Pants clothing system — confirmed via a real Bacon NPC test:
+    # these are NOT attached to any specific body part at all, they sit as direct
+    # children of the Model root and paint a texture across the WHOLE body using
+    # a fixed UV template Roblox's client understands internally. We don't have
+    # that template-remapping logic, so this is a pragmatic approximation (same
+    # spirit as the Decal-on-a-box compromise): apply the Shirt texture to
+    # torso/arm parts and the Pants texture to leg parts, name-based, without
+    # trying to replicate the exact per-region template UV mapping. Imperfect,
+    # but far better than the alternative of no texture at all.
+    shirt_texture_id = pants_texture_id = None
+    for inst in instances:
+        if inst["class_name"] == "Shirt":
+            shirt_texture_id = _extract_asset_id_str(inst["properties"].get("ShirtTemplate"))
+        elif inst["class_name"] == "Pants":
+            pants_texture_id = _extract_asset_id_str(inst["properties"].get("PantsTemplate"))
+
+    # Exact R15 + R6 body part names only — NOT substring matching. Confirmed bug:
+    # "Handle" (a tool/prop, not a body part at all) contains the substring "hand",
+    # so a loose `"hand" in name_lower` check wrongly painted a bacon prop with the
+    # shirt texture. Explicit names avoid this whole class of false-positive.
+    _PANTS_PART_NAMES = {"leftupperleg","leftlowerleg","leftfoot","rightupperleg","rightlowerleg","rightfoot","leftleg","rightleg"}
+    _SHIRT_PART_NAMES = {"uppertorso","lowertorso","torso","leftupperarm","leftlowerarm","lefthand","rightupperarm","rightlowerarm","righthand","leftarm","rightarm"}
+
+    def clothing_texture_for(part_name):
+        name_lower = (part_name or "").lower().replace(" ", "")
+        if pants_texture_id and name_lower in _PANTS_PART_NAMES:
+            return pants_texture_id, "Pants.PantsTemplate"
+        if shirt_texture_id and name_lower in _SHIRT_PART_NAMES:
+            return shirt_texture_id, "Shirt.ShirtTemplate"
+        return None, None
+
+    animation_classes_found = sorted({
+        inst["class_name"] for inst in instances if inst["class_name"] in _ANIMATION_CLASSES
+    })
+
+    parts = []
+    meshpart_count = part_count = union_count = 0
+    for inst in instances:
+        cn = inst["class_name"]
+        props = inst["properties"]
+        if cn not in ("MeshPart", "Part", "UnionOperation"):
+            continue
+
+        size = props.get("Size") or [1.0, 1.0, 1.0]
+        cframe = props.get("CFrame")
+        if isinstance(cframe, dict) and "position" in cframe:
+            position = cframe["position"]
+            orientation = cframe.get("orientation") or [[1,0,0],[0,1,0],[0,0,1]]
+            rot_flat = [v for row in orientation for v in row]
+            rotation = {"status": "decoded", "value": rot_flat, "rawRotationId": None}
+        else:
+            position = [0.0, 0.0, 0.0]
+            rotation = {"status": "identity-fallback", "value": [1,0,0,0,1,0,0,0,1], "rawRotationId": None}
+
+        color = props.get("Color3uint8") or props.get("Color3") or [163, 162, 165]
+        if all(isinstance(c, float) and c <= 1.0 for c in color):
+            color = [round(c * 255) for c in color]  # Color3 (0-1 float) -> 0-255
+
+        # Never read before — every Part-class instance rendered as a solid opaque
+        # box on the frontend regardless of this, including things like
+        # HumanoidRootPart, which Roblox always sets to 1 (fully invisible) and
+        # is never meant to be visible at all.
+        transparency = props.get("Transparency")
+        transparency = float(transparency) if isinstance(transparency, (int, float)) else 0.0
+
+        part_dict = {
+            "name": inst.get("name") or cn,
+            "className": cn,
+            "position": {"status": "decoded", "value": [round(float(v), 4) for v in position]},
+            "size": {"status": "decoded", "value": [round(float(v), 4) for v in size]},
+            "rotation": rotation,
+            "color": {"status": "best-effort", "value": list(color)},
+            "transparency": transparency,
+        }
+
+        if cn == "MeshPart":
+            meshpart_count += 1
+            mesh_id = _extract_asset_id_str(props.get("MeshId"))
+            tex_id, tex_source = resolve_texture(inst["referent"])
+            if not tex_id:
+                tex_id = _extract_asset_id_str(props.get("TextureID"))
+                tex_source = "TextureID" if tex_id else None
+            if not tex_id:
+                tex_id, tex_source = clothing_texture_for(inst.get("name"))
+            part_dict["meshId"] = mesh_id
+            part_dict["textureId"] = tex_id
+            part_dict["textureIdType"] = tex_source
+        elif cn == "Part":
+            part_count += 1
+            shape_enum = props.get("Shape")
+            part_dict["shape"] = _PART_TYPE_BY_ENUM.get(shape_enum, "Block") if isinstance(shape_enum, int) else "Block"
+            part_dict["meshId"] = None
+            tex_id, tex_source = resolve_texture(inst["referent"])
+            if not tex_id:
+                tex_id = _extract_asset_id_str(props.get("TextureID"))
+                tex_source = "TextureID" if tex_id else None
+            if not tex_id:
+                tex_id, tex_source = clothing_texture_for(inst.get("name"))
+            part_dict["textureId"] = tex_id
+            part_dict["textureIdType"] = tex_source
+            part_dict["specialMesh"] = special_mesh(inst["referent"])
+        elif cn == "UnionOperation":
+            union_count += 1
+            part_dict["meshId"] = None
+            part_dict["textureId"] = None
+            part_dict["unionAssetId"] = _extract_asset_id_str(props.get("AssetId"))
+
+        parts.append(part_dict)
+
+    total_parts_all = meshpart_count + part_count + union_count
+    reasons = []
+    if animation_classes_found:
+        # Informational only, not a blocker — the Rust parser decodes real CFrame
+        # rotation (unlike the old Python parser's identity-fallback), so a rigged
+        # character now renders correctly in its default rest/T-pose instead of a
+        # scattered pile of misplaced boxes. Surfaced to the frontend so it can
+        # show a heads-up rather than pretending this is a fully-animated export.
+        reasons.append(
+            f"Asset ini berisi rig ({', '.join(animation_classes_found)}) — akan dirender dalam rest/T-pose "
+            "default, bukan animasi aktif. Untuk avatar yang sedang dipakai user, coba fitur Avatar."
+        )
+    if total_parts_all > 500:
+        reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 500)")
+    if total_parts_all == 0:
+        reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
+    supported = 0 < total_parts_all <= 500
+
+    return {
+        "assetId": file_id,
+        "supported": supported,
+        "reasons": reasons,
+        "meshPartCount": meshpart_count,
+        "partCount": part_count,
+        "unionCount": union_count,
+        "totalParts": total_parts_all,
+        "parts": parts,
+        "isAnimationAsset": bool(animation_classes_found),
+        "animationClassesFound": animation_classes_found,
+        "parserUsed": "rust-rbx-dom",
+    }
+
+@app.get("/api/v2/model/info")
+def model_info():
+    """Parse RBXM (Model assets from create.roblox.com), return manifest.
+    Tries the standalone Rust/rbx-dom parser service first (proper SurfaceAppearance/
+    PBR support — see /rust-model-parser) if ROBLOX_MODEL_PARSER_URL is configured;
+    falls back to the Python parser below (which doesn't understand SurfaceAppearance)
+    if that's not set up or fails for any reason. Either way the response shape is
+    identical, so the frontend doesn't need to know which one ran."""
+    aid = request.args.get("id", "")
+    if not aid: return jsonify({"error": "id required"}), 400
+
+    try:
+        file_id = int(aid)
+        s = get_scraper()
+        try:
+            data = fetch_asset_raw_bytes(file_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download asset ({e})", "supported": False}), 502
+
+        if MODEL_PARSER_URL:
+            try:
+                rust_instances = _parse_model_via_rust_service(data)
+                return jsonify(_manifest_from_rust_instances(rust_instances, file_id))
+            except Exception:
+                pass  # fall through to the Python parser below
+
+        # Detect format: XML (rbxmx) vs Binary (rbxm)
+        is_xml = data[:20].lstrip().startswith(b'<roblox') and not data[:8] == b'<roblox!'
+
+        if is_xml:
+            try:
+                parsed = parse_rbxmx(data)
+            except Exception as e:
+                return jsonify({"error": f"Gagal parse XML: {str(e)}", "supported": False}), 422
+            meshpart_count = parsed["meshPartCount"]
+            part_count = parsed["partCount"]
+            union_count = parsed["unionCount"]
+            total_parts = meshpart_count + part_count
+            pre_parts = parsed["parts"]
+            animation_classes_found = parsed.get("animationClassesFound", [])
+        else:
+            try:
+                chunks, num_types, num_instances = parse_chunks(data)
+            except RBXMParseError as e:
+                return jsonify({"error": str(e), "supported": False}), 422
+
+            type_map = parse_inst_chunks(chunks)
+
+            meshpart_tid = part_tid = union_tid = None
+            for tid, info in type_map.items():
+                cn = info["class_name"]
+                if cn == "MeshPart": meshpart_tid = tid
+                elif cn == "Part": part_tid = tid
+                elif cn == "UnionOperation": union_tid = tid
+
+            meshpart_count = type_map.get(meshpart_tid, {}).get("count", 0) if meshpart_tid is not None else 0
+            part_count = type_map.get(part_tid, {}).get("count", 0) if part_tid is not None else 0
+            union_count = type_map.get(union_tid, {}).get("count", 0) if union_tid is not None else 0
+            total_parts = meshpart_count + part_count
+            pre_parts = None
+            shape_by_referent, specialmesh_by_part = decode_part_shapes_and_meshes(chunks, type_map)
+            animation_classes_found = detect_animation_classes(type_map)
+
+        total_parts_all = meshpart_count + part_count + union_count
+        reasons = []
+        if animation_classes_found:
+            reasons.append(
+                f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+                "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+                "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+                "If this is a character, try the Avatar feature instead."
+            )
+        if total_parts_all > 100:
+            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
+        if total_parts_all == 0 and not animation_classes_found:
+            reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
+
+        supported = (0 < total_parts_all <= 500) and not animation_classes_found
+
+        sstrings = parse_shared_strings(chunks)
+        parts = []
+
+        def decode_class(type_id, count, class_name):
+            if type_id is None or count == 0:
+                return
+            referents = type_map[type_id]["referents"]
+            _, size_raw = find_prop_chunk(chunks, type_id, "size")
+            sizes = decode_vector3_array(size_raw, count) if size_raw else [(1.0,1.0,1.0)]*count
+
+            _, cf_raw = find_prop_chunk(chunks, type_id, "CFrame")
+            if cf_raw:
+                positions, rotations = decode_cframe_full(cf_raw, count)
+            else:
+                positions, rotations = [(0.0,0.0,0.0)]*count, [{"status":"identity-fallback","value":[1,0,0,0,1,0,0,0,1],"rawRotationId":None}]*count
+
+            _, name_raw = find_prop_chunk(chunks, type_id, "Name")
+            names = decode_string_array(name_raw, count) if name_raw else [f"{class_name}{i}" for i in range(count)]
+
+            _, color_raw = find_prop_chunk(chunks, type_id, "Color3uint8")
+            colors = decode_color3uint8_array(color_raw, count) if color_raw else [(163,162,165)]*count
+
+            mesh_ids = [None]*count
+            texture_ids = [None]*count
+            tex_dtype = None
+            if class_name == "MeshPart":
+                mesh_ids, _mesh_dtype = decode_string_like_prop(chunks, type_id, "MeshId", count, sstrings)
+                texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
+
+            for i in range(count):
+                part_dict = {
+                    "name": names[i],
+                    "className": class_name,
+                    "meshId": mesh_ids[i],
+                    "position": {"status": "decoded", "value": [round(v,4) for v in positions[i]]},
+                    "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
+                    "rotation": rotations[i],
+                    "color": {"status": "best-effort", "value": list(colors[i])},
+                    "textureId": texture_ids[i],
+                    "textureIdType": tex_dtype
+                }
+                if class_name == "Part":
+                    ref = referents[i]
+                    part_dict["shape"] = shape_by_referent.get(ref, "Block")
+                    part_dict["specialMesh"] = specialmesh_by_part.get(ref)
+                parts.append(part_dict)
+
+        decode_class(meshpart_tid, meshpart_count, "MeshPart")
+        decode_class(part_tid, part_count, "Part")
+
+        # Decode UnionOperation - ambil AssetId dan size/CFrame/color/name
+        if union_tid is not None and union_count > 0:
+            _, size_raw = find_prop_chunk(chunks, union_tid, "size")
+            sizes = decode_vector3_array(size_raw, union_count) if size_raw else [(1.0,1.0,1.0)]*union_count
+
+            _, cf_raw = find_prop_chunk(chunks, union_tid, "CFrame")
+            if cf_raw:
+                u_positions, u_rotations = decode_cframe_full(cf_raw, union_count)
+            else:
+                u_positions = [(0.0,0.0,0.0)]*union_count
+                u_rotations = [{"status":"identity-fallback","value":[1,0,0,0,1,0,0,0,1],"rawRotationId":None}]*union_count
+
+            _, name_raw = find_prop_chunk(chunks, union_tid, "Name")
+            u_names = decode_string_array(name_raw, union_count) if name_raw else [f"Union{i}" for i in range(union_count)]
+
+            _, color_raw = find_prop_chunk(chunks, union_tid, "Color3uint8")
+            u_colors = decode_color3uint8_array(color_raw, union_count) if color_raw else [(163,162,165)]*union_count
+
+            _, assetid_raw = find_prop_chunk(chunks, union_tid, "AssetId")
+            if assetid_raw:
+                u_asset_ids = decode_string_array(assetid_raw, union_count)
+            else:
+                u_asset_ids = [None]*union_count
+
+            for i in range(union_count):
+                # Extract numeric ID from URL like "https://www.roblox.com//asset/?id=123456"
+                aid_raw = u_asset_ids[i] if u_asset_ids[i] else ""
+                aid_match = re.search(r"(\d{4,})", aid_raw)
+                asset_id_num = aid_match.group(1) if aid_match else None
+
+                parts.append({
+                    "name": u_names[i],
+                    "className": "UnionOperation",
+                    "meshId": None,
+                    "textureId": None,
+                    "unionAssetId": asset_id_num,
+                    "position": {"status": "decoded", "value": [round(v,4) for v in u_positions[i]]},
+                    "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
+                    "rotation": u_rotations[i],
+                    "color": {"status": "best-effort", "value": list(u_colors[i])}
+                })
+
+        return jsonify({
+            "assetId": file_id,
+            "supported": supported,
+            "reasons": reasons,
+            "meshPartCount": meshpart_count,
+            "partCount": part_count,
+            "unionCount": union_count,
+            "totalParts": total_parts_all,
+            "parts": parts,
+            "isAnimationAsset": bool(animation_classes_found),
+            "animationClassesFound": animation_classes_found
+        })
+
+    except ValueError:
+        return jsonify({"error": "id harus berupa angka"}), 400
+    except Exception as e:
+        return handle_roblox_error(e, "model_info")
+
+
+@app.get("/api/v2/model/mesh")
+def model_mesh():
+    """Fetch raw .mesh by ID (dari MeshId di manifest model/info), convert ke OBJ.
+    Dipanggil per-part dari browser saat assembly GLB untuk Model 3D create.roblox.com."""
+    raw_id = request.args.get("meshId", "")
+    if not raw_id:
+        return jsonify({"error": "meshId required"}), 400
+
+    # meshId bisa berupa "rbxassetid://123456" atau angka polos
+    try:
+        clean_id = raw_id.replace("rbxassetid://", "").strip()
+        mesh_asset_id = int(clean_id)
+    except ValueError:
+        return jsonify({"error": "meshId tidak valid"}), 400
+
+    try:
+        s = get_scraper()
+        try:
+            raw = fetch_asset_raw_bytes(mesh_asset_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download mesh ({e})"}), 502
+
+        if not raw.startswith(b"version"):
+            return jsonify({"error": "Bukan format .mesh yang dikenali"}), 422
+
+        mesh = parse_mesh(raw, name=f"mesh_{mesh_asset_id}")
+        obj_text = mesh_to_obj(mesh, mtl_name=f"mesh_{mesh_asset_id}")
+
+        return jsonify({
+            "meshAssetId": mesh_asset_id,
+            "vertexCount": len(mesh.vertices),
+            "faceCount": len(mesh.faces),
+            "meshVersion": mesh.version,
+            "obj": obj_text
+        })
+    except Exception as e:
+        return handle_roblox_error(e, "model_mesh")
+
+
+@app.get("/api/v2/model/texture")
+def model_texture():
+    """Fetch texture image untuk MeshPart (dari TextureID di manifest). Proxy langsung sebagai binary image."""
+    raw_id = request.args.get("textureId", "")
+    if not raw_id:
+        return jsonify({"error": "textureId required"}), 400
+    m = re.search(r"(\d{4,})", raw_id)
+    if not m:
+        return jsonify({"error": "textureId tidak valid - tidak ada angka ID ditemukan"}), 400
+    tex_asset_id = int(m.group(1))
+
+    try:
+        s = get_scraper()
+        try:
+            content = fetch_asset_raw_bytes(tex_asset_id, s, timeout=20)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download texture ({e})"}), 502
+
+        ctype = "image/png"
+        if content[:2] == b"\xff\xd8":
+            ctype = "image/jpeg"
+        elif content[:8] == b"\x89PNG\r\n\x1a\n":
+            ctype = "image/png"
+
+        return Response(content, mimetype=ctype)
+    except Exception as e:
+        return handle_roblox_error(e, "model_texture")
+
+
+@app.get("/api/v2/model/download")
+def model_download():
+    """Download raw .rbxm file langsung dari Roblox - no limit, no conversion."""
+    aid = request.args.get("id", "")
+    if not aid:
+        return jsonify({"error": "id required"}), 400
+
+    m = re.search(r"(\d{5,})", aid)
+    if not m:
+        return jsonify({"error": "id tidak valid"}), 400
+    asset_id = int(m.group(1))
+
+    try:
+        s = get_scraper()
+        try:
+            content = fetch_asset_raw_bytes(asset_id, s, timeout=30)
+        except Exception as e:
+            return jsonify({"error": f"Gagal download asset ({e})"}), 502
+
+        if not content:
+            return jsonify({"error": "File kosong"}), 502
+
+        return Response(
+            content,
+            mimetype="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{asset_id}.rbxm"',
+                "Content-Length": str(len(content))
+            }
+        )
+    except Exception as e:
+        return handle_roblox_error(e, "model_download")
+
+
+@app.post("/api/v2/model/convert")
+def model_convert():
+    """Parse uploaded .rbxm file dan return manifest (sama seperti model/info tapi dari upload, bukan fetch Roblox).
+    Tidak butuh cookie/scraper - file di-upload langsung oleh user."""
+    if 'file' not in request.files:
+        return jsonify({"error": "Tidak ada file yang di-upload"}), 400
+
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({"error": "Nama file kosong"}), 400
+    if not f.filename.lower().endswith(('.rbxm', '.rbxmx')):
+        return jsonify({"error": "Hanya file .rbxm yang didukung"}), 400
+
+    try:
+        data = f.read()
+        if len(data) == 0:
+            return jsonify({"error": "File kosong"}), 400
+        if len(data) > 50 * 1024 * 1024:  # 50MB max
+            return jsonify({"error": "File terlalu besar (maks 50MB)"}), 400
+
+        # Auto-detect format: XML (.rbxmx) vs Binary (.rbxm)
+        is_xml = data[:20].lstrip().startswith(b'<roblox') and data[:8] != b'<roblox!'
+
+        pre_parts = None
+        if is_xml:
+            try:
+                parsed = parse_rbxmx(data)
+                meshpart_count = parsed["meshPartCount"]
+                part_count = parsed["partCount"]
+                union_count = parsed["unionCount"]
+                total_parts = meshpart_count + part_count
+                pre_parts = parsed["parts"]
+                animation_classes_found = parsed.get("animationClassesFound", [])
+            except Exception as e:
+                return jsonify({"error": f"Gagal parse XML: {str(e)}", "supported": False}), 422
+        else:
+            try:
+                chunks, num_types, num_instances = parse_chunks(data)
+            except RBXMParseError as e:
+                return jsonify({"error": str(e), "supported": False}), 422
+
+            type_map = parse_inst_chunks(chunks)
+
+            meshpart_tid = part_tid = union_tid = None
+            for tid, info in type_map.items():
+                cn = info["class_name"]
+                if cn == "MeshPart": meshpart_tid = tid
+                elif cn == "Part": part_tid = tid
+                elif cn == "UnionOperation": union_tid = tid
+
+            meshpart_count = type_map.get(meshpart_tid, {}).get("count", 0) if meshpart_tid is not None else 0
+            part_count = type_map.get(part_tid, {}).get("count", 0) if part_tid is not None else 0
+            union_count = type_map.get(union_tid, {}).get("count", 0) if union_tid is not None else 0
+            total_parts = meshpart_count + part_count
+            animation_classes_found = detect_animation_classes(type_map)
+
+        total_parts_all = meshpart_count + part_count + union_count
+        reasons = []
+        if animation_classes_found:
+            reasons.append(
+                f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+                "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+                "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+                "If this is a character, try the Avatar feature instead."
+            )
+        if total_parts_all > 100:
+            reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
+        if total_parts_all == 0 and not animation_classes_found:
+            reasons.append("Tidak ada MeshPart/Part/Union ditemukan")
+
+        supported = (0 < total_parts_all <= 500) and not animation_classes_found
+
+        sstrings = parse_shared_strings(chunks) if pre_parts is None else []
+        if pre_parts is None:
+            shape_by_referent, specialmesh_by_part = decode_part_shapes_and_meshes(chunks, type_map)
+        else:
+            shape_by_referent, specialmesh_by_part = {}, {}
+        parts = []
+
+        def decode_class(type_id, count, class_name):
+            if type_id is None or count == 0:
+                return
+            referents = type_map[type_id]["referents"]
+            _, size_raw = find_prop_chunk(chunks, type_id, "size")
+            sizes = decode_vector3_array(size_raw, count) if size_raw else [(1.0,1.0,1.0)]*count
+
+            _, cf_raw = find_prop_chunk(chunks, type_id, "CFrame")
+            if cf_raw:
+                positions, rotations = decode_cframe_full(cf_raw, count)
+            else:
+                positions = [(0.0,0.0,0.0)]*count
+                rotations = [{"status":"identity-fallback","value":[1,0,0,0,1,0,0,0,1],"rawRotationId":None}]*count
+
+            _, name_raw = find_prop_chunk(chunks, type_id, "Name")
+            names = decode_string_array(name_raw, count) if name_raw else [f"{class_name}{i}" for i in range(count)]
+
+            _, color_raw = find_prop_chunk(chunks, type_id, "Color3uint8")
+            colors = decode_color3uint8_array(color_raw, count) if color_raw else [(163,162,165)]*count
+
+            mesh_ids = [None]*count
+            texture_ids = [None]*count
+            tex_dtype = None
+            if class_name == "MeshPart":
+                mesh_ids, _mesh_dtype = decode_string_like_prop(chunks, type_id, "MeshId", count, sstrings)
+                texture_ids, tex_dtype = decode_string_like_prop(chunks, type_id, "TextureID", count, sstrings)
+
+            for i in range(count):
+                part_dict = {
+                    "name": names[i],
+                    "className": class_name,
+                    "meshId": mesh_ids[i],
+                    "textureId": texture_ids[i],
+                    "textureIdType": tex_dtype,
+                    "position": {"status": "decoded", "value": [round(v,4) for v in positions[i]]},
+                    "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
+                    "rotation": rotations[i],
+                    "color": {"status": "best-effort", "value": list(colors[i])}
+                }
+                if class_name == "Part":
+                    ref = referents[i]
+                    part_dict["shape"] = shape_by_referent.get(ref, "Block")
+                    part_dict["specialMesh"] = specialmesh_by_part.get(ref)
+                parts.append(part_dict)
+
+        if pre_parts is not None:
+            parts = pre_parts
+        else:
+            decode_class(meshpart_tid, meshpart_count, "MeshPart")
+            decode_class(part_tid, part_count, "Part")
+
+            if union_tid is not None and union_count > 0:
+                _, size_raw = find_prop_chunk(chunks, union_tid, "size")
+                sizes = decode_vector3_array(size_raw, union_count) if size_raw else [(1.0,1.0,1.0)]*union_count
+
+                _, cf_raw = find_prop_chunk(chunks, union_tid, "CFrame")
+                if cf_raw:
+                    u_positions, u_rotations = decode_cframe_full(cf_raw, union_count)
+                else:
+                    u_positions = [(0.0,0.0,0.0)]*union_count
+                    u_rotations = [{"status":"identity-fallback","value":[1,0,0,0,1,0,0,0,1],"rawRotationId":None}]*union_count
+
+                _, name_raw = find_prop_chunk(chunks, union_tid, "Name")
+                u_names = decode_string_array(name_raw, union_count) if name_raw else [f"Union{i}" for i in range(union_count)]
+
+                _, color_raw = find_prop_chunk(chunks, union_tid, "Color3uint8")
+                u_colors = decode_color3uint8_array(color_raw, union_count) if color_raw else [(163,162,165)]*union_count
+
+                _, assetid_raw = find_prop_chunk(chunks, union_tid, "AssetId")
+                if assetid_raw:
+                    u_asset_ids = decode_string_array(assetid_raw, union_count)
+                else:
+                    u_asset_ids = [None]*union_count
+
+                for i in range(union_count):
+                    aid_raw = u_asset_ids[i] if u_asset_ids[i] else ""
+                    aid_match = re.search(r"(\d{4,})", aid_raw)
+                    asset_id_num = aid_match.group(1) if aid_match else None
+                    parts.append({
+                        "name": u_names[i],
+                        "className": "UnionOperation",
+                        "meshId": None,
+                        "textureId": None,
+                        "unionAssetId": asset_id_num,
+                        "position": {"status": "decoded", "value": [round(v,4) for v in u_positions[i]]},
+                        "size": {"status": "decoded", "value": [round(v,4) for v in sizes[i]]},
+                        "rotation": u_rotations[i],
+                        "color": {"status": "best-effort", "value": list(u_colors[i])}
+                    })
+
+        return jsonify({
+            "assetId": f.filename.replace('.rbxm','').replace('.rbxmx',''),
+            "filename": f.filename,
+            "fileSize": len(data),
+            "supported": supported,
+            "reasons": reasons,
+            "meshPartCount": meshpart_count,
+            "partCount": part_count,
+            "unionCount": union_count,
+            "totalParts": total_parts_all,
+            "parts": parts,
+            "isAnimationAsset": bool(animation_classes_found),
+            "animationClassesFound": animation_classes_found
+        })
+
+    except Exception as e:
+        return safe_error(e)
+
+
+@app.get("/api/v2/model/mesh-union")
+def model_mesh_union():
+    """Fetch dan decode geometry Union/CSG dari AssetId (nested RBXM + CSGMDL).
+    Dipanggil per-UnionOperation dari browser saat assembly GLB."""
+    raw_id = request.args.get("assetId", "")
+    if not raw_id:
+        return jsonify({"error": "assetId required"}), 400
+
+    m = re.search(r"(\d{4,})", raw_id)
+    if not m:
+        return jsonify({"error": "assetId tidak valid"}), 400
+    asset_id = int(m.group(1))
+
+    try:
+        s = get_scraper()
+        # Fetch nested RBXM (PartOperationAsset)
+        try:
+            rbxm_data = fetch_asset_raw_bytes(asset_id, s, timeout=25)
+        except Exception as e:
+            return jsonify({"error": f"Gagal fetch Union asset ({e})"}), 502
+
+        # Parse nested RBXM
+        try:
+            nested_chunks, _, _ = parse_chunks(rbxm_data)
+        except RBXMParseError as e:
+            return jsonify({"error": f"Gagal parse nested RBXM: {str(e)}"}), 422
+
+        # Cari PartOperationAsset INST
+        nested_type_map = parse_inst_chunks(nested_chunks)
+        poa_tid = next((tid for tid, info in nested_type_map.items()
+                       if info["class_name"] == "PartOperationAsset"), None)
+        if poa_tid is None:
+            return jsonify({"error": "PartOperationAsset tidak ditemukan di nested RBXM"}), 422
+
+        # Ambil MeshData property
+        _, meshdata_raw = find_prop_chunk(nested_chunks, poa_tid, "MeshData")
+        if meshdata_raw is None:
+            return jsonify({"error": "MeshData property tidak ditemukan"}), 422
+
+        # Baca raw bytes langsung (MeshData adalah binary, bukan UTF-8 string)
+        pos = 0
+        sl = struct.unpack("<I", meshdata_raw[pos:pos+4])[0]; pos += 4
+        mesh_bytes = meshdata_raw[pos:pos+sl]
+
+        if not mesh_bytes:
+            return jsonify({"error": "MeshData kosong"}), 422
+
+        # Parse CSGMDL
+        try:
+            mesh_data = parse_csgmdl(mesh_bytes)
+        except ValueError as e:
+            return jsonify({"error": f"Gagal parse CSGMDL: {str(e)}"}), 422
+
+        obj_text = csgmdl_to_obj(mesh_data, name=f"union_{asset_id}")
+
+        return jsonify({
+            "assetId": asset_id,
+            "csgmdlVersion": mesh_data["version"],
+            "vertexCount": mesh_data["vertex_count"],
+            "faceCount": mesh_data["face_count"],
+            "obj": obj_text
+        })
+
+    except Exception as e:
+        return handle_roblox_error(e, "model_mesh_union")
+
+
+@app.get("/privacy")
+def privacy_page():
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "privacy.html")
+
+@app.get("/terms")
+def terms_page():
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "terms.html")
+
+
+# ── ROBLOX OAUTH 2.0 ENDPOINTS ───────────────────────────────────
+
+@app.get("/auth/login")
+def auth_login():
+    """Step 1: Redirect user ke Roblox OAuth page."""
+    import secrets, urllib.parse
+    if not OAUTH_CLIENT_ID:
+        return jsonify({"error": "OAuth not configured yet - waiting for Roblox app approval"}), 503
+
+    state = secrets.token_urlsafe(16)
+    params = {
+        "client_id": OAUTH_CLIENT_ID,
+        "redirect_uri": OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": OAUTH_SCOPES,
+        "state": state
+    }
+    auth_url = OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params)
+
+    resp = redirect(auth_url)
+    resp.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="Lax", secure=True)
+    return resp
+
+@app.get("/auth/callback")
+def auth_callback():
+    """Step 2: Roblox redirect ke sini dengan authorization code."""
+    import base64, urllib.parse
+    if not OAUTH_CLIENT_ID:
+        return jsonify({"error": "OAuth not configured yet"}), 503
+
+    code_param = request.args.get("code", "")
+    state = request.args.get("state", "")
+    error = request.args.get("error", "")
+
+    if error:
+        return redirect(f"/?oauth_error={urllib.parse.quote(error)}")
+
+    # Verify state
+    saved_state = request.cookies.get("oauth_state", "")
+    if not saved_state or saved_state != state:
+        return redirect("/?oauth_error=invalid_state")
+
+    # Exchange code for token
+    try:
+        credentials = base64.b64encode(f"{OAUTH_CLIENT_ID}:{OAUTH_CLIENT_SECRET}".encode()).decode()
+        token_resp = requests.post(OAUTH_TOKEN_URL, headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }, data={
+            "grant_type": "authorization_code",
+            "code": code_param,
+            "redirect_uri": OAUTH_REDIRECT_URI
+        }, timeout=15)
+
+        if token_resp.status_code != 200:
+            return redirect(f"/?oauth_error=token_exchange_failed")
+
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token", "")
+
+        # Get user info
+        userinfo_resp = requests.get(OAUTH_USERINFO_URL, headers={
+            "Authorization": f"Bearer {access_token}"
+        }, timeout=10)
+        userinfo = userinfo_resp.json() if userinfo_resp.status_code == 200 else {}
+
+        # Redirect ke frontend dengan token (stored di client-side)
+        import urllib.parse
+        params = urllib.parse.urlencode({
+            "oauth_success": "1",
+            "access_token": access_token,
+            "username": userinfo.get("name", ""),
+            "user_id": userinfo.get("sub", ""),
+            "expires_in": token_data.get("expires_in", 3600)
+        })
+        resp = redirect(f"/?{params}")
+        resp.delete_cookie("oauth_state")
+        return resp
+
+    except Exception as e:
+        return redirect(f"/?oauth_error={urllib.parse.quote(str(e))}")
+
+@app.get("/auth/me")
+def auth_me():
+    """Validate OAuth token dan return user info."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"authenticated": False}), 401
+
+    token = auth_header[7:]
+    try:
+        resp = requests.get(OAUTH_USERINFO_URL, headers={
+            "Authorization": f"Bearer {token}"
+        }, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return jsonify({
+                "authenticated": True,
+                "username": data.get("name", ""),
+                "userId": data.get("sub", ""),
+                "displayName": data.get("preferred_username", data.get("name", ""))
+            })
+        return jsonify({"authenticated": False}), 401
+    except Exception as e:
+        return jsonify({"authenticated": False, "error": str(e)}), 500
+
+@app.get("/auth/logout")
+def auth_logout():
+    """Clear session - token di-clear di sisi client."""
+    return jsonify({"success": True, "message": "Token cleared client-side"})
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+def get_maintenance_state():
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/app_state",
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            },
+            params={"key": "eq.maintenance_mode", "select": "value"},
+            timeout=5
+        )
+        data = r.json()
+        if data and len(data) > 0:
+            return data[0].get("value", False)
+        return False
+    except Exception as e:
+        print(f"Error getting maintenance state: {e}")
+        return False
+
+def set_maintenance_state(active):
+    try:
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/app_state",
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json"
+            },
+            params={"key": "eq.maintenance_mode"},
+            json={"value": active},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Error setting maintenance state: {e}")
+
+@app.get("/api/maintenance/status")
+def maintenance_status():
+    return jsonify({"active": get_maintenance_state()})
+
+@app.post("/api/maintenance/toggle")
+def maintenance_toggle():
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get("password", "")
+    admin_password = os.environ.get("MAINTENANCE_ADMIN_PASSWORD", "")
+    if not admin_password or not secrets.compare_digest(password, admin_password):
+        return jsonify({"error": "Invalid password"}), 403
+    new_state = not get_maintenance_state()
+    set_maintenance_state(new_state)
+    return jsonify({"active": new_state})
+
+def _repair_zip_signature(data: bytes) -> bytes:
+    """
+    Some upload/transfer paths (chat apps, some AV scanners, flaky device->PC
+    transfers) have been observed to corrupt only the FIRST byte of an
+    otherwise-intact ZIP file, turning the signature 50 4B 03 04 ("PK\\x03\\x04")
+    into something like 60 4B 03 04. File size and every other byte stay
+    correct in that case. If we see that exact pattern, patch byte 0 back to
+    0x50 before handing the bytes to zipfile so users don't have to manually
+    hex-edit their .prisma files.
+    """
+    if len(data) >= 4 and data[1:4] == b'\x4b\x03\x04' and data[0] != 0x50:
+        return b'\x50' + data[1:]
+    return data
+
+
+@app.post("/api/prisma/parse")
+def prisma_parse():
+    import msgpack, zipfile as zf_module, io, base64
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    upload = request.files['file']
+    if not upload.filename.endswith('.prisma'):
+        return jsonify({"error": "File must have .prisma extension"}), 400
+
+    try:
+        prisma_bytes = _repair_zip_signature(upload.read())
+        prisma_buffer = io.BytesIO(prisma_bytes)
+
+        meshes = []
+        textures = {}
+
+        with zf_module.ZipFile(prisma_buffer, 'r') as z:
+            pobject_files = [n for n in z.namelist() if n.endswith('.pobject')]
+            png_files = [n for n in z.namelist() if n.endswith('.png')]
+
+            if not pobject_files:
+                return jsonify({"error": "No mesh data (.pobject) found in .prisma file"}), 400
+
+            for png_name in png_files:
+                fname = os.path.basename(png_name)
+                png_bytes = z.read(png_name)
+                textures[fname] = base64.b64encode(png_bytes).decode('utf-8')
+
+            for pobj_name in pobject_files:
+                data = z.read(pobj_name)
+                unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+                unpacker.feed(data)
+                objs = []
+                try:
+                    while True:
+                        objs.append(unpacker.unpack())
+                except msgpack.OutOfData:
+                    pass
+
+                geo_container = None
+                for o in objs:
+                    if isinstance(o, list) and len(o) == 1 and isinstance(o[0], list) and len(o[0]) == 11:
+                        geo_container = o[0]
+                        break
+                if geo_container is None:
+                    continue
+
+                mesh_id = geo_container[0]
+                positions = geo_container[8]
+                normals = geo_container[3]
+                uvs = geo_container[5]
+                indices = geo_container[4]
+
+                meshes.append({
+                    "id": mesh_id,
+                    "positions": positions,
+                    "normals": normals,
+                    "uvs": uvs,
+                    "indices": indices
+                })
+
+        if not meshes:
+            return jsonify({"error": "Could not extract any valid mesh geometry from this .prisma file"}), 400
+
+        albedo_candidates = [f for f in textures if 'BaseColor' in f and 'baked' not in f and 'packed' not in f]
+        albedo_tex = albedo_candidates[0] if albedo_candidates else (list(textures.keys())[0] if textures else None)
+        normal_candidates = [f for f in textures if 'normal' in f.lower()]
+        normal_tex = normal_candidates[0] if normal_candidates else None
+
+        return jsonify({
+            "meshes": meshes,
+            "textures": textures,
+            "albedoTexture": albedo_tex,
+            "normalTexture": normal_tex
+        })
+
+    except zf_module.BadZipFile:
+        return jsonify({"error": "Invalid .prisma file (not a valid archive)"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Parsing failed: {str(e)}"}), 500
+
+
+@app.post("/api/prisma/convert")
+def prisma_convert():
+    import msgpack, zipfile as zf_module, io
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    upload = request.files['file']
+    if not upload.filename.endswith('.prisma'):
+        return jsonify({"error": "File must have .prisma extension"}), 400
+
+    try:
+        prisma_bytes = _repair_zip_signature(upload.read())
+        prisma_buffer = io.BytesIO(prisma_bytes)
+
+        obj_lines = ["# Converted from .prisma by 3DRBXMT"]
+        mtl_lines = []
+        vertex_offset = 0
+        uv_offset = 0
+        normal_offset = 0
+        material_names = set()
+        texture_data = {}
+
+        base_name = upload.filename.rsplit('.', 1)[0]
+        base_name = safe_filename(base_name)
+        obj_lines.insert(1, f"mtllib {base_name}.mtl")
+        obj_lines.append("")
+
+        with zf_module.ZipFile(prisma_buffer, 'r') as z:
+            pobject_files = [n for n in z.namelist() if n.endswith('.pobject')]
+            png_files = [n for n in z.namelist() if n.endswith('.png')]
+
+            if not pobject_files:
+                return jsonify({"error": "No mesh data (.pobject) found in .prisma file"}), 400
+
+            for png_name in png_files:
+                fname = os.path.basename(png_name)
+                texture_data[fname] = z.read(png_name)
+
+            albedo_candidates = [f for f in texture_data if 'BaseColor' in f and 'baked' not in f and 'packed' not in f]
+            albedo_tex = albedo_candidates[0] if albedo_candidates else (list(texture_data.keys())[0] if texture_data else None)
+            normal_candidates = [f for f in texture_data if 'normal' in f.lower()]
+            normal_tex = normal_candidates[0] if normal_candidates else None
+
+            for pobj_name in pobject_files:
+                data = z.read(pobj_name)
+                unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+                unpacker.feed(data)
+                objs = []
+                try:
+                    while True:
+                        objs.append(unpacker.unpack())
+                except msgpack.OutOfData:
+                    pass
+
+                geo_container = None
+                for o in objs:
+                    if isinstance(o, list) and len(o) == 1 and isinstance(o[0], list) and len(o[0]) == 11:
+                        geo_container = o[0]
+                        break
+                if geo_container is None:
+                    continue
+
+                mesh_id = geo_container[0]
+                positions = geo_container[8]
+                normals = geo_container[3]
+                uvs = geo_container[5]
+                indices = geo_container[4]
+
+                mat_name = f"mat_{mesh_id[:8]}"
+                material_names.add(mat_name)
+
+                obj_lines.append(f"g mesh_{mesh_id[:8]}")
+                obj_lines.append(f"o {mesh_id[:8]}")
+                obj_lines.append(f"usemtl {mat_name}")
+
+                for p in positions:
+                    obj_lines.append(f"v {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}")
+                for uv in uvs:
+                    obj_lines.append(f"vt {uv[0]:.6f} {uv[1]:.6f}")
+                for n in normals:
+                    obj_lines.append(f"vn {n[0]:.6f} {n[1]:.6f} {n[2]:.6f}")
+
+                num_tris = len(indices) // 3
+                for t in range(num_tris):
+                    i0, i1, i2 = indices[t*3], indices[t*3+1], indices[t*3+2]
+                    v0, v1, v2 = i0 + 1 + vertex_offset, i1 + 1 + vertex_offset, i2 + 1 + vertex_offset
+                    vt0, vt1, vt2 = t*3 + 1 + uv_offset, t*3 + 2 + uv_offset, t*3 + 3 + uv_offset
+                    vn0, vn1, vn2 = t*3 + 1 + normal_offset, t*3 + 2 + normal_offset, t*3 + 3 + normal_offset
+                    obj_lines.append(f"f {v0}/{vt0}/{vn0} {v1}/{vt1}/{vn1} {v2}/{vt2}/{vn2}")
+
+                vertex_offset += len(positions)
+                uv_offset += len(uvs)
+                normal_offset += len(normals)
+
+            for mat_name in material_names:
+                mtl_lines.append(f"newmtl {mat_name}")
+                mtl_lines.append("Ka 1.000000 1.000000 1.000000")
+                mtl_lines.append("Kd 1.000000 1.000000 1.000000")
+                mtl_lines.append("Ks 0.000000 0.000000 0.000000")
+                mtl_lines.append("d 1.0")
+                mtl_lines.append("illum 2")
+                if albedo_tex:
+                    mtl_lines.append(f"map_Kd {albedo_tex}")
+                if normal_tex:
+                    mtl_lines.append(f"map_Bump {normal_tex}")
+                mtl_lines.append("")
+
+        if vertex_offset == 0:
+            return jsonify({"error": "Could not extract any valid mesh geometry from this .prisma file"}), 400
+
+        out_buffer = io.BytesIO()
+        with zf_module.ZipFile(out_buffer, 'w', zf_module.ZIP_DEFLATED) as out_zip:
+            out_zip.writestr(f"{base_name}.obj", '\n'.join(obj_lines))
+            out_zip.writestr(f"{base_name}.mtl", '\n'.join(mtl_lines))
+            for fname, fdata in texture_data.items():
+                out_zip.writestr(fname, fdata)
+
+        out_buffer.seek(0)
+        return Response(
+            out_buffer.read(),
+            mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{base_name}_converted.zip"'}
+        )
+
+    except zf_module.BadZipFile:
+        return jsonify({"error": "Invalid .prisma file (not a valid archive)"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Conversion failed: {str(e)}"}), 500
+
+
+@app.get("/auth/status")
+def auth_status():
+    """Check apakah OAuth sudah dikonfigurasi."""
+    return jsonify({
+        "oauth_configured": bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
+        "client_id_set": bool(OAUTH_CLIENT_ID),
+        "redirect_uri": OAUTH_REDIRECT_URI
+    })
+
+
+if __name__ == "__main__":
+    port=int(os.getenv("PORT",8000))
+    print(f"Server jalan di http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0",port=port,debug=False)
