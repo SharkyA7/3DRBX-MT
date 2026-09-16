@@ -1798,6 +1798,7 @@ def _resolve_all_clothing_textures(raw_bytes):
 def catalog_download_full():
     aid = request.args.get("asset_id","")
     fmt = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
+    variant = (request.args.get("variant") or "").strip().lower() or None  # "colormap"|"decal"|"template"
     if not aid: return jsonify({"error":"asset_id required"}),400
     rl = check_rate_limit("item", limit=20, window_s=60)
     if rl: return rl
@@ -1821,10 +1822,20 @@ def catalog_download_full():
         # Only fall back to the thumbnail approximation when this genuinely isn't
         # one of those wrapper types (e.g. a real mesh accessory with no separate
         # texture asset we can resolve this way).
+        # When ?variant= is given, honor that specific kind (colormap/decal/template)
+        # instead of the default priority match -- some items genuinely have both a
+        # modern ColorMap and a classic template at once (see texture-variants).
         tu = None
-        real_tex_id = _resolve_real_clothing_texture(raw)
+        if variant:
+            all_tex = _resolve_all_clothing_textures(raw)
+            match = next((t for t in all_tex if t["kind"] == variant), None)
+            real_tex_id = match["id"] if match else None
+        else:
+            real_tex_id = _resolve_real_clothing_texture(raw)
         if real_tex_id:
             tu = f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}"
+        elif variant:
+            return jsonify({"error": f"Item ini tidak punya variant '{variant}'"}), 404
         else:
             try:
                 th  = s.get(f"https://thumbnails.roblox.com/v1/assets?assetIds={aid}&size=420x420&format=Png",timeout=10).json()
