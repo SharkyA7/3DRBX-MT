@@ -1627,13 +1627,36 @@ def catalog_info():
         return jsonify(result)
     except Exception as e: return safe_error(e)
 
+@app.get("/api/catalog/texture-variants")
+def catalog_texture_variants():
+    """Tells the frontend which real texture kinds actually exist for an asset, so
+    it only shows a "UV Bake" / "Raw Template" choice when there genuinely are two
+    (e.g. Layered Clothing with both a ColorMap and a classic fallback template) —
+    most items only have one, and shouldn't show a pointless choice."""
+    aid = request.args.get("asset_id","")
+    if not aid: return jsonify({"error":"asset_id required"}),400
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error":"asset_id harus berupa angka"}),400
+    try:
+        s = get_scraper()
+        r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=20)
+        variants = _resolve_all_clothing_textures(r.content) if r.status_code == 200 else []
+        return jsonify({"assetId": file_id, "variants": [v["kind"] for v in variants]})
+    except Exception as e:
+        return safe_error(e)
+
 @app.get("/api/catalog/image")
 def catalog_image():
     """Download the raw 2D image for a catalog asset — for items with no 3D mesh at
     all (Profile/Avatar Backgrounds, Decals, plain Images), where OBJ export isn't
-    possible because there's no geometry, but the item is genuinely just a picture."""
+    possible because there's no geometry, but the item is genuinely just a picture.
+    Optional ?variant=colormap|decal|template forces a specific texture kind, for
+    items that have more than one real texture (see /api/catalog/texture-variants)."""
     aid = request.args.get("asset_id","")
     known_name = (request.args.get("name") or "").strip() or None
+    variant = (request.args.get("variant") or "").strip().lower() or None
     if not aid: return jsonify({"error":"asset_id required"}),400
     rl = check_rate_limit("item", limit=20, window_s=60)
     if rl: return rl
@@ -1645,7 +1668,8 @@ def catalog_image():
         s = get_scraper()
         item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
-        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        if variant: safe_name = f"{safe_name}_{variant}"
+        content, ctype, ext = _fetch_asset_image_bytes(file_id, s, variant=variant)
         return Response(content, mimetype=ctype or "image/png",
             headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'})
     except Exception as e:
@@ -1743,6 +1767,32 @@ def _resolve_real_clothing_texture(raw_bytes):
     if m: return m.group(1)
     m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate|Texture)"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
     return m.group(1) if m else None
+
+def _resolve_all_clothing_textures(raw_bytes):
+    """Like _resolve_real_clothing_texture, but returns EVERY distinct texture
+    reference found instead of stopping at the first/highest-priority one.
+    Needed because some Layered Clothing items genuinely carry both at once:
+    a SurfaceAppearance.ColorMap (the real mesh-UV texture) AND a classic
+    ShirtTemplate/PantsTemplate fallback (kept for avatar rendering paths that
+    don't support Layered Clothing) -- these are two legitimately different,
+    both-real images for the same item, not a priority choice between them.
+
+    Returns a list of {"kind": "colormap"|"decal"|"template", "id": "<assetId>"}
+    dicts, in the same priority order as _resolve_real_clothing_texture, deduped
+    by kind (first match per kind wins). Empty list if none found."""
+    try:
+        text = raw_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return []
+    asset_url_id = r'(?:rbxassetid://|(?:https?://)?(?:www\.)?roblox\.com/asset/?\?id=)(\d+)'
+    results = []
+    m = re.search(r'<Content name="ColorMap"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
+    if m: results.append({"kind": "colormap", "id": m.group(1)})
+    m = re.search(r'<Content name="Texture"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
+    if m: results.append({"kind": "decal", "id": m.group(1)})
+    m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate)"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
+    if m: results.append({"kind": "template", "id": m.group(1)})
+    return results
 
 @app.get("/api/catalog/download-full")
 def catalog_download_full():
@@ -1988,32 +2038,47 @@ def _resolve_item_name(file_id, s):
     except: pass
     return None
 
-def _fetch_asset_image_bytes(file_id, s):
+def _fetch_asset_image_bytes(file_id, s, variant=None):
     """Get the best-available raw 2D image for a catalog asset — used for items that
     have no 3D mesh at all (e.g. the new Profile/Avatar Backgrounds, Decals, Images),
     where OBJ export isn't possible but the item IS just a picture.
+
+    variant: optional "colormap" | "decal" | "template" to force a specific texture
+    kind (see _resolve_all_clothing_textures) — for items that carry more than one
+    real texture at once (e.g. Layered Clothing with both a modern ColorMap AND a
+    classic template fallback). None = best-available default (unchanged behavior).
+
     Returns (content_bytes, content_type, extension). Raises if nothing works."""
     # 1) Try raw asset delivery — for classic Decal/Image assets this serves the
     #    actual original file bytes, not a re-rendered thumbnail.
     try:
         r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=20)
         ctype = r.headers.get("content-type","")
-        if r.status_code == 200 and ctype.startswith("image/"):
+        if r.status_code == 200 and ctype.startswith("image/") and not variant:
             ext = "jpg" if "jpeg" in ctype else "png"
             return r.content, ctype, ext
-        # 1b) Not a raw image -- for Shirt/Pants/Decal, assetdelivery instead returns
-        # a small XML wrapper pointing at the REAL flat template texture as a separate
-        # asset (same fix as catalog_download_full's thumbnail-vs-real-texture bug).
-        # Resolve that and fetch the actual template PNG before falling back below.
+        # 1b) Not a raw image (or a specific variant was requested) -- for
+        # Shirt/Pants/Decal/Layered Clothing, assetdelivery instead returns a small
+        # XML wrapper pointing at the REAL flat texture(s) as separate asset(s).
+        # Resolve whichever one applies and fetch the actual PNG before falling
+        # back below.
         if r.status_code == 200:
-            real_tex_id = _resolve_real_clothing_texture(r.content)
+            all_tex = _resolve_all_clothing_textures(r.content)
+            if variant:
+                match = next((t for t in all_tex if t["kind"] == variant), None)
+                if not match:
+                    raise Exception(f"Item ini tidak punya variant '{variant}'")
+                real_tex_id = match["id"]
+            else:
+                real_tex_id = all_tex[0]["id"] if all_tex else None
             if real_tex_id:
                 r2 = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}", timeout=20)
                 ctype2 = r2.headers.get("content-type","")
                 if r2.status_code == 200 and ctype2.startswith("image/"):
                     ext2 = "jpg" if "jpeg" in ctype2 else "png"
                     return r2.content, ctype2, ext2
-    except: pass
+    except Exception:
+        if variant: raise  # a specifically-requested variant should fail loudly, not silently thumbnail
 
     # 2) Fallback — largest available rendered thumbnail from Roblox's CDN. Only
     #    reached for asset types with no resolvable template (e.g. genuine mesh
