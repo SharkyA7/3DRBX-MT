@@ -134,6 +134,8 @@ select option{background:var(--s2)}
 .btn-green:hover{background:#00FFD0;box-shadow:0 0 20px rgba(0,255,179,.4);}
 .btn-amber{background:var(--amber);color:#000;}
 .btn-amber:hover{background:#FFE08A;box-shadow:0 0 16px rgba(255,209,102,.35);}
+.btn-cyan{background:#4fc3f7;color:#000;}
+.btn-cyan:hover{background:#8fdcff;box-shadow:0 0 16px rgba(79,195,247,.35);}
 .status-box{min-height:20px;display:flex;align-items:flex-start;gap:8px;font-family:var(--font-ui);font-size:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
 .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
 .idle{color:var(--muted)}.idle .dot{background:var(--muted)}
@@ -1256,6 +1258,8 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           <div class="dl-title"><span style="color:#4af">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
           <div class="dl-desc"><span data-t-id="Decal, Image, Face, GUI, Background." data-t-en="Decal, Image, Face, GUI, Background.">Decal, Image, Face, GUI, Background.</span></div>
           <button class="btn" style="background:#2a4;color:#fff" id="img2d-dl-btn" onclick="downloadImage2D()">⬇ <span data-t-id="IMAGE" data-t-en="IMAGE">IMAGE</span></button>
+          <button class="btn btn-cyan" id="img2d-dl-template-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadImage2DVariant('template')">⬇ <span data-t-id="RAW TEMPLATE" data-t-en="RAW TEMPLATE">RAW TEMPLATE</span></button>
+          <button class="btn btn-cyan" id="img2d-dl-colormap-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadImage2DVariant('colormap')">⬇ <span data-t-id="UV BAKE" data-t-en="UV BAKE">UV BAKE</span></button>
         </div>
         <div class="dl-card ready">
           <div class="dl-title"><span style="color:#c8f">FONT</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
@@ -2384,9 +2388,50 @@ async function fetchImage2D(){
     document.getElementById('img2d-dl-card').style.display='block';
 
     st('img2d-status',`✓ "${data.name}" ditemukan. Tekan DOWNLOAD IMAGE untuk mengambil gambar aslinya.`,'ok');
+    checkImage2DTextureVariants(id);
   }catch(e){
     st('img2d-status','✗ '+e.message,'err'); prog('img2d-prog',0);
   }finally{ btn.disabled=false; }
+}
+
+async function checkImage2DTextureVariants(id){
+  // Some items (esp. Layered Clothing) carry BOTH a modern UV-bake ColorMap AND a
+  // classic raw template texture at once -- only show extra buttons when a given
+  // kind genuinely exists, since most items only have one and the plain IMAGE
+  // button above already covers that single-texture case fine.
+  const templateBtn = document.getElementById('img2d-dl-template-btn');
+  const colormapBtn = document.getElementById('img2d-dl-colormap-btn');
+  templateBtn.style.display='none'; colormapBtn.style.display='none';
+  try{
+    const res = await fetch(`${BASE}/api/catalog/texture-variants?asset_id=${id}`);
+    if(!res.ok) return;
+    const data = await res.json();
+    const variants = data.variants || [];
+    // Only worth surfacing as a separate choice when there's more than one kind --
+    // a single-variant item is already exactly what the plain IMAGE button gives.
+    if(variants.length < 2) return;
+    if(variants.includes('template')) templateBtn.style.display='inline-block';
+    if(variants.includes('colormap') || variants.includes('decal')) colormapBtn.style.display='inline-block';
+  }catch(e){ /* silently skip -- extra buttons just stay hidden */ }
+}
+
+async function downloadImage2DVariant(variant){
+  if(!currentImage2DId) return;
+  const label = variant === 'template' ? 'Raw Template' : 'UV Bake';
+  st('img2d-status',`⏳ Mengunduh ${label}...`,'loading');
+  try{
+    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentImage2DId}&variant=${variant}&name=${encodeURIComponent(currentImage2DName)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||`Gagal mengunduh ${label}`); }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition')||'';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const fname = m ? m[1] : `${currentImage2DName}_${variant}.png`;
+    const a = Object.assign(document.createElement('a'),{ href: URL.createObjectURL(blob), download: fname });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('img2d-status',`✓ ${label} berhasil diunduh!`,'ok');
+  }catch(e){
+    st('img2d-status','✗ '+e.message,'err');
+  }
 }
 
 async function downloadImage2D(){
