@@ -2049,6 +2049,23 @@ def _resolve_item_name(file_id, s):
     except: pass
     return None
 
+def _sniff_image_type(content_bytes, header_ctype=""):
+    """Roblox's legacy assetdelivery.roblox.com/v1/asset/?id= endpoint is known to
+    sometimes serve genuine PNG/JPEG bytes under a generic or wrong Content-Type
+    (e.g. application/octet-stream) rather than image/png or image/jpeg -- trusting
+    the HTTP header alone here silently rejects real, valid images. Sniff the
+    actual file signature first and only fall back to the header if that's
+    inconclusive. Returns (is_image, content_type, extension)."""
+    if content_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return True, "image/png", "png"
+    if content_bytes[:3] == b"\xff\xd8\xff":
+        return True, "image/jpeg", "jpg"
+    if content_bytes[:6] in (b"GIF87a", b"GIF89a"):
+        return True, "image/gif", "gif"
+    if header_ctype.startswith("image/"):
+        return True, header_ctype, ("jpg" if "jpeg" in header_ctype else "png")
+    return False, header_ctype, None
+
 def _fetch_asset_image_bytes(file_id, s, variant=None):
     """Get the best-available raw 2D image for a catalog asset — used for items that
     have no 3D mesh at all (e.g. the new Profile/Avatar Backgrounds, Decals, Images),
@@ -2065,9 +2082,9 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
     try:
         r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=20)
         ctype = r.headers.get("content-type","")
-        if r.status_code == 200 and ctype.startswith("image/") and not variant:
-            ext = "jpg" if "jpeg" in ctype else "png"
-            return r.content, ctype, ext
+        is_img, real_ctype, ext = _sniff_image_type(r.content, ctype)
+        if r.status_code == 200 and is_img and not variant:
+            return r.content, real_ctype, ext
         # 1b) Not a raw image (or a specific variant was requested) -- for
         # Shirt/Pants/Decal/Layered Clothing, assetdelivery instead returns a small
         # XML wrapper pointing at the REAL flat texture(s) as separate asset(s).
@@ -2085,9 +2102,20 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
             if real_tex_id:
                 r2 = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}", timeout=20)
                 ctype2 = r2.headers.get("content-type","")
-                if r2.status_code == 200 and ctype2.startswith("image/"):
-                    ext2 = "jpg" if "jpeg" in ctype2 else "png"
-                    return r2.content, ctype2, ext2
+                is_img2, real_ctype2, ext2 = _sniff_image_type(r2.content, ctype2)
+                if r2.status_code == 200 and is_img2:
+                    return r2.content, real_ctype2, ext2
+                # Resolver found the right texture ID, but fetching IT failed (bad
+                # status, or genuinely not image bytes) -- this is different from
+                # "this item has no resolvable texture at all" and shouldn't be
+                # silently swallowed into the generic thumbnail fallback below,
+                # since that hides a real, debuggable failure behind a misleading
+                # "worked fine, just gave you the wrong picture" result.
+                if variant:
+                    raise Exception(
+                        f"Texture asli ditemukan (id {real_tex_id}) tapi gagal diambil "
+                        f"(HTTP {r2.status_code}, content-type {ctype2 or 'unknown'})"
+                    )
     except Exception:
         if variant: raise  # a specifically-requested variant should fail loudly, not silently thumbnail
 
