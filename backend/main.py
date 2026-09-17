@@ -2018,6 +2018,20 @@ def fix_mtl_textures(mtl_text, tex_hashes, tex_filenames):
         mtl_text = mtl_text.replace(h, fname)
     return mtl_text
 
+_MAP_KD_RE = re.compile(r'(map_Kd\s+)\S+', re.IGNORECASE)
+
+def _rewire_mtl_to_texture(mtl_text, texture_filename):
+    """Point every map_Kd line in the .mtl at texture_filename instead of whatever it
+    currently references. Used to make a resolved real ColorMap the item's actual
+    material texture, instead of leaving it as an unused extra file in the ZIP while
+    the .mtl still points at the 3D-thumbnail-manifest bake texture."""
+    new_text, n = _MAP_KD_RE.subn(r'\g<1>' + texture_filename, mtl_text)
+    if n == 0:
+        # No existing map_Kd line to rewrite (material had none) -- append one so
+        # the ColorMap still actually gets used as the texture.
+        new_text = mtl_text.rstrip() + f"\nmap_Kd {texture_filename}\n"
+    return new_text
+
 # ── SHARED: single-asset mesh fetch + bundle resolution ────────────
 def _resolve_item_name(file_id, s):
     """Robustly resolve an Asset's display name — mirrors catalog_info's multi-endpoint
@@ -2165,6 +2179,7 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
     caller writes the returned files into the ZIP afterwards on the main thread."""
     item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
     files = [(f"{safe_name}.obj", obj_data), (f"{safe_name}.mtl", mtl_fixed)]
+    mtl_index = 1  # position of the .mtl entry in `files` -- rewritten below if a real ColorMap is found
     if include_textures:
         for i, tex_url in enumerate(tex_urls):
             try:
@@ -2172,6 +2187,43 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
                 if tb.status_code == 200:
                     files.append((tex_names[i], tb.content))
             except: pass
+
+        # ALSO fetch the classic clothing textures directly off the raw asset XML —
+        # these are separate, both-real images from the 3D-thumbnail-manifest texture
+        # above (which is a bake made for Roblox's 3D preview): SurfaceAppearance's
+        # ColorMap is the real mesh-UV texture for modern Layered Clothing, and
+        # Shirt/PantsTemplate is the flat body-paint template (torso/arms/legs cross
+        # layout) classic clothing actually uses. Best-effort: most non-clothing items
+        # (accessories, plain meshes) won't match anything here and that's fine.
+        _CLOTHING_TEX_LABELS = {"colormap": "ColorMap", "decal": "Decal", "template": "RobloxTemplate"}
+        wired_main_texture = False  # True once ColorMap (or, failing that, Template) has been wired into the .mtl
+        try:
+            raw = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=30).content
+            for tex in _resolve_all_clothing_textures(raw):
+                label = _CLOTHING_TEX_LABELS.get(tex["kind"], tex["kind"])
+                tex_filename = f"{safe_name}_{label}.png"
+                try:
+                    tb = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={tex['id']}", timeout=20)
+                    if tb.status_code == 200:
+                        files.append((tex_filename, tb.content))
+                        # ColorMap is the real mesh-UV texture, so it always wins when
+                        # present. Template (the flat Shirt/PantsTemplate body-paint
+                        # layout) only becomes the main texture as a FALLBACK for classic
+                        # clothing that has no ColorMap at all -- it still matches the
+                        # exported mesh's UVs (the default avatar body layout), just via
+                        # a different, older clothing system. Decal is never auto-wired;
+                        # it stays available as an extra file only.
+                        if tex["kind"] == "colormap":
+                            rewired = _rewire_mtl_to_texture(files[mtl_index][1], tex_filename)
+                            files[mtl_index] = (files[mtl_index][0], rewired)
+                            wired_main_texture = True
+                        elif tex["kind"] == "template" and not wired_main_texture:
+                            rewired = _rewire_mtl_to_texture(files[mtl_index][1], tex_filename)
+                            files[mtl_index] = (files[mtl_index][0], rewired)
+                            wired_main_texture = True
+                except: pass
+        except Exception:
+            pass
     return item_name, safe_name, files
 
 def _write_package_to_zip(zf, folder, files):
@@ -2333,7 +2385,11 @@ def item_v2():
         bundle_results = []
 
         try:
-            item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=(fmt=="gltf"))
+            # Always fetch the real texture (e.g. the Roblox clothing/shirt template),
+            # even for OBJ — the generated .mtl already references the texture filename
+            # via map_Kd regardless of format, so skipping the fetch here just left OBJ
+            # downloads pointing at a texture file that was never in the ZIP.
+            item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=True)
         except Exception as e:
             err = str(e)
             bundle = _resolve_bundle(file_id, s)
@@ -2356,7 +2412,7 @@ def item_v2():
                 item_name = known_name or bundle["name"]
                 files = []
                 with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
-                    futs = {ex.submit(_fetch_asset_package, cid, s, None, (fmt=="gltf")): cid for cid in bundle["asset_ids"]}
+                    futs = {ex.submit(_fetch_asset_package, cid, s, None, True): cid for cid in bundle["asset_ids"]}
                     for fut in as_completed(futs):
                         cid = futs[fut]
                         try:
