@@ -1213,8 +1213,10 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           </div>
           <div class="dl-card ready" id="cat-dl-image-card" style="display:none">
             <div class="dl-title"><span style="color:#8f8">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh).</span></div>
+            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, Shirt/Pants, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh).</span></div>
             <button class="btn" style="background:#2a4;color:#fff" id="cat-dl-image-btn" onclick="downloadCatalogImage()">⬇ IMAGE (PNG)</button>
+            <button class="btn btn-cyan" id="cat-dl-template-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadCatalogImageVariant('template')">⬇ <span data-t-id="RAW TEMPLATE" data-t-en="RAW TEMPLATE">RAW TEMPLATE</span></button>
+            <button class="btn btn-cyan" id="cat-dl-colormap-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadCatalogImageVariant('colormap')">⬇ <span data-t-id="UV BAKE" data-t-en="UV BAKE">UV BAKE</span></button>
           </div>
         </div>
       </div>
@@ -2095,6 +2097,12 @@ async function fetchCatalog(){
       }
     } else if(data.isBackground){
       st('cat-status',`ℹ️ "${data.name}" adalah Profile Background (gambar 2D, bukan mesh) — download sebagai gambar tersedia di bawah.`,'ok');
+    } else if(!data.isBundle){
+      // Not flagged as a Background, but could still be a texture-only item with no
+      // real mesh (classic Shirt/Pants, Decal, Layered Clothing) -- check for a
+      // resolvable real texture regardless, so the IMAGE card (and RAW
+      // TEMPLATE/UV BAKE choice when both exist) isn't gated on isBackground alone.
+      checkCatalogTextureVariants(id);
     }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
@@ -2171,6 +2179,50 @@ async function downloadCatalogImage(){
   }catch(e){
     st('cat-status','✗ '+e.message,'err');
   }finally{ btn.disabled=false; }
+}
+
+// Same "does this item genuinely have more than one real texture kind" check used
+// on the 2D Assets tab (see checkImage2DTextureVariants) -- kept as a parallel
+// function rather than a shared one because the two tabs use different button/status
+// element IDs and different "what counts as image-only" gating (isBackground here
+// vs always-on there), so sharing would need its own indirection layer for little
+// benefit given how small each function is.
+async function checkCatalogTextureVariants(id){
+  const card = document.getElementById('cat-dl-image-card');
+  const templateBtn = document.getElementById('cat-dl-template-btn');
+  const colormapBtn = document.getElementById('cat-dl-colormap-btn');
+  templateBtn.style.display='none'; colormapBtn.style.display='none';
+  try{
+    const res = await fetch(`${BASE}/api/catalog/texture-variants?asset_id=${id}`);
+    if(!res.ok) return;
+    const data = await res.json();
+    const variants = data.variants || [];
+    if(variants.length === 0) return;  // genuinely no resolvable texture -- leave OBJ/GLTF as the only options
+    card.style.display = 'block';
+    if(variants.length < 2) return;    // only one kind -- plain IMAGE button already covers it
+    if(variants.includes('template')) templateBtn.style.display='inline-block';
+    if(variants.includes('colormap') || variants.includes('decal')) colormapBtn.style.display='inline-block';
+  }catch(e){ /* silently skip -- card just stays as fillCatalogInfo left it */ }
+}
+
+async function downloadCatalogImageVariant(variant){
+  if(!currentAssetId) return;
+  const label = variant === 'template' ? 'Raw Template' : 'UV Bake';
+  const name = document.getElementById('cat-name').textContent||currentAssetId;
+  st('cat-status',`⏳ Mengunduh ${label}...`,'loading');
+  try{
+    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentAssetId}&variant=${variant}&name=${encodeURIComponent(name)}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||`Gagal mengunduh ${label}`); }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition')||'';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const fname = m ? m[1] : `${name}_${variant}.png`;
+    const a = Object.assign(document.createElement('a'),{ href: URL.createObjectURL(blob), download: fname });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('cat-status',`✓ ${label} berhasil diunduh!`,'ok');
+  }catch(e){
+    st('cat-status','✗ '+e.message,'err');
+  }
 }
 
 // ── KATALOG PACKED (BATCH) ──────────────────────────────────────────
