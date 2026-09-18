@@ -1440,6 +1440,50 @@ def avatar_info():
         return jsonify(result)
     except Exception as e: return safe_error(e)
 
+@app.get("/api/avatar/wearing")
+def avatar_wearing():
+    """List the catalog items (Shirts, Pants, Accessories, MeshParts, etc.) a user
+    currently has equipped -- built for Packed Catalog so the frontend can add every
+    one of them to the pack in one shot instead of the user typing IDs by hand.
+    Body scale/colors aren't catalog items and are left out; only real wearable
+    assets with an id are returned."""
+    user=request.args.get("user","")
+    if not user: return jsonify({"error":"user required"}),400
+    try:
+        cache_key = f"wearing_{user}"
+        cached = cache_get(cache_key)
+        if cached: return jsonify(cached)
+
+        uid=resolve(user)
+        info=rget(f"https://users.roblox.com/v1/users/{uid}")
+        av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+
+        items = []
+        for a in av.get("assets", []):
+            aid = a.get("id")
+            if not aid: continue
+            atype = a.get("assetType") or {}
+            items.append({
+                "id": aid,
+                "name": a.get("name") or f"Asset {aid}",
+                "assetTypeId": atype.get("id"),
+                "assetTypeName": atype.get("name"),
+            })
+        if not items:
+            return jsonify({"error": f"'{user}' tidak sedang memakai item apa pun (avatar kosong/default)."}), 404
+
+        result = {
+            "userId": uid,
+            "username": info.get("name"),
+            "displayName": info.get("displayName"),
+            "thumbnailUrl": (th.get("data") or [{}])[0].get("imageUrl"),
+            "items": items,
+        }
+        cache_set(cache_key, result)
+        return jsonify(result)
+    except Exception as e: return safe_error(e)
+
 @app.get("/api/avatar/3d-urls")
 def avatar_3d_urls():
     user=request.args.get("user","")
