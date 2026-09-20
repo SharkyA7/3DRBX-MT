@@ -1,7 +1,33 @@
-wasm-model-parser/target/
+# Cloudflare Workers static assets deploy scans the whole "." directory by
+# default -- this excludes everything that isn't actually the live static
+# site, so it doesn't choke on huge/irrelevant files (this is what caused
+# the "Asset too large" .git pack-file error).
+
+# Not deployed to Cloudflare at all -- this runs on Vercel as a Python function.
+backend/
+
+# Stale duplicate from an old Railway deployment attempt -- not the live site.
+frontend/
+
+# Rust build cache + unused sibling project (137MB+ of build artifacts).
+wasm-model-parser/
 rust-model-parser/
 
-NEW BANNER V5.gif
+# Git internals -- this is what triggered the original 57.5MB pack-file error.
+.git/
 
-.git
+# Worker source/config -- these run the site, they shouldn't also be served
+# as downloadable static files.
+worker.js
+wrangler.jsonc
+
+# Misc non-site files.
 *.zip
+NEW BANNER V5.gif
+README.md
+CREDITS.md
+LICENSE
+railway.toml
+Procfile
+vercel.json
+.vercelignore

@@ -557,7 +557,7 @@ window.assembleModelScene = async function(data, statusEl){
     }
 
     await fetchPool(uniqueMeshIds, 6, async (meshId) => {
-      const res = await fetch(`${BASE}/api/v2/model/mesh?meshId=${encodeURIComponent(meshId)}`);
+      const res = await fetch(`${EDGE_BASE}/api/v2/model/mesh?meshId=${encodeURIComponent(meshId)}`);
       const json = await res.json();
       if(!json.obj) throw new Error(json.error || "unknown error");
       const group = objLoader.parse(json.obj);
@@ -572,7 +572,7 @@ window.assembleModelScene = async function(data, statusEl){
     if(uniqueUnionIds.length > 0){
       statusEl.textContent = `⏳ Mengunduh ${uniqueUnionIds.length} Union/CSG geometry...`;
       await fetchPool(uniqueUnionIds, 4, async (unionAssetId) => {
-        const res = await fetch(`${BASE}/api/v2/model/mesh-union?assetId=${encodeURIComponent(unionAssetId)}`);
+        const res = await fetch(`${EDGE_BASE}/api/v2/model/mesh-union?assetId=${encodeURIComponent(unionAssetId)}`);
         const json = await res.json();
         if(!json.obj) throw new Error(json.error || "union fetch failed");
         const group = objLoader.parse(json.obj);
@@ -598,7 +598,7 @@ window.assembleModelScene = async function(data, statusEl){
     if(uniqueTextureIds.length > 0){
       statusEl.textContent = `⏳ Mengunduh ${uniqueTextureIds.length} texture...`;
       await fetchPool(uniqueTextureIds, 6, async (texId) => {
-        const res = await fetch(`${BASE}/api/v2/model/texture?textureId=${encodeURIComponent(texId)}`);
+        const res = await fetch(`${EDGE_BASE}/api/v2/model/texture?textureId=${encodeURIComponent(texId)}`);
         if(!res.ok) throw new Error("texture fetch failed");
         const blob = await res.blob();
         const bitmap = await createImageBitmap(blob);
@@ -1161,21 +1161,6 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <input type="file" id="pk-file-input" accept=".txt,text/plain" style="display:none" onchange="addPackedItemsFromFile(this.files[0]); this.value=''">
         <button class="btn" type="button" style="width:100%" onclick="document.getElementById('pk-file-input').click()">📄 <span data-t-id="UPLOAD .TXT" data-t-en="UPLOAD .TXT">UPLOAD .TXT</span></button>
         <p class="hint"><span data-t-id="Satu Asset ID atau link Roblox per baris (catalog/library/bundles). Semua langsung ditambahkan sekaligus." data-t-en="One Asset ID or Roblox link per line (catalog/library/bundles). All added at once.">Satu Asset ID atau link Roblox per baris (catalog/library/bundles). Semua langsung ditambahkan sekaligus.</span></p>
-
-        <div style="display:flex;align-items:center;gap:10px;margin:16px 0">
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-          <span style="font-size:9px;color:var(--muted);letter-spacing:.04em"><span data-t-id="ATAU" data-t-en="OR">ATAU</span></span>
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-        </div>
-
-        <div class="row">
-          <div style="flex:1;min-width:180px">
-            <input type="text" id="pk-avatar-input" data-t-ph-id="User ID atau Username Roblox" data-t-ph-en="Roblox User ID or Username" placeholder="User ID atau Username Roblox">
-          </div>
-          <button class="btn" id="pk-avatar-btn" onclick="addPackedItemsFromAvatar()">👤 <span data-t-id="FETCH AVATAR" data-t-en="FETCH AVATAR">FETCH AVATAR</span></button>
-        </div>
-        <p class="hint"><span data-t-id="Ambil semua item katalog yang sedang dipakai user ini (Shirt, Pants, Aksesoris, dll), lalu tambahkan sekaligus ke pack." data-t-en="Grab every catalog item this user currently has equipped (Shirt, Pants, Accessories, etc.) and add them all to the pack at once.">Ambil semua item katalog yang sedang dipakai user ini (Shirt, Pants, Aksesoris, dll), lalu tambahkan sekaligus ke pack.</span></p>
-
         <div class="status-box idle" id="pk-status"><div class="dot"></div><span id="pk-msg"><span data-t-id="Belum ada item." data-t-en="No items yet.">Belum ada item.</span></span></div>
       </div>
 
@@ -1228,10 +1213,8 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           </div>
           <div class="dl-card ready" id="cat-dl-image-card" style="display:none">
             <div class="dl-title"><span style="color:#8f8">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
-            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, Shirt/Pants, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh).</span></div>
+            <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, dll — bukan mesh).</span></div>
             <button class="btn" style="background:#2a4;color:#fff" id="cat-dl-image-btn" onclick="downloadCatalogImage()">⬇ IMAGE (PNG)</button>
-            <button class="btn btn-cyan" id="cat-dl-template-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadCatalogImageVariant('template')">⬇ <span data-t-id="RAW TEMPLATE" data-t-en="RAW TEMPLATE">RAW TEMPLATE</span></button>
-            <button class="btn btn-cyan" id="cat-dl-colormap-btn" style="display:none;margin-top:6px;width:100%" onclick="downloadCatalogImageVariant('colormap')">⬇ <span data-t-id="UV BAKE" data-t-en="UV BAKE">UV BAKE</span></button>
           </div>
         </div>
       </div>
@@ -1907,6 +1890,11 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 
 <script>
 const BASE = '';
+// Cloudflare Worker edge cache for the specific byte-heavy, immutable-per-ID
+// Roblox asset routes (mesh, texture, 2D image) -- repeat downloads of the
+// same asset hit this cache instead of re-fetching from Vercel/Roblox each
+// time. Everything else still uses the relative BASE path above.
+const EDGE_BASE = 'https://3drbx-mt.shafarois5.workers.dev';
 
 // ── TABS ──────────────────────────────────────────────────────────
 function switchTab(name){
@@ -2112,12 +2100,6 @@ async function fetchCatalog(){
       }
     } else if(data.isBackground){
       st('cat-status',`ℹ️ "${data.name}" adalah Profile Background (gambar 2D, bukan mesh) — download sebagai gambar tersedia di bawah.`,'ok');
-    } else if(!data.isBundle){
-      // Not flagged as a Background, but could still be a texture-only item with no
-      // real mesh (classic Shirt/Pants, Decal, Layered Clothing) -- check for a
-      // resolvable real texture regardless, so the IMAGE card (and RAW
-      // TEMPLATE/UV BAKE choice when both exist) isn't gated on isBackground alone.
-      checkCatalogTextureVariants(id);
     }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
@@ -2181,7 +2163,7 @@ async function downloadCatalogImage(){
   st('cat-status',`⏳ Mengunduh gambar...`,'loading');
   try{
     const name=document.getElementById('cat-name').textContent||currentAssetId;
-    const res=await fetch(`${BASE}/api/catalog/image?asset_id=${currentAssetId}&name=${encodeURIComponent(name)}`);
+    const res=await fetch(`${EDGE_BASE}/api/catalog/image?asset_id=${currentAssetId}&name=${encodeURIComponent(name)}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
     const blob=await res.blob();
     const ext = blob.type.includes('jpeg') ? 'jpg' : 'png';
@@ -2194,50 +2176,6 @@ async function downloadCatalogImage(){
   }catch(e){
     st('cat-status','✗ '+e.message,'err');
   }finally{ btn.disabled=false; }
-}
-
-// Same "does this item genuinely have more than one real texture kind" check used
-// on the 2D Assets tab (see checkImage2DTextureVariants) -- kept as a parallel
-// function rather than a shared one because the two tabs use different button/status
-// element IDs and different "what counts as image-only" gating (isBackground here
-// vs always-on there), so sharing would need its own indirection layer for little
-// benefit given how small each function is.
-async function checkCatalogTextureVariants(id){
-  const card = document.getElementById('cat-dl-image-card');
-  const templateBtn = document.getElementById('cat-dl-template-btn');
-  const colormapBtn = document.getElementById('cat-dl-colormap-btn');
-  templateBtn.style.display='none'; colormapBtn.style.display='none';
-  try{
-    const res = await fetch(`${BASE}/api/catalog/texture-variants?asset_id=${id}`);
-    if(!res.ok) return;
-    const data = await res.json();
-    const variants = data.variants || [];
-    if(variants.length === 0) return;  // genuinely no resolvable texture -- leave OBJ/GLTF as the only options
-    card.style.display = 'block';
-    if(variants.length < 2) return;    // only one kind -- plain IMAGE button already covers it
-    if(variants.includes('template')) templateBtn.style.display='inline-block';
-    if(variants.includes('colormap') || variants.includes('decal')) colormapBtn.style.display='inline-block';
-  }catch(e){ /* silently skip -- card just stays as fillCatalogInfo left it */ }
-}
-
-async function downloadCatalogImageVariant(variant){
-  if(!currentAssetId) return;
-  const label = variant === 'template' ? 'Raw Template' : 'UV Bake';
-  const name = document.getElementById('cat-name').textContent||currentAssetId;
-  st('cat-status',`⏳ Mengunduh ${label}...`,'loading');
-  try{
-    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentAssetId}&variant=${variant}&name=${encodeURIComponent(name)}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||`Gagal mengunduh ${label}`); }
-    const blob = await res.blob();
-    const cd = res.headers.get('content-disposition')||'';
-    const m = cd.match(/filename="?([^"]+)"?/);
-    const fname = m ? m[1] : `${name}_${variant}.png`;
-    const a = Object.assign(document.createElement('a'),{ href: URL.createObjectURL(blob), download: fname });
-    a.click(); URL.revokeObjectURL(a.href);
-    st('cat-status',`✓ ${label} berhasil diunduh!`,'ok');
-  }catch(e){
-    st('cat-status','✗ '+e.message,'err');
-  }
 }
 
 // ── KATALOG PACKED (BATCH) ──────────────────────────────────────────
@@ -2354,56 +2292,6 @@ async function addPackedItemsFromFile(file){
 
   btn.disabled = false;
   if(fileBtn) fileBtn.disabled = false;
-}
-
-// Fetch every catalog item a Roblox avatar (by User ID or username) currently
-// has equipped, and add them all to the pack in one go -- reuses addPackedItemById
-// so dedup / Animation Bundle rejection / etc. all work exactly like manual adds.
-async function addPackedItemsFromAvatar(){
-  const input = document.getElementById('pk-avatar-input');
-  const user = input.value.trim();
-  if(!user){ st('pk-status','Masukkan User ID atau Username Roblox.','err'); return; }
-
-  const btn = document.getElementById('pk-avatar-btn');
-  const addBtn = document.getElementById('pk-add-btn');
-  const fileBtn = document.querySelector('button[onclick*="pk-file-input"]');
-  btn.disabled = true;
-  if(addBtn) addBtn.disabled = true;
-  if(fileBtn) fileBtn.disabled = true;
-  st('pk-status', `⏳ Mengambil avatar "${user}"…`, 'loading');
-
-  try{
-    const res = await fetch(`${BASE}/api/avatar/wearing?user=${encodeURIComponent(user)}`);
-    if(!res.ok){ const e = await res.json(); throw new Error(e.error || 'Avatar tidak ditemukan'); }
-    const data = await res.json();
-    const items = data.items || [];
-    if(items.length === 0){
-      st('pk-status', `✗ "${data.username||user}" tidak sedang memakai item apa pun.`, 'err');
-      return;
-    }
-
-    let added = 0, skipped = 0, failed = 0;
-    for(let i=0; i<items.length; i++){
-      st('pk-status', `⏳ Menambahkan item ${i+1}/${items.length} dari avatar ${data.username||user}…`, 'loading');
-      const r = await addPackedItemById(items[i].id);
-      if(r.ok) added++;
-      else if(r.duplicate) skipped++;
-      else failed++;
-    }
-    renderPackedGrid();
-    input.value = '';
-
-    const parts = [`✓ ${added} item ditambahkan dari avatar ${data.username||user}`];
-    if(skipped) parts.push(`${skipped} sudah ada`);
-    if(failed) parts.push(`${failed} gagal`);
-    st('pk-status', parts.join(', ') + ` (${packedItems.length} total di daftar)`, added>0 ? 'ok' : 'err');
-  }catch(e){
-    st('pk-status', '✗ '+e.message, 'err');
-  }finally{
-    btn.disabled = false;
-    if(addBtn) addBtn.disabled = false;
-    if(fileBtn) fileBtn.disabled = false;
-  }
 }
 
 function removePackedItem(id){
@@ -2537,7 +2425,7 @@ async function downloadImage2DVariant(variant){
   const label = variant === 'template' ? 'Raw Template' : 'UV Bake';
   st('img2d-status',`⏳ Mengunduh ${label}...`,'loading');
   try{
-    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentImage2DId}&variant=${variant}&name=${encodeURIComponent(currentImage2DName)}`);
+    const res = await fetch(`${EDGE_BASE}/api/catalog/image?asset_id=${currentImage2DId}&variant=${variant}&name=${encodeURIComponent(currentImage2DName)}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||`Gagal mengunduh ${label}`); }
     const blob = await res.blob();
     const cd = res.headers.get('content-disposition')||'';
@@ -2557,7 +2445,7 @@ async function downloadImage2D(){
   btn.disabled = true;
   st('img2d-status','⏳ Mengunduh gambar…','loading');
   try{
-    const res = await fetch(`${BASE}/api/catalog/image?asset_id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
+    const res = await fetch(`${EDGE_BASE}/api/catalog/image?asset_id=${currentImage2DId}&name=${encodeURIComponent(currentImage2DName)}`);
     if(!res.ok){ const e=await res.json(); throw new Error(e.error||'Gagal mengunduh gambar'); }
     const blob = await res.blob();
     const cd = res.headers.get('content-disposition')||'';
@@ -2988,7 +2876,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 document.getElementById('av-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchAvatar(); });
 document.getElementById('cat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchCatalog(); });
 document.getElementById('pk-input').addEventListener('keydown',e=>{ if(e.key==='Enter') addPackedItem(); });
-document.getElementById('pk-avatar-input').addEventListener('keydown',e=>{ if(e.key==='Enter') addPackedItemsFromAvatar(); });
 
 let currentAudioId = null;
 

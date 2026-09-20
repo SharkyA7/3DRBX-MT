@@ -13,6 +13,7 @@
 
 const CACHEABLE_PATHS = new Set([
   "/api/v2/model/mesh",
+  "/api/v2/model/mesh-union",
   "/api/v2/model/texture",
   "/api/catalog/image",
 ]);
@@ -49,6 +50,11 @@ export default {
     if (cached) {
       const hit = new Response(cached.body, cached);
       hit.headers.set("X-Edge-Cache", "hit");
+      // The site itself is served from a different origin (getrbx3d.qzz.io on
+      // Vercel) but fetches these specific routes from this Worker's domain --
+      // that's a cross-origin request, so the browser needs this header or it
+      // silently blocks the response from ever reaching the page's JS.
+      hit.headers.set("Access-Control-Allow-Origin", "*");
       return hit;
     }
 
@@ -65,6 +71,7 @@ export default {
       // for everyone else requesting the same asset a moment later).
       const miss = new Response(backendResponse.body, backendResponse);
       miss.headers.set("X-Edge-Cache", "miss-error");
+      miss.headers.set("Access-Control-Allow-Origin", "*");
       return miss;
     }
 
@@ -74,6 +81,7 @@ export default {
       `public, max-age=${CACHE_TTL_SECONDS}, immutable`
     );
     response.headers.set("X-Edge-Cache", "miss");
+    response.headers.set("Access-Control-Allow-Origin", "*");
 
     // Store a clone in the edge cache without blocking the response back to
     // this user.
