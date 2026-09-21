@@ -95,9 +95,22 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       <button class="btn active" id="uv-mode-checker">🏁 UV CHECKER</button>
       <button class="btn-outline" id="uv-mode-real" style="display:none">🖼 REAL TEXTURE</button>
       <button class="btn-outline" id="uv-mode-wire">◇ WIREFRAME</button>
+      <button class="btn-outline" id="uv-mode-2d">🗺 LOAD 2D UV MAP</button>
     </div>
     <div class="legend">
       Each square is one UV tile. <b>Even, unstretched squares</b> = clean UVs. <b>Squares that stretch, squish, or blur</b> mark distorted UVs on that part of the mesh. The colored corner labels help spot mirrored or rotated UV shells. Meshes with <b>no UV data at all</b> render solid <span style="color:var(--red)">red</span>.
+    </div>
+
+    <div id="uv-2d-section" style="display:none;margin-top:18px">
+      <div class="viewer-wrap" style="background:#0a0a0a">
+        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:block"></canvas>
+      </div>
+      <div class="toggle-row">
+        <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
+      </div>
+      <div class="legend">
+        Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.
+      </div>
     </div>
   </div>
 
@@ -237,6 +250,8 @@ async function handleFile(file){
   activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
   activeBlobUrls = [];
   document.getElementById('viewer-section').style.display = 'none';
+  document.getElementById('uv-2d-section').style.display = 'none';
+  document.getElementById('uv-mode-2d').classList.remove('active');
   wireframeOn = false;
   document.getElementById('uv-mode-wire').classList.remove('active');
 
@@ -357,6 +372,103 @@ document.getElementById('uv-mode-wire').addEventListener('click', () => {
   wireframeOn = !wireframeOn;
   currentRoot.traverse(child => { if(child.isMesh) child.material.wireframe = wireframeOn; });
   document.getElementById('uv-mode-wire').classList.toggle('active', wireframeOn);
+});
+
+// ── 2D UV layout: flatten every mesh's UVs into a single 0-1 image ──
+const MESH_COLORS = ['#50E8F4','#00FFB3','#FFD166','#FF6B9D','#B084F5','#FF9F4A','#5DD9C1','#F45D9C'];
+
+function buildUVLayoutCanvas(root, size = 1024){
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, size, size);
+
+  // faint grid, same 16 cells as the 3D checker, for scale reference
+  ctx.strokeStyle = 'rgba(255,255,255,.08)';
+  ctx.lineWidth = 1;
+  for(let i = 0; i <= 16; i++){
+    const p = (i / 16) * size;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+  }
+  // 0-1 bounds
+  ctx.strokeStyle = 'rgba(255,255,255,.4)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, size - 2, size - 2);
+
+  let meshIdx = 0, drawnAny = false;
+  root.traverse(child => {
+    if(!child.isMesh) return;
+    const uvAttr = child.geometry.attributes && child.geometry.attributes.uv;
+    if(!uvAttr) return; // no UVs — nothing to plot for this mesh
+
+    const color = MESH_COLORS[meshIdx % MESH_COLORS.length];
+    meshIdx++;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.85;
+
+    const idx = child.geometry.index;
+    const triCount = idx ? idx.count / 3 : uvAttr.count / 3;
+    const getUV = i => {
+      const vi = idx ? idx.getX(i) : i;
+      return [uvAttr.getX(vi) * size, (1 - uvAttr.getY(vi)) * size]; // flip V: UV origin is bottom-left, canvas is top-left
+    };
+
+    for(let t = 0; t < triCount; t++){
+      const a = getUV(t * 3), b = getUV(t * 3 + 1), c = getUV(t * 3 + 2);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.lineTo(c[0], c[1]);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    drawnAny = true;
+  });
+  ctx.globalAlpha = 1;
+
+  if(!drawnAny){
+    ctx.fillStyle = '#FF4466';
+    ctx.font = `bold ${Math.round(size * 0.03)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('No UV data found on any mesh', size / 2, size / 2);
+  }
+  return canvas;
+}
+
+document.getElementById('uv-mode-2d').addEventListener('click', () => {
+  if(!currentRoot) return;
+  const section = document.getElementById('uv-2d-section');
+  const btn = document.getElementById('uv-mode-2d');
+  const showing = section.style.display !== 'none';
+  if(showing){
+    section.style.display = 'none';
+    btn.classList.remove('active');
+    return;
+  }
+  const src = buildUVLayoutCanvas(currentRoot);
+  const dest = document.getElementById('uv-2d-canvas');
+  dest.width = src.width; dest.height = src.height;
+  dest.getContext('2d').drawImage(src, 0, 0);
+  section.style.display = 'block';
+  btn.classList.add('active');
+});
+
+document.getElementById('uv-2d-download').addEventListener('click', () => {
+  const canvas = document.getElementById('uv-2d-canvas');
+  if(!canvas.width) return;
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'uv-layout.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 });
 
 const dropZone = document.getElementById('drop-zone');
