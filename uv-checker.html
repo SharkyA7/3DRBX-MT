@@ -304,11 +304,9 @@ async function handleFile(file){
         const hasUV = !!(child.geometry.attributes && child.geometry.attributes.uv);
         if(!hasUV) uvlessCount++;
         child.userData.realMap = (child.material && child.material.map) || null;
-        child.material = new THREE.MeshStandardMaterial({
+        child.material = new THREE.MeshBasicMaterial({
           map: hasUV ? checkerTexture : null,
-          color: hasUV ? 0xffffff : 0xff4466,
-          roughness: 0.85,
-          metalness: 0.05
+          color: hasUV ? 0xffffff : 0xff4466
         });
       }
     });
