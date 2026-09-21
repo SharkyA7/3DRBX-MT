@@ -3729,6 +3729,13 @@ def terms_page():
     from flask import send_from_directory
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "terms.html")
 
+@app.get("/uv-checker")
+@app.get("/UV-Checker")
+@app.get("/uvchecker")
+def uv_checker_page():
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)) + "/../", "uv-checker.html")
+
 
 # ── ROBLOX OAUTH 2.0 ENDPOINTS ───────────────────────────────────
 
