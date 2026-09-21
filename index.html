@@ -325,6 +325,8 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
   font-size:11px;color:var(--muted);cursor:pointer;transition:color .15s;background:none;
   border:none;padding:4px 8px;border-radius:6px;}
 .footer-contact-item:hover{color:var(--accent);background:rgba(80,232,244,.06);}
+.footer-contact-item.donate{color:#00c46a;border:1px solid rgba(0,196,106,.35);}
+.footer-contact-item.donate:hover{color:#00e67a;background:rgba(0,196,106,.1);}
 
 
 .rgba-channel-row{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;}
@@ -939,6 +941,20 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
     <div class="nudge-actions">
       <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/login'">🔑 Login dengan Roblox</button>
       <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
+    </div>
+  </div>
+</div>
+
+<div class="nudge-overlay" id="donate-nudge-overlay" style="display:none">
+  <div class="nudge-box" id="donate-nudge-box">
+    <div class="nudge-icon">☕</div>
+    <div class="nudge-title" data-t-id="Senang bisa bantu!" data-t-en="Glad this helped!">Senang bisa bantu!</div>
+    <div class="nudge-body" data-t-id="Kelihatannya kamu sering pakai tool ini. Tool ini gratis dan bakal terus gratis — tapi hosting &amp; CDN tetap makan biaya tiap bulan.<br><br>Kalau tool ini ngebantu kerjaan kamu, dukungan kecil lewat <strong>PayPal</strong> bakal sangat membantu untuk jaga tool ini tetap online." data-t-en="Looks like you're getting good use out of this tool. It's free and will stay free — but hosting &amp; CDN still cost money every month.<br><br>If this tool has been useful for your work, a small tip via <strong>PayPal</strong> goes a long way toward keeping it online.">
+      Kelihatannya kamu sering pakai tool ini. Tool ini gratis dan bakal terus gratis — tapi hosting &amp; CDN tetap makan biaya tiap bulan.<br><br>Kalau tool ini ngebantu kerjaan kamu, dukungan kecil lewat <strong>PayPal</strong> bakal sangat membantu untuk jaga tool ini tetap online.
+    </div>
+    <div class="nudge-actions">
+      <button class="nudge-btn-login" style="background:#00c46a" onmouseover="this.style.background='#00e67a'" onmouseout="this.style.background='#00c46a'" onclick="window.open('https://paypal.me/Shafarois','_blank','noopener');closeDonateNudge(true)">☕ <span data-t-id="Dukung via PayPal" data-t-en="Support via PayPal">Dukung via PayPal</span></button>
+      <button class="nudge-btn-continue" onclick="closeDonateNudge(false)"><span data-t-id="Mungkin Lain Kali" data-t-en="Maybe Later">Mungkin Lain Kali</span></button>
     </div>
   </div>
 </div>
@@ -1748,6 +1764,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Download avatar user beserta accessories yang sedang dipakai (worn accessories)" data-t-en="Download a user's avatar including the accessories currently worn">Download avatar user beserta accessories yang sedang dipakai (worn accessories)</span></li>
           <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Upload file TXT berisi daftar ID untuk download banyak accessories Roblox sekaligus" data-t-en="Upload a TXT file with a list of IDs to batch-download multiple Roblox accessories at once">Upload file TXT berisi daftar ID untuk download banyak accessories Roblox sekaligus</span></li>
           <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Peningkatan performa CDN untuk fetch & download yang lebih cepat" data-t-en="CDN performance improvements for faster fetch & download">Peningkatan performa CDN untuk fetch & download yang lebih cepat</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Tombol dukungan PayPal ditambahkan di footer untuk membantu biaya hosting/CDN" data-t-en="PayPal support button added to the footer to help cover hosting/CDN costs">Tombol dukungan PayPal ditambahkan di footer untuk membantu biaya hosting/CDN</span></li>
         </ul>
       </div>
     </div>
@@ -1912,6 +1929,9 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 <footer>
   <span data-t-id="ROBLOX 3D DOWNLOADER · TIDAK RESMI · TIDAK BERAFILIASI DENGAN ROBLOX CORPORATION" data-t-en="ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION">ROBLOX 3D DOWNLOADER · UNOFFICIAL · NOT AFFILIATED WITH ROBLOX CORPORATION</span>
   <div class="footer-contact">
+    <a class="footer-contact-item donate" href="https://paypal.me/Shafarois" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+      ☕ <span data-t-id="Dukung tool ini via PayPal" data-t-en="Support this tool via PayPal">Dukung tool ini via PayPal</span>
+    </a>
     <button class="footer-contact-item" onclick="location.href='mailto:shafarois5@gmail.com?subject=Bug Report - 3DRBXMT'">
       ✉️ <span data-t-id="Laporkan Bug via Email" data-t-en="Report Bug via Email">Laporkan Bug via Email</span>
     </button>
@@ -4219,6 +4239,71 @@ document.addEventListener('DOMContentLoaded', () => {
       const original = window[name];
       window[name] = function(...args){
         trackFetchAction();
+        return original.apply(this, args);
+      };
+    }
+  });
+});
+</script>
+
+<script>
+// Donate nudge: shown at real "successful download" moments (not just previews/fetches),
+// with a growing snooze gap so it never nags. Fully opts out once someone donates.
+function trackDownloadAction(){
+  if(localStorage.getItem('rbx3d_donate_dismissed') === '1') return;
+  let count = parseInt(localStorage.getItem('rbx3d_donate_count') || '0', 10);
+  count += 1;
+  localStorage.setItem('rbx3d_donate_count', count.toString());
+  let nextAt = parseInt(localStorage.getItem('rbx3d_donate_next_at') || '3', 10);
+  if(count >= nextAt){
+    showDonateNudge();
+  }
+}
+function showDonateNudge(){
+  const overlay = document.getElementById('donate-nudge-overlay');
+  overlay.style.display = 'flex';
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    const box = document.getElementById('donate-nudge-box');
+    box.style.opacity = '0';
+    box.style.transform = 'scale(0.92)';
+    animate(box, { opacity:[0,1], scale:[0.92,1] }, { duration:0.35, easing:[0.22,1,0.36,1] });
+  }
+}
+function closeDonateNudge(supported){
+  const overlay = document.getElementById('donate-nudge-overlay');
+  if(supported){
+    localStorage.setItem('rbx3d_donate_dismissed', '1'); // don't ask again after they've donated
+  }else{
+    const count = parseInt(localStorage.getItem('rbx3d_donate_count') || '0', 10);
+    const prevGap = parseInt(localStorage.getItem('rbx3d_donate_gap') || '7', 10);
+    const nextGap = prevGap * 2; // back off further each time: 3 -> +7 -> +14 -> +28 ...
+    localStorage.setItem('rbx3d_donate_next_at', (count + prevGap).toString());
+    localStorage.setItem('rbx3d_donate_gap', nextGap.toString());
+  }
+  if(typeof Motion !== 'undefined'){
+    const { animate } = Motion;
+    animate(overlay, { opacity:[1,0] }, { duration:0.2 }).then(() => {
+      overlay.style.display = 'none';
+      overlay.style.opacity = '1';
+    });
+  } else {
+    overlay.style.display = 'none';
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const downloadFnNames = [
+    'downloadAvatar','downloadCatalog','downloadCatalogImage','downloadCatalogImageVariant',
+    'downloadPackedCatalog','downloadImage2DVariant','downloadImage2D','downloadFont2D',
+    'downloadVideo2D','downloadPacked2DImages','downloadReal','downloadProcedural','downloadAudio',
+    'downloadOBJZipFromUpload','downloadRBXM','downloadSingleMap','downloadTextures',
+    'downloadBakePrisma','downloadBakeBlender','downloadBakeStudio','downloadBakeUnreal','downloadRGBAPacked'
+  ];
+  downloadFnNames.forEach(name => {
+    if(typeof window[name] === 'function'){
+      const original = window[name];
+      window[name] = function(...args){
+        trackDownloadAction();
         return original.apply(this, args);
       };
     }
