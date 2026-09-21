@@ -66,6 +66,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 
 .legend{margin-top:18px;padding:14px 16px;background:var(--s1);border:1px solid var(--border);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;}
 .legend b{color:var(--white);}
+
+.warn-box{margin-top:14px;padding:12px 14px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.35);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--amber);line-height:1.6;}
+.warn-box b{color:var(--white);}
 </style>
 </head>
 <body>
@@ -114,6 +117,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       </div>
       <div class="toggle-row">
         <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
+      </div>
+      <div class="warn-box">
+        ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
       </div>
       <div class="legend">
         Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.
