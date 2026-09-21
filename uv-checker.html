@@ -61,6 +61,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .btn.active{background:var(--green);box-shadow:0 0 16px rgba(0,255,179,.35);}
 .btn-outline.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
 
+.progress-track{width:100%;height:8px;border-radius:4px;background:var(--s2);overflow:hidden;border:1px solid var(--border2);}
+.progress-fill{height:100%;width:0%;background:var(--accent);transition:width .12s linear;box-shadow:0 0 8px rgba(80,232,244,.5);}
+
 .legend{margin-top:18px;padding:14px 16px;background:var(--s1);border:1px solid var(--border);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;}
 .legend b{color:var(--white);}
 </style>
@@ -102,8 +105,12 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
     </div>
 
     <div id="uv-2d-section" style="display:none;margin-top:18px">
+      <div id="uv-2d-progress-wrap" style="display:none">
+        <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
+        <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
+      </div>
       <div class="viewer-wrap" style="background:#0a0a0a">
-        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:block"></canvas>
+        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:none"></canvas>
       </div>
       <div class="toggle-row">
         <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
@@ -375,16 +382,22 @@ document.getElementById('uv-mode-wire').addEventListener('click', () => {
 });
 
 // ── 2D UV layout: flatten every mesh's UVs into a single 0-1 image ──
+// Runs in chunks with requestAnimationFrame breathers so a dense, high-poly
+// model (thousands of triangles) doesn't block the main thread long enough
+// to hang/crash the tab. Each mesh is batched into one Path2D + one stroke()
+// call instead of one stroke() per triangle, which is the main cost cut.
 const MESH_COLORS = ['#50E8F4','#00FFB3','#FFD166','#FF6B9D','#B084F5','#FF9F4A','#5DD9C1','#F45D9C'];
+const UV_CHUNK_TRIS = 4000; // triangles per yield within a single mesh
 
-function buildUVLayoutCanvas(root, size = 1024){
+function nextFrame(){ return new Promise(r => requestAnimationFrame(r)); }
+
+async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(0, 0, size, size);
 
-  // faint grid, same 16 cells as the 3D checker, for scale reference
   ctx.strokeStyle = 'rgba(255,255,255,.08)';
   ctx.lineWidth = 1;
   for(let i = 0; i <= 16; i++){
@@ -392,53 +405,62 @@ function buildUVLayoutCanvas(root, size = 1024){
     ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
   }
-  // 0-1 bounds
   ctx.strokeStyle = 'rgba(255,255,255,.4)';
   ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, size - 2, size - 2);
 
-  let meshIdx = 0, drawnAny = false;
+  const meshes = [];
   root.traverse(child => {
-    if(!child.isMesh) return;
-    const uvAttr = child.geometry.attributes && child.geometry.attributes.uv;
-    if(!uvAttr) return; // no UVs — nothing to plot for this mesh
-
-    const color = MESH_COLORS[meshIdx % MESH_COLORS.length];
-    meshIdx++;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.85;
-
-    const idx = child.geometry.index;
-    const triCount = idx ? idx.count / 3 : uvAttr.count / 3;
-    const getUV = i => {
-      const vi = idx ? idx.getX(i) : i;
-      return [uvAttr.getX(vi) * size, (1 - uvAttr.getY(vi)) * size]; // flip V: UV origin is bottom-left, canvas is top-left
-    };
-
-    for(let t = 0; t < triCount; t++){
-      const a = getUV(t * 3), b = getUV(t * 3 + 1), c = getUV(t * 3 + 2);
-      ctx.beginPath();
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-      ctx.lineTo(c[0], c[1]);
-      ctx.closePath();
-      ctx.stroke();
-    }
-    drawnAny = true;
+    if(child.isMesh && child.geometry.attributes && child.geometry.attributes.uv) meshes.push(child);
   });
-  ctx.globalAlpha = 1;
 
-  if(!drawnAny){
+  if(meshes.length === 0){
     ctx.fillStyle = '#FF4466';
     ctx.font = `bold ${Math.round(size * 0.03)}px monospace`;
     ctx.textAlign = 'center';
     ctx.fillText('No UV data found on any mesh', size / 2, size / 2);
+    if(onProgress) onProgress(1);
+    return canvas;
   }
+
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.85;
+
+  for(let m = 0; m < meshes.length; m++){
+    const child = meshes[m];
+    ctx.strokeStyle = MESH_COLORS[m % MESH_COLORS.length];
+    const uvAttr = child.geometry.attributes.uv;
+    const idx = child.geometry.index;
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+    const getUV = i => {
+      const vi = idx ? idx.getX(i) : i;
+      return [uvAttr.getX(vi) * size, (1 - uvAttr.getY(vi)) * size]; // UV origin is bottom-left, canvas is top-left
+    };
+
+    let path = new Path2D();
+    for(let t = 0; t < triCount; t++){
+      const a = getUV(t * 3), b = getUV(t * 3 + 1), c = getUV(t * 3 + 2);
+      path.moveTo(a[0], a[1]);
+      path.lineTo(b[0], b[1]);
+      path.lineTo(c[0], c[1]);
+      path.closePath();
+
+      if((t + 1) % UV_CHUNK_TRIS === 0){
+        ctx.stroke(path);
+        path = new Path2D();
+        await nextFrame(); // let the browser paint/handle input before continuing
+      }
+    }
+    ctx.stroke(path);
+
+    if(onProgress) onProgress((m + 1) / meshes.length);
+    await nextFrame();
+  }
+  ctx.globalAlpha = 1;
   return canvas;
 }
 
-document.getElementById('uv-mode-2d').addEventListener('click', () => {
+document.getElementById('uv-mode-2d').addEventListener('click', async () => {
   if(!currentRoot) return;
   const section = document.getElementById('uv-2d-section');
   const btn = document.getElementById('uv-mode-2d');
@@ -448,12 +470,36 @@ document.getElementById('uv-mode-2d').addEventListener('click', () => {
     btn.classList.remove('active');
     return;
   }
-  const src = buildUVLayoutCanvas(currentRoot);
+
+  const progressWrap = document.getElementById('uv-2d-progress-wrap');
+  const progressFill = document.getElementById('uv-2d-progress-fill');
+  const progressLabel = document.getElementById('uv-2d-progress-label');
   const dest = document.getElementById('uv-2d-canvas');
-  dest.width = src.width; dest.height = src.height;
-  dest.getContext('2d').drawImage(src, 0, 0);
+
   section.style.display = 'block';
   btn.classList.add('active');
+  btn.disabled = true;
+  dest.style.display = 'none';
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressLabel.textContent = 'Building UV layout… 0%';
+
+  try{
+    const src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
+      const p = Math.round(pct * 100);
+      progressFill.style.width = p + '%';
+      progressLabel.textContent = `Building UV layout… ${p}%`;
+    });
+    dest.width = src.width; dest.height = src.height;
+    dest.getContext('2d').drawImage(src, 0, 0);
+    dest.style.display = 'block';
+    progressWrap.style.display = 'none';
+  }catch(err){
+    progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
+    progressFill.style.width = '0%';
+  }finally{
+    btn.disabled = false;
+  }
 });
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
