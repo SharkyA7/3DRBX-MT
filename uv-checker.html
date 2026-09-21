@@ -334,8 +334,10 @@ async function handleFile(file){
 
 document.getElementById('uv-mode-checker').addEventListener('click', () => {
   if(!currentRoot) return;
+  wireframeOn = false;
+  document.getElementById('uv-mode-wire').classList.remove('active');
   currentRoot.traverse(child => {
-    if(child.isMesh){ child.material.map = checkerTexture; child.material.color.set(0xffffff); child.material.needsUpdate = true; }
+    if(child.isMesh){ child.material.map = checkerTexture; child.material.color.set(0xffffff); child.material.wireframe = false; child.material.needsUpdate = true; }
   });
   document.getElementById('uv-mode-checker').classList.add('active');
   document.getElementById('uv-mode-real').classList.remove('active');
@@ -343,8 +345,10 @@ document.getElementById('uv-mode-checker').addEventListener('click', () => {
 
 document.getElementById('uv-mode-real').addEventListener('click', () => {
   if(!currentRoot) return;
+  wireframeOn = false;
+  document.getElementById('uv-mode-wire').classList.remove('active');
   currentRoot.traverse(child => {
-    if(child.isMesh){ child.material.map = child.userData.realMap; child.material.color.set(0xffffff); child.material.needsUpdate = true; }
+    if(child.isMesh){ child.material.map = child.userData.realMap; child.material.color.set(0xffffff); child.material.wireframe = false; child.material.needsUpdate = true; }
   });
   document.getElementById('uv-mode-real').classList.add('active');
   document.getElementById('uv-mode-checker').classList.remove('active');
