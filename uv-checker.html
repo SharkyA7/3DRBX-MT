@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3DRBXMT — UV Map Checker</title>
+<meta name="description" content="Upload a 3D model (.obj, or the OBJ+MTL+texture .zip downloaded from this tool) and inspect its UV layout with a checkerboard overlay right in the browser.">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#001619;--s1:#03181C;--s2:#052228;--s3:#082C33;
+  --accent:#50E8F4;--green:#00FFB3;--amber:#FFD166;--red:#FF4466;
+  --white:#C7F8FE;--muted:#6FA0A6;
+  --border:#0C2A2E;--border2:#153B40;
+  --font-px:'Press Start 2P',monospace;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-ui:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{overflow-x:hidden;width:100%}
+body{background:var(--bg);color:var(--white);font-family:var(--font-ui);min-height:100vh;overflow-x:hidden;background-image:linear-gradient(rgba(80,232,244,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(80,232,244,.025) 1px,transparent 1px);background-size:56px 56px;}
+.back-link{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-decoration:none;padding:6px 0;}
+.back-link:hover{color:var(--white)}
+header{text-align:center;padding:44px 20px 28px;position:relative;}
+header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:500px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-ui);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(80,232,244,.25);padding:4px 12px;border-radius:20px;background:rgba(80,232,244,.06);margin:14px 0 18px;}
+.hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulsedot 2s infinite;}
+@keyframes pulsedot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+h1{font-family:var(--font-px);font-size:clamp(14px,3vw,22px);color:var(--white);letter-spacing:3px;line-height:1.5;margin-bottom:10px;}
+h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
+.sub{font-family:var(--font-ui);font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.06em;max-width:480px;margin:0 auto;}
+
+.container{max-width:640px;margin:0 auto;padding:0 20px 60px;}
+
+.drop-zone{border:2px dashed var(--border2);border-radius:12px;padding:44px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--s1);}
+.drop-zone:hover{border-color:var(--accent2,var(--accent));}
+.drop-zone.dragover{border-color:var(--accent);background:rgba(80,232,244,.06);}
+.drop-zone .icon{font-size:32px;margin-bottom:10px;}
+.drop-zone .label{font-family:var(--font-ui);font-size:13px;font-weight:600;color:var(--white);}
+.hint{font-family:var(--font-ui);font-size:11px;color:var(--muted);margin-top:8px;}
+
+.status-box{min-height:20px;display:flex;align-items:flex-start;gap:8px;font-family:var(--font-ui);font-size:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.idle{color:var(--muted)}.idle .dot{background:var(--muted)}
+.loading{color:var(--amber)}.loading .dot{background:var(--amber);animation:blink .7s infinite;box-shadow:0 0 8px var(--amber)}
+.ok{color:var(--green)}.ok .dot{background:var(--green);box-shadow:0 0 8px var(--green)}
+.err{color:var(--red)}.err .dot{background:var(--red);box-shadow:0 0 8px var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+.viewer-wrap{width:100%;aspect-ratio:1;max-width:560px;margin:22px auto 0;background:#0a0a0a;border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--border2);}
+#uv-canvas{width:100%;height:100%;display:block;touch-action:none;}
+.viewer-hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-family:var(--font-mono);font-size:10px;color:var(--muted);pointer-events:none;opacity:.7;}
+
+.toggle-row{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap;}
+.btn{background:var(--accent);color:#000;border:none;border-radius:8px;font-family:var(--font-ui);font-size:12px;font-weight:700;padding:11px 18px;cursor:pointer;letter-spacing:.04em;transition:background .15s,box-shadow .15s,transform .1s;white-space:nowrap;}
+.btn:hover{background:#00EEFF;box-shadow:0 0 20px rgba(80,232,244,.4);}
+.btn:active{transform:scale(.97)}
+.btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;box-shadow:none;}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--white);}
+.btn-outline:hover{background:var(--s3);box-shadow:none;border-color:var(--accent);}
+.btn.active{background:var(--green);box-shadow:0 0 16px rgba(0,255,179,.35);}
+.btn-outline.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
+
+.legend{margin-top:18px;padding:14px 16px;background:var(--s1);border:1px solid var(--border);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;}
+.legend b{color:var(--white);}
+</style>
+</head>
+<body>
+
+<div style="max-width:640px;margin:0 auto;padding:14px 20px 0"><a href="/" class="back-link">← Back to 3DRBXMT</a></div>
+
+<header>
+  <div class="hero-tag">🎨 UV INSPECTOR</div>
+  <h1>UV MAP <span class="hl">CHECKER</span></h1>
+  <div class="sub">Upload a 3D model and see exactly how its UVs are laid out — spot stretching, mirroring, and missing UVs before you use the file.</div>
+</header>
+
+<div class="container">
+
+  <div class="drop-zone" id="drop-zone">
+    <div class="icon">📦</div>
+    <div class="label">Click or drag a file here</div>
+    <div class="hint">Accepts a plain <b>.obj</b>, or the <b>.zip</b> (OBJ+MTL+texture) downloaded from 3DRBXMT — from anywhere, not just this tool.</div>
+    <input type="file" id="file-input" accept=".obj,.zip" style="display:none">
+  </div>
+
+  <div class="status-box idle" id="uv-status"><div class="dot"></div><span id="uv-msg">No model loaded yet.</span></div>
+
+  <div id="viewer-section" style="display:none">
+    <div class="viewer-wrap">
+      <canvas id="uv-canvas"></canvas>
+      <div class="viewer-hint">drag to orbit · scroll to zoom</div>
+    </div>
+    <div class="toggle-row">
+      <button class="btn active" id="uv-mode-checker">🏁 UV CHECKER</button>
+      <button class="btn-outline" id="uv-mode-real" style="display:none">🖼 REAL TEXTURE</button>
+      <button class="btn-outline" id="uv-mode-wire">◇ WIREFRAME</button>
+    </div>
+    <div class="legend">
+      Each square is one UV tile. <b>Even, unstretched squares</b> = clean UVs. <b>Squares that stretch, squish, or blur</b> mark distorted UVs on that part of the mesh. The colored corner labels help spot mirrored or rotated UV shells. Meshes with <b>no UV data at all</b> render solid <span style="color:var(--red)">red</span>.
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+let scene, camera, renderer, controls;
+let currentRoot = null;
+let checkerTexture = null;
+let wireframeOn = false;
+let activeBlobUrls = [];
+
+function st(msg, kind){
+  const box = document.getElementById('uv-status');
+  box.className = 'status-box ' + kind;
+  box.querySelector('span').textContent = msg;
+}
+
+// Procedural UV checker: a rainbow-hued grid (not just black/white) so both
+// STRETCHING (uneven squares) and ORIENTATION (mirroring/rotation, which a
+// plain 2-color checker can't reveal but a colored one does) are visible at a
+// glance. Corner labels pin down which way is (0,0)/(1,1) in UV space.
+function createCheckerCanvas(size = 1024, cells = 16){
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cell = size / cells;
+
+  for(let y = 0; y < cells; y++){
+    for(let x = 0; x < cells; x++){
+      const hue = ((x + y) * (360 / cells)) % 360;
+      const dark = (x + y) % 2 === 0;
+      ctx.fillStyle = `hsl(${hue} 60% ${dark ? 32 : 68}%)`;
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+    }
+  }
+
+  ctx.strokeStyle = 'rgba(0,0,0,.35)';
+  ctx.lineWidth = Math.max(1, size / 512);
+  for(let i = 0; i <= cells; i++){
+    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(size, i * cell); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.round(size * 0.032)}px monospace`;
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  ctx.fillText('(0,0)', 10, 10);
+  ctx.textAlign = 'right';
+  ctx.fillText('(1,0)', size - 10, 10);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('(1,1)', size - 10, size - 10);
+  ctx.textAlign = 'left';
+  ctx.fillText('(0,1)', 10, size - 10);
+
+  return canvas;
+}
+
+function initScene(){
+  const canvas = document.getElementById('uv-canvas');
+  const wrap = canvas.parentElement;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0a);
+
+  camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+
+  try{
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, failIfMajorPerformanceCaveat: false });
+  }catch(err){
+    st('WebGL is not supported in this browser/device.', 'err');
+    return;
+  }
+  const size = wrap.clientWidth;
+  renderer.setSize(size, size);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const d1 = new THREE.DirectionalLight(0xffffff, 1.1); d1.position.set(2, 3, 4); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x6699ff, 0.35); d2.position.set(-2, -1, -3); scene.add(d2);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  checkerTexture = new THREE.CanvasTexture(createCheckerCanvas());
+  checkerTexture.wrapS = checkerTexture.wrapT = THREE.RepeatWrapping; // UVs outside 0-1 visibly tile instead of silently clamping
+  if(THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
+
+  (function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  })();
+
+  window.addEventListener('resize', () => {
+    const s = wrap.clientWidth;
+    renderer.setSize(s, s);
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+  });
+}
+
+function frameObject(object){
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  object.position.sub(center);
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const dist = maxDim * 1.7;
+  camera.position.set(dist * 0.55, dist * 0.45, dist * 0.8);
+  camera.near = maxDim / 200;
+  camera.far = maxDim * 200;
+  camera.updateProjectionMatrix();
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+async function handleFile(file){
+  if(!file) return;
+
+  if(currentRoot){ scene.remove(currentRoot); currentRoot = null; }
+  activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
+  activeBlobUrls = [];
+  document.getElementById('viewer-section').style.display = 'none';
+  wireframeOn = false;
+  document.getElementById('uv-mode-wire').classList.remove('active');
+
+  st('⏳ Reading file…', 'loading');
+
+  try{
+    const lower = file.name.toLowerCase();
+    let objText, mtlText;
+    const imageFiles = {};
+
+    if(lower.endsWith('.zip')){
+      st('⏳ Unpacking ZIP…', 'loading');
+      const zip = await JSZip.loadAsync(file);
+      for(const filename of Object.keys(zip.files)){
+        const entry = zip.files[filename];
+        if(entry.dir) continue;
+        const l = filename.toLowerCase();
+        if(l.endsWith('.obj')) objText = await entry.async('text');
+        else if(l.endsWith('.mtl')) mtlText = await entry.async('text');
+        else if(/\.(png|jpe?g)$/.test(l)) imageFiles[filename.split('/').pop()] = await entry.async('blob');
+      }
+      if(!objText) throw new Error('This ZIP has no .obj file in it.');
+    }else if(lower.endsWith('.obj')){
+      objText = await file.text();
+    }else{
+      throw new Error('Unsupported format — upload a .obj file, or a .zip containing OBJ+MTL+textures.');
+    }
+
+    const blobUrlMap = {};
+    for(const [fname, fblob] of Object.entries(imageFiles)){
+      const url = URL.createObjectURL(fblob);
+      blobUrlMap[fname] = url;
+      activeBlobUrls.push(url);
+    }
+
+    const hasRealTexture = Object.keys(imageFiles).length > 0 && !!mtlText;
+    let root;
+
+    if(mtlText){
+      st('⏳ Loading material + texture…', 'loading');
+      const manager = new THREE.LoadingManager();
+      manager.setURLModifier(url => blobUrlMap[url.split('/').pop()] || url);
+
+      const mtlLoader = new MTLLoader(manager);
+      const materials = mtlLoader.parse(mtlText, '');
+      materials.preload();
+
+      const objLoader = new OBJLoader(manager);
+      objLoader.setMaterials(materials);
+      root = objLoader.parse(objText);
+
+      await new Promise(resolve => {
+        let done = false;
+        manager.onLoad = () => { if(!done){ done = true; resolve(); } };
+        setTimeout(() => { if(!done){ done = true; resolve(); } }, 8000); // don't hang forever if a texture never loads
+      });
+    }else{
+      root = new OBJLoader().parse(objText);
+    }
+
+    let meshCount = 0, uvlessCount = 0;
+    root.traverse(child => {
+      if(child.isMesh){
+        meshCount++;
+        const hasUV = !!(child.geometry.attributes && child.geometry.attributes.uv);
+        if(!hasUV) uvlessCount++;
+        child.userData.realMap = (child.material && child.material.map) || null;
+        child.material = new THREE.MeshStandardMaterial({
+          map: hasUV ? checkerTexture : null,
+          color: hasUV ? 0xffffff : 0xff4466,
+          roughness: 0.85,
+          metalness: 0.05
+        });
+      }
+    });
+
+    if(meshCount === 0) throw new Error('No mesh geometry found in this file.');
+
+    scene.add(root);
+    currentRoot = root;
+    frameObject(root);
+
+    document.getElementById('uv-mode-checker').classList.add('active');
+    document.getElementById('uv-mode-real').classList.remove('active');
+    document.getElementById('uv-mode-real').style.display = hasRealTexture ? 'inline-block' : 'none';
+    document.getElementById('viewer-section').style.display = 'block';
+
+    let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded.`;
+    if(uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
+    st(msg, uvlessCount > 0 ? 'err' : 'ok');
+  }catch(e){
+    st('✗ ' + e.message, 'err');
+  }
+}
+
+document.getElementById('uv-mode-checker').addEventListener('click', () => {
+  if(!currentRoot) return;
+  currentRoot.traverse(child => {
+    if(child.isMesh){ child.material.map = checkerTexture; child.material.color.set(0xffffff); child.material.needsUpdate = true; }
+  });
+  document.getElementById('uv-mode-checker').classList.add('active');
+  document.getElementById('uv-mode-real').classList.remove('active');
+});
+
+document.getElementById('uv-mode-real').addEventListener('click', () => {
+  if(!currentRoot) return;
+  currentRoot.traverse(child => {
+    if(child.isMesh){ child.material.map = child.userData.realMap; child.material.color.set(0xffffff); child.material.needsUpdate = true; }
+  });
+  document.getElementById('uv-mode-real').classList.add('active');
+  document.getElementById('uv-mode-checker').classList.remove('active');
+});
+
+document.getElementById('uv-mode-wire').addEventListener('click', () => {
+  if(!currentRoot) return;
+  wireframeOn = !wireframeOn;
+  currentRoot.traverse(child => { if(child.isMesh) child.material.wireframe = wireframeOn; });
+  document.getElementById('uv-mode-wire').classList.toggle('active', wireframeOn);
+});
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
+['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
+dropZone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+initScene();
+</script>
+</body>
+</html>
