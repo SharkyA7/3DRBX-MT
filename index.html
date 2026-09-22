@@ -241,6 +241,15 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .modal-scan{height:1px;background:linear-gradient(90deg,transparent,rgba(80,232,244,.3),transparent);margin:0 20px 12px}
 
 
+/* ── SAFETY / FAQ ─────────────────────────────────────────── */
+.safety-section{max-width:860px;margin:0 auto 40px;padding:0 16px;}
+.safety-header{font-family:var(--font-ui);font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-align:center;margin-bottom:16px;}
+.safety-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+.safety-item{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.safety-q{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--white);margin-bottom:6px;display:flex;gap:8px;align-items:flex-start;}
+.safety-a{font-family:var(--font-ui);font-size:12px;color:var(--muted);line-height:1.65;padding-left:24px;}
+.safety-a b{color:var(--accent3);}
+
 /* ── PATCH NOTES ─────────────────────────────────────────── */
 .patch-section{max-width:860px;margin:0 auto;padding:0 16px 60px}
 .patch-header{font-family:'Press Start 2P',monospace;font-size:11px;color:#e8000b;letter-spacing:2px;margin-bottom:24px;display:flex;align-items:center;gap:10px}
@@ -402,6 +411,46 @@ body.maintenance-mode .maint-banner{display:block;}
   "description": "Open-source tool for 3D artists and Roblox creators to export avatar meshes and catalog items for Nomad Sculpt, Prisma 3D, and Blender.",
   "isAccessibleForFree": true,
   "license": "https://github.com/SharkyA7/Roblox-downloader-backend/blob/main/LICENSE"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is 3DRBXMT a phishing site or a scam?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. 3DRBXMT is a free, open-source fan-made tool for 3D artists. It never asks for your Roblox password or any account credentials — it only reads publicly available data from Roblox's own public API (avatar meshes, catalog items) and lets you export them as OBJ/GLTF files. The full source code is public on GitHub for anyone to audit."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is 3DRBXMT affiliated with, endorsed by, or sponsored by Roblox Corporation?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. 3DRBXMT is an independent, unofficial, fan-made project built by a hobbyist 3D creator. It is not affiliated with, endorsed by, or sponsored by Roblox Corporation in any way."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does 3DRBXMT require login, or ask for my Roblox password?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No login is required to use the core tools. An optional Roblox OAuth login is offered purely to raise personal API rate limits (so heavy users don't share a limit with everyone else) — this uses Roblox's own official login flow, and 3DRBXMT never sees or stores your password."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is 3DRBXMT open source?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. The full backend and frontend source code is publicly available on GitHub under an open-source license, so anyone can inspect exactly what the tool does before using it."
+      }
+    }
+  ]
 }
 </script>
 <script type="importmap">
@@ -1749,6 +1798,24 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
   </div>
 </section>
 
+<section class="safety-section">
+  <div class="safety-header"><span data-t-id="APAKAH INI AMAN?" data-t-en="IS THIS SAFE?">IS THIS SAFE?</span></div>
+  <div class="safety-grid">
+    <div class="safety-item">
+      <div class="safety-q">🛡️ <span data-t-id="Apakah ini situs phishing atau scam?" data-t-en="Is this a phishing site or a scam?">Is this a phishing site or a scam?</span></div>
+      <div class="safety-a" data-t-id="Tidak. 3DRBXMT gak pernah minta password atau data akun Roblox kamu. Tool ini cuma baca data publik dari API resmi Roblox (mesh avatar, item katalog) lalu bantu kamu export jadi file OBJ/GLTF. Source code-nya <b>terbuka (open-source)</b> di GitHub, siapa aja bisa cek sendiri." data-t-en="No. 3DRBXMT never asks for your Roblox password or account data. It only reads publicly available data from Roblox's official API (avatar meshes, catalog items) and helps you export it as OBJ/GLTF files. The source code is <b>fully open-source</b> on GitHub — anyone can audit exactly what it does.">Tidak. 3DRBXMT gak pernah minta password atau data akun Roblox kamu. Tool ini cuma baca data publik dari API resmi Roblox (mesh avatar, item katalog) lalu bantu kamu export jadi file OBJ/GLTF. Source code-nya <b>terbuka (open-source)</b> di GitHub, siapa aja bisa cek sendiri.</div>
+    </div>
+    <div class="safety-item">
+      <div class="safety-q">🔗 <span data-t-id="Apakah ini resmi dari Roblox Corporation?" data-t-en="Is this made or endorsed by Roblox Corporation?">Is this made or endorsed by Roblox Corporation?</span></div>
+      <div class="safety-a" data-t-id="Bukan. 3DRBXMT adalah proyek <b>fan-made independen</b>, dibuat oleh kreator 3D biasa, bukan bagian dari Roblox Corporation dan gak berafiliasi dengannya." data-t-en="No. 3DRBXMT is an <b>independent, fan-made</b> project built by a solo 3D creator — it is not affiliated with, endorsed by, or part of Roblox Corporation.">Bukan. 3DRBXMT adalah proyek <b>fan-made independen</b>, dibuat oleh kreator 3D biasa, bukan bagian dari Roblox Corporation dan gak berafiliasi dengannya.</div>
+    </div>
+    <div class="safety-item">
+      <div class="safety-q">🔑 <span data-t-id="Apakah saya harus login pakai password Roblox?" data-t-en="Do I have to log in with my Roblox password?">Do I have to log in with my Roblox password?</span></div>
+      <div class="safety-a" data-t-id="Gak perlu buat fitur utama. Login Roblox itu <b>opsional</b>, cuma buat naikin limit personal, dan pakai jalur login resmi Roblox (OAuth) — password kamu <b>gak pernah lewat atau tersimpan</b> di server 3DRBXMT." data-t-en="Not for the core features. Roblox login is <b>optional</b>, only used to raise your personal rate limit, and goes through Roblox's own official OAuth login — your password <b>never passes through or is stored on</b> 3DRBXMT's servers.">Gak perlu buat fitur utama. Login Roblox itu <b>opsional</b>, cuma buat naikin limit personal, dan pakai jalur login resmi Roblox (OAuth) — password kamu <b>gak pernah lewat atau tersimpan</b> di server 3DRBXMT.</div>
+    </div>
+  </div>
+</section>
+
 <section class="patch-section">
   <div class="patch-header"><span data-t-id="PATCH NOTES" data-t-en="PATCH NOTES">PATCH NOTES</span></div>
   <div class="timeline">
@@ -1765,6 +1832,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Upload file TXT berisi daftar ID untuk download banyak accessories Roblox sekaligus" data-t-en="Upload a TXT file with a list of IDs to batch-download multiple Roblox accessories at once">Upload file TXT berisi daftar ID untuk download banyak accessories Roblox sekaligus</span></li>
           <li><span class="tl-tag tag-feat">IMPROVE</span><span data-t-id="Peningkatan performa CDN untuk fetch & download yang lebih cepat" data-t-en="CDN performance improvements for faster fetch & download">Peningkatan performa CDN untuk fetch & download yang lebih cepat</span></li>
           <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Tombol dukungan PayPal ditambahkan di footer untuk membantu biaya hosting/CDN" data-t-en="PayPal support button added to the footer to help cover hosting/CDN costs">Tombol dukungan PayPal ditambahkan di footer untuk membantu biaya hosting/CDN</span></li>
+          <li><span class="tl-tag tag-new">NEW</span><span data-t-id="Section 'Is This Safe?' ditambahkan untuk jelasin kalau tool ini bukan phishing, gak minta password, dan gak berafiliasi dengan Roblox Corporation" data-t-en="Added an 'Is This Safe?' section clarifying this is not phishing, never asks for your password, and isn't affiliated with Roblox Corporation">Section 'Is This Safe?' ditambahkan untuk jelasin kalau tool ini bukan phishing, gak minta password, dan gak berafiliasi dengan Roblox Corporation</span></li>
         </ul>
       </div>
     </div>
