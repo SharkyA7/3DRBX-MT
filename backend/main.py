@@ -4141,6 +4141,674 @@ def auth_status():
     })
 
 
+
+
+# ── EMOTE / ANIMATION → BVH EXPORT ──────────────────────────────────
+# Reverse-engineered against a real UGC emote asset (see dev notes / chat log
+# for the full byte-level derivation). Roblox's newer "CurveAnimation" format
+# stores rotation/position as continuous per-axis FloatCurve instances rather
+# than the older discrete Keyframe/Pose tree, so this is a separate pipeline
+# from the classic ANIMATION_CLASSES/detect_animation_classes() rejection
+# above — that logic is for *model* downloads correctly refusing to treat an
+# animation-only file as a static mesh; this is for actually exporting the
+# animation itself.
+#
+# VERIFIED end-to-end: BVH output from this pipeline was round-tripped
+# through an independent BVH->GLTF conversion + Prisma3D import and produced
+# the correct real Marketplace emote (right motion, right ~2.39s duration).
+#
+# STILL APPROXIMATE (flagged inline where used):
+#   - Bone lengths: generic R15 stud proportions, not this avatar's real
+#     bind pose (AnimationRigData's transform/preTransform/postTransform
+#     blobs are custom-serialized and not yet decoded).
+#   - Only handles CurveAnimation-format assets. Classic KeyframeSequence
+#     animations (older uploads) are detected and rejected with a clear
+#     "not yet supported" error rather than silently producing garbage.
+
+_CURVEANIM_CLASSES = {"CurveAnimation", "EulerRotationCurve", "Vector3Curve", "FloatCurve", "MarkerCurve"}
+_KEYFRAME_CLASSES = {"KeyframeSequence", "Keyframe", "Pose"}
+
+_CURVE_TIME_SCALE = 1.0 / 10000.0  # best-guess fixed-point -> seconds (validated against real emote length)
+_CURVE_FRAME_RATE = 30.0
+
+_GENERIC_R15_OFFSETS = {
+    "HumanoidRootPart": (0, 0, 0),
+    "LowerTorso":    (0, 0, 0),
+    "UpperTorso":    (0, 0.6, 0),
+    "Head":          (0, 0.9, 0),
+    "LeftUpperArm":  (0.6, 0.6, 0),
+    "LeftLowerArm":  (0, -0.6, 0),
+    "LeftHand":      (0, -0.6, 0),
+    "RightUpperArm": (-0.6, 0.6, 0),
+    "RightLowerArm": (0, -0.6, 0),
+    "RightHand":     (0, -0.6, 0),
+    "LeftUpperLeg":  (0.3, -0.5, 0),
+    "LeftLowerLeg":  (0, -0.9, 0),
+    "LeftFoot":      (0, -0.9, 0),
+    "RightUpperLeg": (-0.3, -0.5, 0),
+    "RightLowerLeg": (0, -0.9, 0),
+    "RightFoot":     (0, -0.9, 0),
+}
+
+
+def _curveanim_zigzag_decode(u):
+    return (u >> 1) ^ -(u & 1)
+
+
+def _curveanim_read_referents(buf, count):
+    """Referent decoder for the animation pipeline specifically. NOTE: this is
+    deliberately NOT the same as the shared read_referent_array() above --
+    cross-checked against this file's real PRNT hierarchy (INST referents vs
+    PRNT child/parent referents must land in the same ID space, and only this
+    zigzag+accumulate version does; read_referent_array's plain sign-extend
+    produced systematically doubled/inconsistent IDs for this asset's referent
+    range). This version is what was actually validated end-to-end (BVH output
+    confirmed correct via external Blender/Prisma3D import matching the real
+    Marketplace emote) -- left separate from read_referent_array rather than
+    changing that shared function, since other existing features depend on it
+    and weren't in scope to regression-test here."""
+    raw = _read_interleaved_be_u32(buf, count)
+    out, acc = [], 0
+    for v in raw:
+        acc = (acc + _curveanim_zigzag_decode(v)) & 0xFFFFFFFF
+        out.append(acc if acc < 2**31 else acc - 2**32)
+    return out
+
+
+def _curveanim_parse_inst(chunks):
+    """Same shape as parse_inst_chunks() but using _curveanim_read_referents()."""
+    type_map = {}
+    for name, body in chunks:
+        if name != "INST":
+            continue
+        pos = 0
+        type_id = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        nl = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        class_name = body[pos:pos+nl].decode("utf-8"); pos += nl
+        is_service = body[pos]; pos += 1
+        n = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        referents = _curveanim_read_referents(body[pos:pos+n*4], n) if n > 0 else []
+        type_map[type_id] = {"class_name": class_name, "count": n, "referents": referents, "is_service": is_service}
+    return type_map
+
+
+def build_parent_map(chunks):
+    """child_referent -> parent_referent, from the PRNT chunk, using the
+    animation pipeline's own referent decoder (see _curveanim_read_referents)."""
+    for name, body in chunks:
+        if name != "PRNT":
+            continue
+        pos = 1
+        pcount = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+        children = _curveanim_read_referents(body[pos:pos+pcount*4], pcount); pos += pcount*4
+        parents = _curveanim_read_referents(body[pos:pos+pcount*4], pcount)
+        return dict(zip(children, parents))
+    return {}
+
+
+def decode_float_curve_values(chunks, type_map):
+    """Returns {referent: [(time_raw, value, tangentIn, tangentOut), ...]} for every
+    FloatCurve instance's ValuesAndTimes property.
+
+    Per-curve byte layout (VERIFIED against real data):
+      [interpType:i32][keyframeCount:i32]
+      keyframeCount x 14-byte records: [interpEnum:u16][value:f32][tangentIn:f32][tangentOut:f32]
+      trailer: (keyframeCount+2) x i32: [const=1][keyframeCount][time_0]...[time_n-1]
+    """
+    fc_tid = next((tid for tid, info in type_map.items() if info["class_name"] == "FloatCurve"), None)
+    if fc_tid is None:
+        return {}
+    fc_ids = type_map[fc_tid]["referents"]
+    _, raw = find_prop_chunk(chunks, fc_tid, "ValuesAndTimes")
+    if raw is None:
+        return {}
+    out = {}
+    p = 0
+    for fid in fc_ids:
+        blen = struct.unpack_from("<i", raw, p)[0]; p += 4
+        payload = raw[p:p+blen]; p += blen
+        _interp, count = struct.unpack_from("<ii", payload, 0)
+        records = payload[8:8+count*14]
+        trailer = payload[8+count*14:]
+        times = struct.unpack_from(f"<{count}i", trailer, 8) if count else ()
+        keys = []
+        for i in range(count):
+            r = records[i*14:(i+1)*14]
+            _enum = struct.unpack_from("<H", r, 0)[0]
+            value, tin, tout = struct.unpack_from("<3f", r, 2)
+            keys.append((times[i], value, tin, tout))
+        out[fid] = keys
+    return out
+
+
+def _lerp_curve(keys, t):
+    if not keys:
+        return 0.0
+    if t <= keys[0][0] * _CURVE_TIME_SCALE:
+        return keys[0][1]
+    if t >= keys[-1][0] * _CURVE_TIME_SCALE:
+        return keys[-1][1]
+    for i in range(len(keys) - 1):
+        t0, v0 = keys[i][0] * _CURVE_TIME_SCALE, keys[i][1]
+        t1, v1 = keys[i+1][0] * _CURVE_TIME_SCALE, keys[i+1][1]
+        if t0 <= t <= t1:
+            a = (t - t0) / (t1 - t0) if t1 > t0 else 0
+            return v0 + (v1 - v0) * a
+    return keys[-1][1]
+
+
+def _extract_curve_rig(raw_bytes):
+    """Shared first stage for both BVH and GLTF export: parse a CurveAnimation
+    .rbxm and return the joint hierarchy + per-joint rotation/position curves.
+    Raises RBXMParseError with a clear message if this isn't a CurveAnimation
+    asset (e.g. it's the older KeyframeSequence format instead)."""
+    chunks, _num_types, _num_instances = parse_chunks(raw_bytes)
+    type_map = _curveanim_parse_inst(chunks)
+    present = {info["class_name"] for info in type_map.values()}
+
+    if "CurveAnimation" not in present:
+        if present & _KEYFRAME_CLASSES:
+            raise RBXMParseError(
+                "Ini animasi format lama (KeyframeSequence), belum didukung — hanya CurveAnimation "
+                "(format animasi baru Roblox) yang bisa diexport saat ini."
+            )
+        raise RBXMParseError("Bukan asset CurveAnimation yang valid.")
+
+    parent_of = build_parent_map(chunks)
+
+    def class_tid(name):
+        return next((tid for tid, info in type_map.items() if info["class_name"] == name), None)
+
+    def names_of(tid):
+        if tid is None:
+            return {}
+        _, raw = find_prop_chunk(chunks, tid, "Name")
+        if raw is None:
+            return {}
+        vals = decode_string_array(raw, type_map[tid]["count"])
+        return dict(zip(type_map[tid]["referents"], vals))
+
+    folder_tid = class_tid("Folder")
+    fc_tid = class_tid("FloatCurve")
+
+    folder_names = names_of(folder_tid)
+    fc_names = names_of(fc_tid)
+    fc_curves = decode_float_curve_values(chunks, type_map)
+
+    children_of = {}
+    for c, p in parent_of.items():
+        children_of.setdefault(p, []).append(c)
+
+    def class_of(ref):
+        for tid, info in type_map.items():
+            if ref in info["referents"]:
+                return info["class_name"]
+        return None
+
+    joint_data = {}
+    for fid, jname in folder_names.items():
+        rot, pos = {}, {}
+        for child in children_of.get(fid, []):
+            ccls = class_of(child)
+            if ccls == "EulerRotationCurve":
+                for gc in children_of.get(child, []):
+                    axis = fc_names.get(gc)
+                    if axis in ("X", "Y", "Z"):
+                        rot[axis] = fc_curves.get(gc, [])
+            elif ccls == "Vector3Curve":
+                for gc in children_of.get(child, []):
+                    axis = fc_names.get(gc)
+                    if axis in ("X", "Y", "Z"):
+                        pos[axis] = fc_curves.get(gc, [])
+        joint_data[jname] = {"rot": rot, "pos": pos, "folder_id": fid}
+
+    if not joint_data:
+        raise RBXMParseError("Tidak ada joint (Folder) yang ditemukan di CurveAnimation ini.")
+
+    joint_parent = {}
+    for jname, jd in joint_data.items():
+        pid = parent_of.get(jd["folder_id"])
+        joint_parent[jname] = folder_names.get(pid)  # None => root
+
+    roots = [j for j, p in joint_parent.items() if p is None]
+    if not roots:
+        raise RBXMParseError("Tidak bisa menentukan root joint (hierarki rig rusak/tidak lengkap).")
+    root_name = roots[0]
+
+    def children_joints(jname):
+        return [j for j, p in joint_parent.items() if p == jname]
+
+    order = []
+    def walk(j):
+        order.append(j)
+        for k in children_joints(j):
+            walk(k)
+    walk(root_name)
+
+    all_times = set()
+    for jd in joint_data.values():
+        for curveset in (jd["rot"], jd["pos"]):
+            for keys in curveset.values():
+                for k in keys:
+                    all_times.add(round(k[0] * _CURVE_TIME_SCALE, 6))
+    if not all_times:
+        all_times = {0.0}
+    t_min, t_max = min(all_times), max(all_times)
+    n_frames = max(2, int((t_max - t_min) * _CURVE_FRAME_RATE) + 1)
+    frame_time = 1.0 / _CURVE_FRAME_RATE
+
+    return {
+        "joint_data": joint_data,
+        "root_name": root_name,
+        "order": order,
+        "children_joints": children_joints,
+        "t_min": t_min, "t_max": t_max,
+        "n_frames": n_frames, "frame_time": frame_time,
+    }
+
+
+def curveanimation_to_bvh(raw_bytes):
+    """Full pipeline: raw .rbxm bytes of a CurveAnimation asset -> BVH text."""
+    import math
+
+    rig = _extract_curve_rig(raw_bytes)
+    joint_data, root_name, order = rig["joint_data"], rig["root_name"], rig["order"]
+    children_joints = rig["children_joints"]
+    t_min, n_frames, frame_time = rig["t_min"], rig["n_frames"], rig["frame_time"]
+
+    lines = ["HIERARCHY"]
+
+    def emit(jname, depth, is_root):
+        indent = "  " * depth
+        kw = "ROOT" if is_root else "JOINT"
+        lines.append(f"{indent}{kw} {jname}")
+        lines.append(f"{indent}{{")
+        ox, oy, oz = _GENERIC_R15_OFFSETS.get(jname, (0, 0.5, 0))
+        lines.append(f"{indent}  OFFSET {ox:.4f} {oy:.4f} {oz:.4f}")
+        if is_root:
+            lines.append(f"{indent}  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation")
+        else:
+            lines.append(f"{indent}  CHANNELS 3 Zrotation Xrotation Yrotation")
+        kids = children_joints(jname)
+        if kids:
+            for k in kids:
+                emit(k, depth + 1, False)
+        else:
+            lines.append(f"{indent}  End Site")
+            lines.append(f"{indent}  {{")
+            lines.append(f"{indent}    OFFSET 0.0000 -0.3000 0.0000")
+            lines.append(f"{indent}  }}")
+        lines.append(f"{indent}}}")
+
+    emit(root_name, 0, True)
+
+    motion = ["MOTION", f"Frames: {n_frames}", f"Frame Time: {frame_time:.6f}"]
+    for f in range(n_frames):
+        t = t_min + f * frame_time
+        row = []
+        for jname in order:
+            jd = joint_data[jname]
+            if jname == root_name:
+                px = _lerp_curve(jd["pos"].get("X", []), t)
+                py = _lerp_curve(jd["pos"].get("Y", []), t)
+                pz = _lerp_curve(jd["pos"].get("Z", []), t)
+                row += [f"{px:.4f}", f"{py:.4f}", f"{pz:.4f}"]
+            rz = math.degrees(_lerp_curve(jd["rot"].get("Z", []), t))
+            rx = math.degrees(_lerp_curve(jd["rot"].get("X", []), t))
+            ry = math.degrees(_lerp_curve(jd["rot"].get("Y", []), t))
+            row += [f"{rz:.4f}", f"{rx:.4f}", f"{ry:.4f}"]
+        motion.append(" ".join(row))
+
+    return "\n".join(lines) + "\n" + "\n".join(motion) + "\n", {
+        "joints": len(joint_data),
+        "frames": n_frames,
+        "duration_s": round(rig["t_max"] - t_min, 3),
+    }
+
+
+# ── quaternion helpers for GLTF export ──
+# Composition order Z*X*Y verified against a real reference GLB (produced by
+# assimp's standard BVH importer, converted from our own already-validated
+# BVH output) to floating-point precision -- not a guess.
+def _quat_mul(a, b):
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (
+        aw*bx + ax*bw + ay*bz - az*by,
+        aw*by - ax*bz + ay*bw + az*bx,
+        aw*bz + ax*by - ay*bx + az*bw,
+        aw*bw - ax*bx - ay*by - az*bz,
+    )
+
+def _quat_axis(deg, axis):
+    import math
+    r = math.radians(deg) / 2.0
+    s, c = math.sin(r), math.cos(r)
+    if axis == 'x': return (s, 0.0, 0.0, c)
+    if axis == 'y': return (0.0, s, 0.0, c)
+    return (0.0, 0.0, s, c)
+
+def _euler_zxy_to_quat(z_deg, x_deg, y_deg):
+    return _quat_mul(_quat_mul(_quat_axis(z_deg, 'z'), _quat_axis(x_deg, 'x')), _quat_axis(y_deg, 'y'))
+
+
+def curveanimation_to_glb(raw_bytes):
+    """Full pipeline: raw .rbxm bytes of a CurveAnimation asset -> a self-contained
+    .glb (glTF 2.0 binary) with the node hierarchy + a real animation clip
+    (quaternion rotation channels, translation on the root). No mesh/skin --
+    animation-only, meant to be applied to an already-rigged avatar, same as
+    the BVH export. Rotation math verified against a real assimp-generated
+    reference (see _euler_zxy_to_quat)."""
+    import math
+
+    rig = _extract_curve_rig(raw_bytes)
+    joint_data, root_name, order = rig["joint_data"], rig["root_name"], rig["order"]
+    t_min, n_frames, frame_time = rig["t_min"], rig["n_frames"], rig["frame_time"]
+
+    node_index = {name: i for i, name in enumerate(order)}
+    nodes = []
+    rest_global_pos = {}  # joint name -> (x,y,z) rest-pose position in model space
+    for jname in order:
+        ox, oy, oz = _GENERIC_R15_OFFSETS.get(jname, (0, 0.5, 0))
+        node = {
+            "name": jname,
+            "translation": [ox, oy, oz],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+        }
+        kids = [node_index[k] for k in rig["children_joints"](jname)]
+        if kids:
+            node["children"] = kids
+        nodes.append(node)
+        # rest pose here is a pure translation chain (identity rest rotations),
+        # so global position is just the cumulative sum of parent offsets
+        parent_names = [p for p in order if jname in rig["children_joints"](p)]
+        px, py, pz = rest_global_pos.get(parent_names[0], (0, 0, 0)) if parent_names else (0, 0, 0)
+        rest_global_pos[jname] = (px + ox, py + oy, pz + oz)
+
+    times = [round(t_min + f * frame_time - t_min, 6) for f in range(n_frames)]  # relative to t_min, starts at 0
+
+    buffer_blob = bytearray()
+    accessors = []
+    buffer_views = []
+
+    def push_accessor(values, comp_type, acc_type, count):
+        """values: flat list of floats. Appends to the shared binary blob,
+        4-byte aligned (required by GLTF spec), and returns the accessor index."""
+        while len(buffer_blob) % 4 != 0:
+            buffer_blob.append(0)
+        byte_offset = len(buffer_blob)
+        packed = struct.pack(f"<{len(values)}f", *values)
+        buffer_blob.extend(packed)
+        bv_index = len(buffer_views)
+        buffer_views.append({"buffer": 0, "byteOffset": byte_offset, "byteLength": len(packed)})
+        acc = {"bufferView": bv_index, "componentType": comp_type, "count": count, "type": acc_type}
+        if acc_type == "SCALAR":
+            acc["min"] = [min(values)]; acc["max"] = [max(values)]
+        accessors.append(acc)
+        return len(accessors) - 1
+
+    def push_accessor_ints(values, comp_type, struct_char, acc_type, count, unsigned=True):
+        """Like push_accessor but for integer data (indices, JOINTS_0)."""
+        while len(buffer_blob) % 4 != 0:
+            buffer_blob.append(0)
+        byte_offset = len(buffer_blob)
+        packed = struct.pack(f"<{len(values)}{struct_char}", *values)
+        buffer_blob.extend(packed)
+        bv_index = len(buffer_views)
+        buffer_views.append({"buffer": 0, "byteOffset": byte_offset, "byteLength": len(packed)})
+        acc = {"bufferView": bv_index, "componentType": comp_type, "count": count, "type": acc_type}
+        if acc_type == "SCALAR":
+            acc["min"] = [min(values)]; acc["max"] = [max(values)]
+        accessors.append(acc)
+        return len(accessors) - 1
+
+    FLOAT = 5126
+    time_acc = push_accessor(times, FLOAT, "SCALAR", n_frames)
+
+    channels, samplers = [], []
+
+    def add_channel(node_idx, path, values_flat, n_components, acc_type):
+        out_acc = push_accessor(values_flat, FLOAT, acc_type, n_frames)
+        samplers.append({"input": time_acc, "interpolation": "LINEAR", "output": out_acc})
+        channels.append({"sampler": len(samplers) - 1, "target": {"node": node_idx, "path": path}})
+
+    for jname in order:
+        jd = joint_data[jname]
+        node_idx = node_index[jname]
+
+        rot_flat = []
+        for f in range(n_frames):
+            t = t_min + f * frame_time
+            rz = math.degrees(_lerp_curve(jd["rot"].get("Z", []), t))
+            rx = math.degrees(_lerp_curve(jd["rot"].get("X", []), t))
+            ry = math.degrees(_lerp_curve(jd["rot"].get("Y", []), t))
+            qx, qy, qz, qw = _euler_zxy_to_quat(rz, rx, ry)
+            rot_flat += [qx, qy, qz, qw]
+        add_channel(node_idx, "rotation", rot_flat, 4, "VEC4")
+
+        if jname == root_name:
+            pos_flat = []
+            for f in range(n_frames):
+                t = t_min + f * frame_time
+                px = _lerp_curve(jd["pos"].get("X", []), t)
+                py = _lerp_curve(jd["pos"].get("Y", []), t)
+                pz = _lerp_curve(jd["pos"].get("Z", []), t)
+                pos_flat += [px, py, pz]
+            add_channel(node_idx, "translation", pos_flat, 3, "VEC3")
+
+    # Skins block. inverseBindMatrices now use the REAL rest-pose global joint
+    # positions (computed above from the offset chain, valid since rest
+    # rotations are identity -- this is correct, not a placeholder, for the
+    # translation part; true bone-length accuracy still depends on
+    # AnimationRigData's undecoded transform blobs, see module docstring).
+    def _translate_mat4(x, y, z):
+        return [1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]
+
+    ibm_flat = []
+    for jname in order:
+        gx, gy, gz = rest_global_pos[jname]
+        ibm_flat += _translate_mat4(-gx, -gy, -gz)
+    ibm_acc = push_accessor(ibm_flat, FLOAT, "MAT4", len(order))
+    skins = [{
+        "name": "skeleton",
+        "joints": [node_index[j] for j in order],
+        "skeleton": node_index[root_name],
+        "inverseBindMatrices": ibm_acc,
+    }]
+
+    # Visible mesh: a small cube at each joint's rest-pose position, 100%
+    # skinned to that joint, so the skeleton is actually visible and animates
+    # -- a skins block alone renders nothing in most viewers (Blender
+    # synthesizes a visual armature from it, but that's Blender-specific, not
+    # part of the glTF spec; Prisma3D and most other viewers need real
+    # geometry to draw). Cosmetic only, purely to visualize the bones.
+    HALF = 0.08
+    CUBE_OFFSETS = [(-HALF,-HALF,-HALF),(HALF,-HALF,-HALF),(HALF,HALF,-HALF),(-HALF,HALF,-HALF),
+                    (-HALF,-HALF,HALF),(HALF,-HALF,HALF),(HALF,HALF,HALF),(-HALF,HALF,HALF)]
+    CUBE_TRIS = [0,1,2, 0,2,3, 4,6,5, 4,7,6, 0,4,5, 0,5,1,
+                 1,5,6, 1,6,2, 2,6,7, 2,7,3, 3,7,4, 3,4,0]
+    UNSIGNED_SHORT = 5123
+    primitives = []
+    for jidx, jname in enumerate(order):
+        gx, gy, gz = rest_global_pos[jname]
+        positions = []
+        for dx, dy, dz in CUBE_OFFSETS:
+            positions += [gx + dx, gy + dy, gz + dz]
+        pos_acc = push_accessor(positions, FLOAT, "VEC3", 8)
+        # every vertex of this cube is 100% weighted to joint jidx
+        joints_flat = [jidx, 0, 0, 0] * 8
+        joints_acc = push_accessor_ints(joints_flat, UNSIGNED_SHORT, "H", "VEC4", 8)
+        weights_flat = [1.0, 0.0, 0.0, 0.0] * 8
+        weights_acc = push_accessor(weights_flat, FLOAT, "VEC4", 8)
+        idx_acc = push_accessor_ints(CUBE_TRIS, UNSIGNED_SHORT, "H", "SCALAR", len(CUBE_TRIS))
+        primitives.append({
+            "attributes": {"POSITION": pos_acc, "JOINTS_0": joints_acc, "WEIGHTS_0": weights_acc},
+            "indices": idx_acc,
+            "material": 0,
+        })
+
+    meshes = [{"name": "bone_markers", "primitives": primitives}]
+    materials = [{"name": "bone", "pbrMetallicRoughness": {"baseColorFactor": [1.0, 0.6, 0.1, 1.0]}}]
+
+    # skinned-mesh node: separate from the joint hierarchy, references the
+    # skeleton root via "skeleton" and gets deformed by the skin's joints
+    mesh_node_index = len(nodes)
+    nodes.append({"name": "bone_markers", "mesh": 0, "skin": 0})
+
+    gltf_json = {
+        "asset": {"version": "2.0", "generator": "3DRBXMT CurveAnimation exporter"},
+        "scene": 0,
+        "scenes": [{"nodes": [node_index[root_name], mesh_node_index]}],
+        "nodes": nodes,
+        "skins": skins,
+        "meshes": meshes,
+        "materials": materials,
+        "animations": [{"name": "Motion", "channels": channels, "samplers": samplers}],
+        "accessors": accessors,
+        "bufferViews": buffer_views,
+        "buffers": [{"byteLength": len(buffer_blob)}],
+    }
+
+    json_bytes = json.dumps(gltf_json, separators=(",", ":")).encode("utf-8")
+    while len(json_bytes) % 4 != 0:
+        json_bytes += b" "  # GLTF spec: JSON chunk padded with spaces
+    bin_bytes = bytes(buffer_blob)
+    while len(bin_bytes) % 4 != 0:
+        bin_bytes += b"\x00"  # BIN chunk padded with zero bytes
+
+    total_len = 12 + (8 + len(json_bytes)) + (8 + len(bin_bytes))
+    glb = bytearray()
+    glb += struct.pack("<4sII", b"glTF", 2, total_len)
+    glb += struct.pack("<I4s", len(json_bytes), b"JSON") + json_bytes
+    glb += struct.pack("<I4s", len(bin_bytes), b"BIN\x00") + bin_bytes
+
+    return bytes(glb), {
+        "joints": len(joint_data),
+        "frames": n_frames,
+        "duration_s": round(rig["t_max"] - t_min, 3),
+    }
+
+
+@app.get("/api/animation/info")
+def animation_info():
+    """Resolve an Animation catalog/asset ID -> metadata, without downloading the
+    full BVH yet. Two-hop fetch: the given ID is usually a thin Animation stub
+    whose real content lives at a second AnimationId it points to."""
+    aid = request.args.get("asset_id", "")
+    if not aid:
+        return jsonify({"error": "asset_id required"}), 400
+    rl = check_rate_limit("item", limit=20, window_s=60)
+    if rl: return rl
+    try:
+        s = get_scraper()
+        stub = fetch_asset_raw_bytes(aid, s)
+        chunks, _, _ = parse_chunks(stub)
+        type_map = _curveanim_parse_inst(chunks)
+        anim_tid = next((tid for tid, info in type_map.items() if info["class_name"] == "Animation"), None)
+        if anim_tid is None:
+            return jsonify({"error": "Asset ini bukan Animation stub."}), 400
+        _, raw = find_prop_chunk(chunks, anim_tid, "AnimationId")
+        if raw is None:
+            return jsonify({"error": "AnimationId tidak ditemukan di stub ini."}), 400
+        real_ref = decode_string_array(raw, 1)[0]
+        real_id = re.search(r"\d+", real_ref)
+        if not real_id:
+            return jsonify({"error": f"AnimationId tidak valid: {real_ref}"}), 400
+        real_id = real_id.group(0)
+
+        real_bytes = fetch_asset_raw_bytes(real_id, s)
+        real_chunks, _, _ = parse_chunks(real_bytes)
+        real_type_map = _curveanim_parse_inst(real_chunks)
+        present = {info["class_name"] for info in real_type_map.values()}
+
+        if "CurveAnimation" in present:
+            fmt = "curve"
+            joint_count = sum(info["count"] for info in real_type_map.values() if info["class_name"] == "Folder")
+        elif present & _KEYFRAME_CLASSES:
+            fmt = "keyframe"
+            joint_count = None
+        else:
+            fmt = "unknown"
+            joint_count = None
+
+        return jsonify({
+            "stub_asset_id": aid,
+            "real_asset_id": real_id,
+            "format": fmt,
+            "bvh_supported": fmt == "curve",
+            "joint_count": joint_count,
+        })
+    except RBXMParseError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return safe_error(e)
+
+
+@app.get("/api/animation/download-full")
+def animation_download_full():
+    aid = request.args.get("asset_id", "")
+    fmt = request.args.get("format", "bvh").lower()  # "bvh" atau "gltf"
+    if not aid:
+        return jsonify({"error": "asset_id required"}), 400
+    if fmt not in ("bvh", "gltf"):
+        return jsonify({"error": "format harus 'bvh' atau 'gltf'"}), 400
+    rl = check_rate_limit("item", limit=15, window_s=60)
+    if rl: return rl
+    try:
+        s = get_scraper()
+        stub = fetch_asset_raw_bytes(aid, s)
+        chunks, _, _ = parse_chunks(stub)
+        type_map = _curveanim_parse_inst(chunks)
+        anim_tid = next((tid for tid, info in type_map.items() if info["class_name"] == "Animation"), None)
+
+        # Some asset IDs already point directly at the real CurveAnimation/KeyframeSequence
+        # asset rather than a thin Animation stub -- only follow AnimationId if this
+        # actually IS a stub.
+        if anim_tid is not None:
+            _, raw = find_prop_chunk(chunks, anim_tid, "AnimationId")
+            if raw is None:
+                return jsonify({"error": "AnimationId tidak ditemukan di stub ini."}), 400
+            real_ref = decode_string_array(raw, 1)[0]
+            real_id_match = re.search(r"\d+", real_ref)
+            if not real_id_match:
+                return jsonify({"error": f"AnimationId tidak valid: {real_ref}"}), 400
+            real_id = real_id_match.group(0)
+            real_bytes = fetch_asset_raw_bytes(real_id, s)
+        else:
+            real_id = aid
+            real_bytes = stub
+
+        safe_name = safe_filename(f"emote_{real_id}")
+        if fmt == "gltf":
+            glb_bytes, meta = curveanimation_to_glb(real_bytes)
+            return Response(
+                glb_bytes,
+                mimetype="model/gltf-binary",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{safe_name}.glb"',
+                    "X-Animation-Joints": str(meta["joints"]),
+                    "X-Animation-Frames": str(meta["frames"]),
+                    "X-Animation-Duration": str(meta["duration_s"]),
+                },
+            )
+        else:
+            bvh_text, meta = curveanimation_to_bvh(real_bytes)
+            return Response(
+                bvh_text.encode("utf-8"),
+                mimetype="text/plain",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{safe_name}.bvh"',
+                    "X-Animation-Joints": str(meta["joints"]),
+                    "X-Animation-Frames": str(meta["frames"]),
+                    "X-Animation-Duration": str(meta["duration_s"]),
+                },
+            )
+    except RBXMParseError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return safe_error(e)
+
+
 if __name__ == "__main__":
     port=int(os.getenv("PORT",8000))
     print(f"Server jalan di http://0.0.0.0:{port}")
