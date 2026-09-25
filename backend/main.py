@@ -1169,7 +1169,15 @@ _PART_SHAPE_NAMES = {0: "Ball", 1: "Block", 2: "Cylinder"}
 # so instead of silently rendering that dummy rig's raw saved Part CFrames (which
 # produces a scattered pile of boxes frozen mid-pose), we detect and reject it with
 # an explicit reason.
-ANIMATION_CLASSES = {"KeyframeSequence", "Keyframe", "Pose", "Motor6D", "Animation"}
+ANIMATION_CLASSES = {
+    "KeyframeSequence", "Keyframe", "Pose", "Motor6D", "Animation",
+    # newer CurveAnimation format (see the CurveAnimation->BVH/GLTF exporter below) --
+    # without these, a raw CurveAnimation asset ID (not routed through the thin
+    # "Animation" stub) slipped past this check entirely in every feature that
+    # relies on it, not just the one that surfaced the bug.
+    "CurveAnimation", "EulerRotationCurve", "Vector3Curve", "FloatCurve",
+    "MarkerCurve", "AnimationRigData",
+}
 
 
 def detect_animation_classes(type_map):
@@ -1859,6 +1867,26 @@ def catalog_download_full():
         raw_r = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={aid}", timeout=30)
         raw   = raw_r.content
 
+        # Animation assets are delivered as an RBXM container (the "<roblox!" binary
+        # format) with zero mesh geometry -- parse_mesh() below expects Roblox's
+        # separate raw .mesh format and has nothing to work with, so without this
+        # check it silently falls into the generic parse-failure fallback (no .obj
+        # written at all), which is what produced the confusing OBJ-less ZIP. Real
+        # mesh/clothing assets are NOT RBXM containers, so parse_chunks() raising
+        # here is the expected/common case, not an error -- just proceed normally.
+        try:
+            _anim_chunks, _, _ = parse_chunks(raw)
+            _anim_type_map = parse_inst_chunks(_anim_chunks)
+            _anim_found = detect_animation_classes(_anim_type_map)
+        except Exception:
+            _anim_found = None
+        if _anim_found:
+            return jsonify({
+                "error": f"'{name}' adalah asset animasi ({', '.join(_anim_found)} terdeteksi), bukan mesh 3D — "
+                         "animasi cuma berisi data gerakan/tulang, tidak ada geometri untuk diekspor sebagai OBJ. "
+                         "Coba tab 🎭 EMOTE / ANIMASI untuk download gerakannya (BVH/GLTF)."
+            }), 422
+
         # Real texture first (Shirt/Pants/Decal wrapper -> actual flat image asset).
         # A thumbnail is a rendered PREVIEW (e.g. a mannequin wearing the shirt) --
         # baking that onto the mesh as if it were the texture is what produced the
@@ -2427,6 +2455,27 @@ def item_v2():
         is_bundle = False
         is_image = False
         bundle_results = []
+
+        # Same content-based animation check as catalog_download_full(): catches a
+        # raw Animation Asset ID directly (not part of a Bundle), which the
+        # isAnimationBundle check further below never sees since that only fires
+        # inside the Bundle-resolution fallback path. Without this, a plain
+        # animation asset either silently produces an OBJ-less ZIP or a generic
+        # "Gagal mengunduh item" error depending on which downstream branch it
+        # happens to fall into -- neither tells the user what actually happened.
+        try:
+            _raw_check = fetch_asset_raw_bytes(str(file_id), s)
+            _anim_chunks, _, _ = parse_chunks(_raw_check)
+            _anim_type_map = parse_inst_chunks(_anim_chunks)
+            _anim_found = detect_animation_classes(_anim_type_map)
+        except Exception:
+            _anim_found = None
+        if _anim_found:
+            return jsonify({
+                "error": f"Asset {file_id} adalah asset animasi ({', '.join(_anim_found)} terdeteksi), bukan mesh 3D — "
+                         "animasi cuma berisi data gerakan/tulang, tidak ada geometri untuk diekspor sebagai OBJ. "
+                         "Coba tab 🎭 EMOTE / ANIMASI untuk download gerakannya (BVH/GLTF)."
+            }), 422
 
         try:
             # Always fetch the real texture (e.g. the Roblox clothing/shirt template),
