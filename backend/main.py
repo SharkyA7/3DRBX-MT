@@ -1572,6 +1572,21 @@ def avatar_procedural_download():
             headers={"Content-Disposition":f'attachment; filename="{name}_procedural.zip"'})
     except Exception as e: return safe_error(e)
 
+_ANIMATION_ASSET_TYPE_IDS = {24, 61}  # 24=Animation (classic), 61=EmoteAnimation
+_ANIMATION_ASSET_TYPE_NAMES = {"animation", "emoteanimation"}
+
+def _is_animation_asset_type(atype):
+    """atype can come back as an int, a numeric string, or a name string
+    depending on which of catalog_info()'s 3 fallback endpoints answered."""
+    if atype is None:
+        return False
+    if isinstance(atype, int) or (isinstance(atype, str) and atype.strip().isdigit()):
+        return int(atype) in _ANIMATION_ASSET_TYPE_IDS
+    if isinstance(atype, str):
+        return atype.strip().lower().replace(" ", "") in _ANIMATION_ASSET_TYPE_NAMES
+    return False
+
+
 @app.get("/api/catalog/info")
 def catalog_info():
     aid = request.args.get("asset_id","")
@@ -1669,10 +1684,12 @@ def catalog_info():
         price   = item.get("price") or item.get("priceInRobux")
         atype   = item.get("assetType") or item.get("assetTypeId")
         is_bg   = _is_background_item(item)
+        is_anim = _is_animation_asset_type(atype)
 
         result = {"assetId":aid_int,"name":name,
-            "assetType":"Profile Background" if is_bg else atype,
+            "assetType":"Animation" if is_anim else ("Profile Background" if is_bg else atype),
             "isBackground": is_bg,
+            "isAnimationBundle": is_anim,
             "creatorName":creator,"price":price,
             "thumbnailUrl":thumb,"catalogUrl":f"https://www.roblox.com/catalog/{aid}"}
         cache_set(cache_key, result)
