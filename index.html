@@ -1288,10 +1288,16 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
       <div class="card">
         <div class="label"><span data-t-id="DOWNLOAD" data-t-en="DOWNLOAD">DOWNLOAD</span></div>
-        <div id="cat-anim-warning" style="display:none;background:rgba(255,80,80,.1);border:1px solid #f55;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f88">
-          ⚠️ <span data-t-id="Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF." data-t-en="This is an Animation Bundle — it only contains motion/keyframe data, no 3D mesh. It can't be downloaded as OBJ/GLTF.">Ini Animation Bundle (paket animasi) — hanya berisi data gerakan/keyframe, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.</span>
+        <div id="cat-anim-warning" style="display:none;background:rgba(255,196,80,.1);border:1px solid #fa4;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#fc8">
+          🎭 <span data-t-id="Ini item Emote/Animasi — hanya berisi data gerakan, tidak ada mesh 3D untuk diekspor sebagai OBJ/GLTF. Download gerakannya sendiri (BVH/GLTF) di bawah." data-t-en="This is an Emote/Animation item — it only has motion data, no 3D mesh to export as OBJ/GLTF. Download the motion itself (BVH/GLTF) below instead.">Ini item Emote/Animasi — hanya berisi data gerakan, tidak ada mesh 3D untuk diekspor sebagai OBJ/GLTF. Download gerakannya sendiri (BVH/GLTF) di bawah.</span>
         </div>
         <div class="dl-grid" id="cat-dl-grid">
+          <div class="dl-card ready" id="cat-dl-anim-card" style="display:none">
+            <div class="dl-title"><span style="color:#fc8">🎭 EMOTE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Data gerakan (skeleton/keyframe) item ini, bukan mesh — import ke Blender/aplikasi 3D lain sebagai animasi." data-t-en="This item's motion data (skeleton/keyframes), not a mesh — import into Blender/other 3D apps as an animation.">Data gerakan (skeleton/keyframe) item ini, bukan mesh — import ke Blender/aplikasi 3D lain sebagai animasi.</span></div>
+            <button class="btn btn-cyan" id="cat-dl-anim-bvh-btn" onclick="downloadCatalogAnimation('bvh')">⬇ BVH</button>
+            <button class="btn btn-amber" id="cat-dl-anim-gltf-btn" style="margin-top:6px;width:100%" onclick="downloadCatalogAnimation('gltf')">⬇ GLTF (GLB)</button>
+          </div>
           <div class="dl-card ready" id="cat-dl-obj-card">
             <div class="dl-title"><span style="color:#4af">OBJ</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Mesh item dikonversi dari format Roblox ke OBJ+MTL." data-t-en="Item mesh converted from Roblox format to OBJ+MTL.">Mesh item dikonversi dari format Roblox ke OBJ+MTL.</span></div>
@@ -2219,6 +2225,7 @@ async function downloadAvatar(format){
 
 // ── CATALOG ───────────────────────────────────────────────────────
 let currentAssetId = null;
+let currentIsBundle = false;
 
 async function fetchCatalog(){
   const id=parseInt(document.getElementById('cat-input').value);
@@ -2239,7 +2246,7 @@ async function fetchCatalog(){
     st('cat-status',`✓ Item "${data.name}" ditemukan.`,'ok');
     if(data.isBundle){
       if(data.isAnimationBundle){
-        st('cat-status',`⚠️ "${data.name}" adalah Animation Bundle — hanya data gerakan, tidak ada mesh 3D. Tidak bisa diunduh sebagai OBJ/GLTF.`,'err');
+        st('cat-status',`🎭 "${data.name}" adalah Emote/Animasi — download gerakannya (BVH/GLTF) tersedia di bawah.`,'ok');
       } else {
         st('cat-status',`✓ Bundle "${data.name}" ditemukan (${data.bundleItemCount||0} item di dalamnya).`,'ok');
       }
@@ -2270,15 +2277,16 @@ function fillCatalogInfo(d){
 
   const isAnim = !!d.isAnimationBundle;
   const isBg = !!d.isBackground;
+  currentIsBundle = !!d.isBundle;
   document.getElementById('cat-anim-warning').style.display = isAnim ? 'block' : 'none';
-  // cat-dl-obj-card / cat-dl-gltf-card / cat-dl-image-card are siblings inside
-  // cat-dl-grid, so the grid itself only needs hiding entirely for Animation
-  // Bundles (nothing downloadable at all); for Backgrounds we keep the grid
-  // visible but swap which individual card shows.
-  document.getElementById('cat-dl-grid').style.display = isAnim ? 'none' : 'grid';
-  document.getElementById('cat-dl-obj-card').style.display = isBg ? 'none' : '';
-  document.getElementById('cat-dl-gltf-card').style.display = isBg ? 'none' : '';
-  document.getElementById('cat-dl-image-card').style.display = isBg ? 'block' : 'none';
+  // cat-dl-obj-card / cat-dl-gltf-card / cat-dl-image-card / cat-dl-anim-card are
+  // siblings inside cat-dl-grid; the grid itself stays visible and we just swap
+  // which individual card shows depending on what kind of item this is.
+  document.getElementById('cat-dl-grid').style.display = 'grid';
+  document.getElementById('cat-dl-anim-card').style.display = isAnim ? '' : 'none';
+  document.getElementById('cat-dl-obj-card').style.display = (isAnim || isBg) ? 'none' : '';
+  document.getElementById('cat-dl-gltf-card').style.display = (isAnim || isBg) ? 'none' : '';
+  document.getElementById('cat-dl-image-card').style.display = (!isAnim && isBg) ? 'block' : 'none';
 }
 
 async function downloadCatalog(format){
@@ -2305,6 +2313,41 @@ async function downloadCatalog(format){
       st('cat-status',`✓ Download selesai!`,'ok');
     }
   }catch(e){ showApiError('cat-status', e.error?e:{message:e.message}); }
+}
+
+// Emote/Animation items (single "Animation"/"EmoteAnimation" catalog assets, or a
+// true "Animation Bundle" of several moves) never have mesh geometry, so this is a
+// separate export path from downloadCatalog() -- it fetches the motion/keyframe data
+// itself as BVH (widely supported by 3D apps for mocap import) or GLTF/GLB with an
+// embedded skeletal animation, instead of trying (and failing) to produce an OBJ.
+async function downloadCatalogAnimation(format){
+  if(!currentAssetId) return;
+  const bvhBtn = document.getElementById('cat-dl-anim-bvh-btn');
+  const gltfBtn = document.getElementById('cat-dl-anim-gltf-btn');
+  bvhBtn.disabled = true; gltfBtn.disabled = true;
+  st('cat-status',`⏳ Mengonversi animasi (${format.toUpperCase()})...`,'loading');
+  try{
+    const name = document.getElementById('cat-name').textContent || currentAssetId;
+    // Bundle -> multiple components, backend resolves & zips them all server-side.
+    // Single Animation/Emote asset -> one BVH text file or one GLB binary directly.
+    const url = currentIsBundle
+      ? `${BASE}/api/animation/download-bundle?bundle_id=${currentAssetId}&format=${format}`
+      : `${BASE}/api/animation/download-full?asset_id=${currentAssetId}&format=${format}`;
+    const res = await fetch(url);
+    if(!res.ok){ const e = await res.json(); throw new Error(e.error||'Gagal mengunduh animasi'); }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition')||'';
+    const m = cd.match(/filename="([^"]+)"/);
+    const fname = m ? m[1] : `${name}.${currentIsBundle?'zip':format==='gltf'?'glb':'bvh'}`;
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:fname
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('cat-status',`✓ Animasi (${format.toUpperCase()}) berhasil diunduh!`,'ok');
+  }catch(e){
+    st('cat-status','✗ '+e.message,'err');
+  }finally{ bvhBtn.disabled=false; gltfBtn.disabled=false; }
 }
 
 async function downloadCatalogImage(){
