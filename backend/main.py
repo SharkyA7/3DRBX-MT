@@ -4810,6 +4810,44 @@ def animation_info():
         return safe_error(e)
 
 
+def _resolve_and_convert_animation(aid, fmt, s):
+    """Shared core of /api/animation/download-full and /api/animation/download-bundle:
+    resolve a raw asset ID (which may be a thin Animation stub pointing at the real
+    CurveAnimation/KeyframeSequence via AnimationId, or may already BE the real asset)
+    down to real animation bytes, then convert to BVH text or a GLB binary.
+    Raises (RBXMParseError / requests errors / etc.) on failure -- callers decide how
+    to report it: a single 4xx for one asset, or a per-component entry in a bundle zip."""
+    stub = fetch_asset_raw_bytes(aid, s)
+    chunks, _, _ = parse_chunks(stub)
+    type_map = _curveanim_parse_inst(chunks)
+    anim_tid = next((tid for tid, info in type_map.items() if info["class_name"] == "Animation"), None)
+
+    # Some asset IDs already point directly at the real CurveAnimation/KeyframeSequence
+    # asset rather than a thin Animation stub -- only follow AnimationId if this
+    # actually IS a stub.
+    if anim_tid is not None:
+        _, raw = find_prop_chunk(chunks, anim_tid, "AnimationId")
+        if raw is None:
+            raise RBXMParseError("AnimationId tidak ditemukan di stub ini.")
+        real_ref = decode_string_array(raw, 1)[0]
+        real_id_match = re.search(r"\d+", real_ref)
+        if not real_id_match:
+            raise RBXMParseError(f"AnimationId tidak valid: {real_ref}")
+        real_id = real_id_match.group(0)
+        real_bytes = fetch_asset_raw_bytes(real_id, s)
+    else:
+        real_id = aid
+        real_bytes = stub
+
+    safe_name = safe_filename(f"emote_{real_id}")
+    if fmt == "gltf":
+        glb_bytes, meta = curveanimation_to_glb(real_bytes)
+        return safe_name, glb_bytes, "model/gltf-binary", "glb", meta
+    else:
+        bvh_text, meta = curveanimation_to_bvh(real_bytes)
+        return safe_name, bvh_text.encode("utf-8"), "text/plain", "bvh", meta
+
+
 @app.get("/api/animation/download-full")
 def animation_download_full():
     aid = request.args.get("asset_id", "")
@@ -4822,53 +4860,84 @@ def animation_download_full():
     if rl: return rl
     try:
         s = get_scraper()
-        stub = fetch_asset_raw_bytes(aid, s)
-        chunks, _, _ = parse_chunks(stub)
-        type_map = _curveanim_parse_inst(chunks)
-        anim_tid = next((tid for tid, info in type_map.items() if info["class_name"] == "Animation"), None)
+        safe_name, content, mimetype, ext, meta = _resolve_and_convert_animation(aid, fmt, s)
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}.{ext}"',
+                "X-Animation-Joints": str(meta["joints"]),
+                "X-Animation-Frames": str(meta["frames"]),
+                "X-Animation-Duration": str(meta["duration_s"]),
+            },
+        )
+    except RBXMParseError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return safe_error(e)
 
-        # Some asset IDs already point directly at the real CurveAnimation/KeyframeSequence
-        # asset rather than a thin Animation stub -- only follow AnimationId if this
-        # actually IS a stub.
-        if anim_tid is not None:
-            _, raw = find_prop_chunk(chunks, anim_tid, "AnimationId")
-            if raw is None:
-                return jsonify({"error": "AnimationId tidak ditemukan di stub ini."}), 400
-            real_ref = decode_string_array(raw, 1)[0]
-            real_id_match = re.search(r"\d+", real_ref)
-            if not real_id_match:
-                return jsonify({"error": f"AnimationId tidak valid: {real_ref}"}), 400
-            real_id = real_id_match.group(0)
-            real_bytes = fetch_asset_raw_bytes(real_id, s)
-        else:
-            real_id = aid
-            real_bytes = stub
 
-        safe_name = safe_filename(f"emote_{real_id}")
-        if fmt == "gltf":
-            glb_bytes, meta = curveanimation_to_glb(real_bytes)
-            return Response(
-                glb_bytes,
-                mimetype="model/gltf-binary",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{safe_name}.glb"',
-                    "X-Animation-Joints": str(meta["joints"]),
-                    "X-Animation-Frames": str(meta["frames"]),
-                    "X-Animation-Duration": str(meta["duration_s"]),
-                },
-            )
-        else:
-            bvh_text, meta = curveanimation_to_bvh(real_bytes)
-            return Response(
-                bvh_text.encode("utf-8"),
-                mimetype="text/plain",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{safe_name}.bvh"',
-                    "X-Animation-Joints": str(meta["joints"]),
-                    "X-Animation-Frames": str(meta["frames"]),
-                    "X-Animation-Duration": str(meta["duration_s"]),
-                },
-            )
+@app.get("/api/animation/download-bundle")
+def animation_download_bundle():
+    """True Animation Bundle (bundleType AvatarAnimations -- e.g. an emote pack with
+    several moves inside, as opposed to a single standalone Emote/Animation catalog
+    asset) -> one ZIP with every component's BVH/GLB. Components are converted
+    concurrently and per-component failures don't abort the whole request, the same
+    error-tolerant pattern item_v2()'s Bundle fallback already uses for meshes
+    (README.txt inside the ZIP lists which components succeeded/failed)."""
+    bid = request.args.get("bundle_id", "")
+    fmt = request.args.get("format", "bvh").lower()
+    if not bid:
+        return jsonify({"error": "bundle_id required"}), 400
+    if fmt not in ("bvh", "gltf"):
+        return jsonify({"error": "format harus 'bvh' atau 'gltf'"}), 400
+    rl = check_rate_limit("item", limit=15, window_s=60)
+    if rl: return rl
+    try:
+        bundle_id = int(bid)
+    except ValueError:
+        return jsonify({"error": "bundle_id harus berupa angka"}), 400
+    try:
+        s = get_scraper()
+        bundle = _resolve_bundle(bundle_id, s)
+        if not bundle:
+            return jsonify({"error": f"Bundle {bid} tidak ditemukan."}), 404
+        if not bundle.get("isAnimationBundle"):
+            return jsonify({"error": f"'{bundle['name']}' bukan Animation Bundle."}), 400
+        if not bundle["asset_ids"]:
+            return jsonify({"error": f"Bundle '{bundle['name']}' tidak punya komponen animasi."}), 502
+
+        results = []  # (safe_name_or_label, ok, content_bytes_or_err_str, ext)
+        with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(bundle["asset_ids"]))) as ex:
+            futs = {ex.submit(_resolve_and_convert_animation, cid, fmt, s): cid for cid in bundle["asset_ids"]}
+            for fut in as_completed(futs):
+                cid = futs[fut]
+                try:
+                    safe_name, content, _mimetype, ext, _meta = fut.result()
+                    results.append((safe_name, True, content, ext))
+                except Exception as ce:
+                    results.append((f"asset_{cid}", False, str(ce), None))
+
+        if not any(r[1] for r in results):
+            return jsonify({"error": f"Semua komponen animasi bundle '{bundle['name']}' gagal dikonversi."}), 502
+
+        readme = (
+            f"Bundle : {bundle['name']}\n"
+            f"Format : {fmt.upper()}\n\n"
+            "Komponen:\n" + "\n".join(
+                f"- {n}: {'OK' if ok else 'GAGAL - ' + str(c)}" for n, ok, c, _ in results
+            ) + "\n"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, ok, content, ext in results:
+                if ok:
+                    zf.writestr(f"{name}.{ext}", content)
+            zf.writestr("README.txt", readme)
+        buf.seek(0)
+        safe_bundle_name = safe_filename(bundle["name"])
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_bundle_name}_{fmt}.zip"'})
     except RBXMParseError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
