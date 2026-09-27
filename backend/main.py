@@ -1738,9 +1738,11 @@ def catalog_image():
         item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
         if variant: safe_name = f"{safe_name}_{variant}"
-        content, ctype, ext = _fetch_asset_image_bytes(file_id, s, variant=variant)
-        return Response(content, mimetype=ctype or "image/png",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'})
+        content, ctype, ext, tint = _fetch_asset_image_bytes(file_id, s, variant=variant)
+        headers = {"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'}
+        if tint:
+            headers["X-Background-Tint"] = ",".join(str(v) for v in tint)
+        return Response(content, mimetype=ctype or "image/png", headers=headers)
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh gambar: {e}"}), 502
 
@@ -1846,9 +1848,10 @@ def _resolve_all_clothing_textures(raw_bytes):
     don't support Layered Clothing) -- these are two legitimately different,
     both-real images for the same item, not a priority choice between them.
 
-    Returns a list of {"kind": "colormap"|"decal"|"template", "id": "<assetId>"}
-    dicts, in the same priority order as _resolve_real_clothing_texture, deduped
-    by kind (first match per kind wins). Empty list if none found."""
+    Returns a list of {"kind": "colormap"|"decal"|"template"|"avatarbackground",
+    "id": "<assetId>", ...} dicts, in the same priority order as
+    _resolve_real_clothing_texture, deduped by kind (first match per kind wins).
+    Empty list if none found."""
     try:
         text = raw_bytes.decode("utf-8", errors="ignore")
     except Exception:
@@ -1861,6 +1864,28 @@ def _resolve_all_clothing_textures(raw_bytes):
     if m: results.append({"kind": "decal", "id": m.group(1)})
     m = re.search(r'<Content name="(?:ShirtTemplate|PantsTemplate)"[^>]*>\s*<url>\s*' + asset_url_id, text, re.IGNORECASE)
     if m: results.append({"kind": "template", "id": m.group(1)})
+    # Avatar/Profile Background (AssetType.AvatarBackground, added mid-2026) is
+    # wrapped completely differently from the Content/url pattern above: a Folder
+    # named "AvatarBackground" holding an IntValue "ImageId" (the REAL flat pattern
+    # image asset -- this, not any thumbnail, is what should be downloaded) and a
+    # Color3Value "Color" (a tint multiplied onto that image at render time, which
+    # this endpoint can't reproduce without an image library, so it's only surfaced
+    # to the caller as metadata -- see the X-Background-Tint header on
+    # /api/catalog/image). Not recognized before, so this always fell all the way
+    # through to the generic thumbnail-CDN fallback below, silently downloading
+    # Roblox's un-renderable-item placeholder thumbnail instead of the real asset.
+    m = re.search(
+        r'<Item class="IntValue"[^>]*>\s*<Properties>\s*<string name="Name">ImageId</string>\s*'
+        r'<int name="Value">(\d+)</int>', text, re.IGNORECASE)
+    if m:
+        entry = {"kind": "avatarbackground", "id": m.group(1)}
+        tm = re.search(
+            r'<Item class="Color3Value"[^>]*>\s*<Properties>\s*<string name="Name">Color</string>\s*'
+            r'<Color3 name="Value">\s*<R>([\d.]+)</R>\s*<G>([\d.]+)</G>\s*<B>([\d.]+)</B>',
+            text, re.IGNORECASE)
+        if tm:
+            entry["tint"] = tuple(round(float(v) * 255) for v in tm.groups())
+        results.append(entry)
     return results
 
 @app.get("/api/catalog/download-full")
@@ -2179,7 +2204,10 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
     real texture at once (e.g. Layered Clothing with both a modern ColorMap AND a
     classic template fallback). None = best-available default (unchanged behavior).
 
-    Returns (content_bytes, content_type, extension). Raises if nothing works."""
+    Returns (content_bytes, content_type, extension, tint_rgb_or_None). tint_rgb is
+    an (r,g,b) 0-255 tuple when the resolved texture came with a render-time color
+    tint (currently only Avatar/Profile Backgrounds); None otherwise. Raises if
+    nothing works."""
     # 1) Try raw asset delivery — for classic Decal/Image assets this serves the
     #    actual original file bytes, not a re-rendered thumbnail.
     try:
@@ -2187,7 +2215,7 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
         ctype = r.headers.get("content-type","")
         is_img, real_ctype, ext = _sniff_image_type(r.content, ctype)
         if r.status_code == 200 and is_img and not variant:
-            return r.content, real_ctype, ext
+            return r.content, real_ctype, ext, None
         # 1b) Not a raw image (or a specific variant was requested) -- for
         # Shirt/Pants/Decal/Layered Clothing, assetdelivery instead returns a small
         # XML wrapper pointing at the REAL flat texture(s) as separate asset(s).
@@ -2200,14 +2228,16 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
                 if not match:
                     raise Exception(f"Item ini tidak punya variant '{variant}'")
                 real_tex_id = match["id"]
+                tint = match.get("tint")
             else:
                 real_tex_id = all_tex[0]["id"] if all_tex else None
+                tint = all_tex[0].get("tint") if all_tex else None
             if real_tex_id:
                 r2 = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={real_tex_id}", timeout=20)
                 ctype2 = r2.headers.get("content-type","")
                 is_img2, real_ctype2, ext2 = _sniff_image_type(r2.content, ctype2)
                 if r2.status_code == 200 and is_img2:
-                    return r2.content, real_ctype2, ext2
+                    return r2.content, real_ctype2, ext2, tint
                 # Resolver found the right texture ID, but fetching IT failed (bad
                 # status, or genuinely not image bytes) -- this is different from
                 # "this item has no resolvable texture at all" and shouldn't be
@@ -2233,7 +2263,7 @@ def _fetch_asset_image_bytes(file_id, s, variant=None):
             if entry.get("state") == "Completed" and entry.get("imageUrl"):
                 ir = s.get(entry["imageUrl"], timeout=20)
                 if ir.status_code == 200:
-                    return ir.content, ir.headers.get("content-type","image/png"), "png"
+                    return ir.content, ir.headers.get("content-type","image/png"), "png", None
         except: continue
 
     raise Exception("Tidak bisa mengambil gambar untuk item ini")
@@ -2506,7 +2536,7 @@ def item_v2():
             if not bundle:
                 # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
                 try:
-                    img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+                    img_bytes, img_ctype, img_ext, _tint = _fetch_asset_image_bytes(file_id, s)
                     item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
                     safe_name_img = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
                     files = [(f"{safe_name_img}.{img_ext}", img_bytes)]
@@ -2586,7 +2616,7 @@ def _resolve_batch_entry(raw_id, known_name, s):
     if not bundle or not bundle["asset_ids"]:
         # Bukan Bundle juga — coba sebagai aset gambar datar (mis. Avatar Background)
         try:
-            img_bytes, img_ctype, img_ext = _fetch_asset_image_bytes(file_id, s)
+            img_bytes, img_ctype, img_ext, _tint = _fetch_asset_image_bytes(file_id, s)
             item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
             safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
             return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
@@ -2733,7 +2763,7 @@ def _resolve_image_batch_entry(raw_id, known_name, s):
     try:
         item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
-        content, ctype, ext = _fetch_asset_image_bytes(file_id, s)
+        content, ctype, ext, _tint = _fetch_asset_image_bytes(file_id, s)
         return {"raw_id": raw_id, "kind": "image", "id": file_id, "name": item_name,
                 "files": [(f"{safe_name}.{ext}", content)]}
     except Exception as e:
