@@ -2366,7 +2366,10 @@ async function downloadCatalogImage(){
       download:`${name}.${ext}`
     });
     a.click(); URL.revokeObjectURL(a.href);
-    st('cat-status',`✓ Download gambar selesai!`,'ok');
+    const tint = res.headers.get('X-Background-Tint');
+    st('cat-status', tint
+      ? `✓ Download selesai! Ini pattern dasarnya (belum ditinting) — warna asli item ini: rgb(${tint})`
+      : `✓ Download gambar selesai!`, 'ok');
   }catch(e){
     st('cat-status','✗ '+e.message,'err');
   }finally{ btn.disabled=false; }
