@@ -1746,6 +1746,170 @@ def catalog_image():
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh gambar: {e}"}), 502
 
+def _extract_wrap_layers(raw):
+    """Find every WrapLayer (the fitting data Layered Clothing carries) inside a raw
+    RBXM/RBXMX asset and return a list of
+    {"name": <owning part's name>, "cage_id": str|None, "reference_id": str|None,
+     "settings": {...}} dicts.
+
+    Uses the Rust parser service first (it dumps every property generically, so
+    WrapLayer.CageMeshId / ReferenceMeshId come through like any other Content prop),
+    then the pure-Python chunk decoder as a fallback -- same Rust-first/Python-fallback
+    order model_info() already uses. Raises RBXMParseError if the asset isn't an RBXM
+    container at all (e.g. a plain .mesh or image), which callers treat as "no cages"."""
+    try:
+        instances = _parse_model_via_rust_service(raw)
+    except Exception:
+        instances = None
+
+    layers = []
+    if instances is not None:
+        by_ref = {i["referent"]: i for i in instances}
+        wanted = ("CageOrigin", "ReferenceOrigin", "ImportOrigin", "Order",
+                  "Puffiness", "ShrinkFactor", "AutoSkin", "BindOffset")
+        for inst in instances:
+            if inst.get("class_name") != "WrapLayer":
+                continue
+            p = inst.get("properties") or {}
+            parent = by_ref.get(inst.get("parent_referent")) or {}
+            layers.append({
+                "name": parent.get("name") or inst.get("name") or "WrapLayer",
+                "cage_id": _extract_asset_id_str(p.get("CageMeshId")),
+                "reference_id": _extract_asset_id_str(p.get("ReferenceMeshId")),
+                "settings": {k: p[k] for k in wanted if k in p},
+            })
+        return layers
+
+    # Python fallback (no Rust service reachable / configured).
+    chunks, _, _ = parse_chunks(raw)
+    type_map = parse_inst_chunks(chunks)
+    sstrings = parse_shared_strings(chunks)
+    for tid, info in type_map.items():
+        if info["class_name"] != "WrapLayer":
+            continue
+        n = info["count"]
+        cage_ids, _ = decode_string_like_prop(chunks, tid, "CageMeshId", n, sstrings)
+        ref_ids, _ = decode_string_like_prop(chunks, tid, "ReferenceMeshId", n, sstrings)
+        for i in range(n):
+            layers.append({
+                "name": f"WrapLayer{i+1}",
+                "cage_id": _extract_asset_id_str(cage_ids[i]),
+                "reference_id": _extract_asset_id_str(ref_ids[i]),
+                "settings": {},
+            })
+    return layers
+
+def _get_wrap_layers(file_id, s):
+    """Cached wrapper: the CAGES check and the actual download both need this, so
+    fetching + parsing the asset twice back-to-back would just double the latency."""
+    ck = f"wraplayers_{file_id}"
+    cached = cache_get(ck)
+    if cached is not None:
+        return cached
+    raw = fetch_asset_raw_bytes(str(file_id), s)
+    try:
+        layers = _extract_wrap_layers(raw)
+    except RBXMParseError:
+        layers = []  # not an RBXM container -> definitely no WrapLayer
+    layers = [l for l in layers if l["cage_id"] or l["reference_id"]]
+    cache_set(ck, layers)
+    return layers
+
+def _convert_cage_mesh(stem, mesh_id, s):
+    raw_mesh = fetch_asset_raw_bytes(mesh_id, s)
+    mesh = parse_mesh(raw_mesh, name=stem)
+    return mesh_to_obj(mesh), len(mesh.vertices), len(mesh.faces)
+
+@app.get("/api/catalog/cages")
+def catalog_cages():
+    """Layered Clothing cage export. Layered items carry hidden helper meshes (cages)
+    that tell Roblox how the clothing bends over different bodies; creators making
+    clothing in Blender need them, and Roblox gives no easy way to download them.
+    They live on the item's WrapLayer (CageMeshId + ReferenceMeshId), each a normal
+    .mesh asset -- so this reads the raw asset, finds those IDs, converts each mesh to
+    OBJ with the existing parser, and packs them (plus cage_info.json with the
+    WrapLayer origins/settings) into one ZIP.
+    ?check=1 returns just {"hasCages": bool} without fetching any cage mesh, so the
+    frontend can decide whether to show the CAGES button at all."""
+    aid = request.args.get("asset_id", "")
+    known_name = (request.args.get("name") or "").strip() or None
+    check_only = (request.args.get("check") or "").lower() in ("1", "true")
+    if not aid: return jsonify({"error": "asset_id required"}), 400
+    rl = check_rate_limit("cagecheck" if check_only else "item", limit=30 if check_only else 20, window_s=60)
+    if rl: return rl
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({"error": "asset_id harus berupa angka"}), 400
+    try:
+        s = get_scraper()
+        layers = _get_wrap_layers(file_id, s)
+        if check_only:
+            return jsonify({"hasCages": bool(layers), "layerCount": len(layers)})
+        if not layers:
+            return jsonify({"error": "Item ini tidak punya cage — cage hanya ada di Layered Clothing (jaket, celana, sweater 3D, dll), bukan aksesori/klasik biasa."}), 404
+
+        item_name = known_name or _resolve_item_name(file_id, s) or str(file_id)
+        safe = lambda t: "".join(c if c.isalnum() or c in " _-" else "_" for c in t).strip() or "item"
+        safe_name = safe(item_name)
+
+        tasks = []  # (file stem, mesh id, layer index, which property)
+        for idx, l in enumerate(layers):
+            prefix = safe_name if len(layers) == 1 else f"{safe_name}_{safe(l['name'])}_{idx+1}"
+            if l["cage_id"]:       tasks.append((f"{prefix}_CageMeshId", l["cage_id"], idx, "CageMeshId"))
+            if l["reference_id"]:  tasks.append((f"{prefix}_ReferenceMeshId", l["reference_id"], idx, "ReferenceMeshId"))
+
+        results = []  # (stem, ok, obj_text_or_error, verts, faces, layer idx, prop)
+        with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, len(tasks))) as ex:
+            futs = {ex.submit(_convert_cage_mesh, stem, mid, s): (stem, idx, prop) for stem, mid, idx, prop in tasks}
+            for fut in as_completed(futs):
+                stem, idx, prop = futs[fut]
+                try:
+                    obj_text, nv, nf = fut.result()
+                    results.append((stem, True, obj_text, nv, nf, idx, prop))
+                except Exception as ce:
+                    results.append((stem, False, str(ce), 0, 0, idx, prop))
+        results.sort(key=lambda r: r[0])
+
+        if not any(r[1] for r in results):
+            return jsonify({"error": f"Cage ditemukan tapi semua gagal dikonversi: {results[0][2]}"}), 502
+
+        info = {
+            "item": item_name, "assetId": file_id,
+            "layers": [{
+                "name": l["name"], "CageMeshId": l["cage_id"], "ReferenceMeshId": l["reference_id"],
+                "settings": l["settings"],
+                "files": {r[6]: (f"{r[0]}.obj" if r[1] else None) for r in results if r[5] == i},
+            } for i, l in enumerate(layers)],
+        }
+        readme = (
+            f"Item : {item_name} (ID {file_id})\n"
+            "Isi  : cage Layered Clothing (WrapLayer) dalam format OBJ.\n\n"
+            "File:\n" + "\n".join(
+                f"- {r[0]}.obj : {'OK — ' + str(r[3]) + ' vertex, ' + str(r[4]) + ' face' if r[1] else 'GAGAL — ' + r[2]}"
+                for r in results
+            ) + "\n\n"
+            "Catatan:\n"
+            "- Roblox menyimpan dua mesh cage per item lewat properti WrapLayer.CageMeshId dan\n"
+            "  WrapLayer.ReferenceMeshId; file dinamai sesuai nama properti aslinya.\n"
+            "- cage_info.json berisi asset ID tiap cage plus origin/setting WrapLayer (Order,\n"
+            "  Puffiness, ShrinkFactor, dll) yang dibutuhkan kalau item ini dirakit ulang di Studio.\n"
+            "- Mesh ini apa adanya dari Roblox (tanpa tekstur) — import ke Blender sebagai\n"
+            "  referensi bentuk saat membuat/menyesuaikan pakaian.\n"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for stem, ok, content, *_rest in results:
+                if ok:
+                    zf.writestr(f"{stem}.obj", content)
+            zf.writestr("cage_info.json", json.dumps(info, indent=2))
+            zf.writestr("README.txt", readme)
+        buf.seek(0)
+        return Response(buf.read(), mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}_cages.zip"'})
+    except Exception as e:
+        return safe_error(e)
+
 @app.get("/api/2d/font")
 def api_2d_font():
     """Download a Font Family asset — the manifest JSON plus every referenced Face's
@@ -2993,6 +3157,66 @@ def _parse_model_via_rust_service(raw_bytes):
     if "instances" not in body:
         raise Exception(body.get("error", "Response tidak valid dari parser service"))
     return body["instances"]
+
+@app.get("/api/debug/cage-check")
+def debug_cage_check():
+    """TEMPORARY — the CAGES feature (_extract_wrap_layers) assumes Layered Clothing
+    ships a "WrapLayer" instance with CageMeshId/ReferenceMeshId properties directly
+    inside the item's own raw asset -- same assumption model_info() makes for
+    textures, which IS correct there. This endpoint checks that same assumption for
+    a specific item instead of guessing: every class name actually present in the
+    raw asset (so we can see if it's not literally "WrapLayer", or isn't in this
+    asset's RBXM at all), plus the full unfiltered properties of anything
+    Wrap-related found, so if CageMeshId/ReferenceMeshId came through under a
+    different key we can see that directly instead of it silently reading as None.
+    Visit with ?id=<assetId>. Remove once the CAGES bug is understood."""
+    aid = request.args.get("id", "91819948712906")  # College Jacket | Pink, confirmed Layered Clothing UGC
+    result = {"MODEL_PARSER_URL_configured": bool(MODEL_PARSER_URL)}
+    try:
+        file_id = int(aid)
+    except ValueError:
+        return jsonify({**result, "ok": False, "reason": "id harus angka"}), 200
+    try:
+        s = get_scraper()
+        try:
+            raw = fetch_asset_raw_bytes(file_id, s, timeout=25)
+            result["asset_bytes"] = len(raw)
+            result["asset_first_16_bytes_hex"] = raw[:16].hex()
+        except Exception as e:
+            return jsonify({**result, "ok": False, "stage": "fetch_asset", "reason": str(e)}), 200
+
+        try:
+            instances = _parse_model_via_rust_service(raw)
+            result["source"] = "rust"
+        except Exception as e:
+            instances = None
+            result["rust_error"] = str(e)
+
+        if instances is not None:
+            from collections import Counter
+            result["total_instances"] = len(instances)
+            result["class_name_counts"] = dict(Counter(i.get("class_name") for i in instances))
+            wrap_like = [i for i in instances if "wrap" in (i.get("class_name") or "").lower()]
+            result["wrap_like_count"] = len(wrap_like)
+            result["wrap_like_instances"] = [
+                {"class_name": i.get("class_name"), "name": i.get("name"),
+                 "referent": i.get("referent"), "parent_referent": i.get("parent_referent"),
+                 "properties": i.get("properties")}
+                for i in wrap_like
+            ]
+        else:
+            result["source"] = "python_fallback"
+            chunks, _, _ = parse_chunks(raw)
+            type_map = parse_inst_chunks(chunks)
+            from collections import Counter
+            result["class_name_counts"] = dict(Counter(info["class_name"] for info in type_map.values()))
+            result["wrap_like_class_names"] = [
+                info["class_name"] for info in type_map.values() if "wrap" in info["class_name"].lower()
+            ]
+
+        return jsonify({**result, "ok": True}), 200
+    except Exception as e:
+        return jsonify({**result, "ok": False, "stage": "unexpected", "reason": str(e)}), 200
 
 @app.get("/api/debug/model-parser-check")
 def debug_model_parser_check():
