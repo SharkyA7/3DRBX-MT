@@ -3210,9 +3210,33 @@ def debug_cage_check():
             type_map = parse_inst_chunks(chunks)
             from collections import Counter
             result["class_name_counts"] = dict(Counter(info["class_name"] for info in type_map.values()))
-            result["wrap_like_class_names"] = [
-                info["class_name"] for info in type_map.values() if "wrap" in info["class_name"].lower()
-            ]
+            wrap_tids = [tid for tid, info in type_map.items() if "wrap" in info["class_name"].lower()]
+            result["wrap_like_class_names"] = [type_map[tid]["class_name"] for tid in wrap_tids]
+            # The class instance itself being found doesn't mean CageMeshId/ReferenceMeshId
+            # actually decoded -- decode_string_like_prop() silently returns None for any
+            # dtype it doesn't recognize as string-like (by design, so it never feeds garbage
+            # downstream). So list EVERY property name+dtype byte actually present for this
+            # type_id, straight from the PROP chunks, instead of only checking the two names
+            # _extract_wrap_layers() assumes -- this shows directly whether they exist under
+            # those exact names, under different names, or with an unhandled dtype.
+            all_props = []
+            for name, body in chunks:
+                if name != "PROP":
+                    continue
+                pos = 0
+                tid = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                if tid not in wrap_tids:
+                    continue
+                nl = struct.unpack("<I", body[pos:pos+4])[0]; pos += 4
+                pname = body[pos:pos+nl].decode("utf-8", "replace"); pos += nl
+                dtype = body[pos]; pos += 1
+                all_props.append({
+                    "type_id": tid, "prop_name": pname,
+                    "dtype_hex": hex(dtype), "dtype_dec": dtype,
+                    "known_string_type": dtype in (PROP_TYPE_STRING, PROP_TYPE_SHARED_STRING),
+                    "raw_value_first_64_bytes_hex": body[pos:pos+64].hex(),
+                })
+            result["wrap_type_all_properties"] = all_props
 
         return jsonify({**result, "ok": True}), 200
     except Exception as e:
