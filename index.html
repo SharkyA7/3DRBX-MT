@@ -1308,6 +1308,11 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
             <div class="dl-desc">Dikonversi ke GLTF 2.0 dengan embedded buffer.</div>
             <button class="btn btn-amber" onclick="downloadCatalog('gltf')">⬇ GLTF ZIP</button>
           </div>
+          <div class="dl-card ready" id="cat-dl-cages-card" style="display:none">
+            <div class="dl-title"><span style="color:#c9f">CAGES</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Item Layered Clothing ini punya cage mesh (inner/outer) — dipakai untuk fitting di Blender saat bikin/sesuaikan pakaian." data-t-en="This Layered Clothing item has cage meshes (inner/outer) — used for fitting in Blender when making/adjusting clothing.">Item Layered Clothing ini punya cage mesh (inner/outer) — dipakai untuk fitting di Blender saat bikin/sesuaikan pakaian.</span></div>
+            <button class="btn" style="background:#c9f;color:#000" id="cat-dl-cages-btn" onclick="downloadCatalogCages()">⬇ <span data-t-id="CAGE OBJ ZIP" data-t-en="CAGE OBJ ZIP">CAGE OBJ ZIP</span></button>
+          </div>
           <div class="dl-card ready" id="cat-dl-image-card" style="display:none">
             <div class="dl-title"><span style="color:#8f8">IMAGE</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh)." data-t-en="The item's raw 2D image (for Backgrounds, Decals, Shirt/Pants, etc — not a mesh).">Gambar 2D asli item (untuk Background, Decal, Shirt/Pants, dll — bukan mesh).</span></div>
@@ -2258,6 +2263,7 @@ async function fetchCatalog(){
       // resolvable real texture regardless, so the IMAGE card (and RAW
       // TEMPLATE/UV BAKE choice when both exist) isn't gated on isBackground alone.
       checkCatalogTextureVariants(id);
+      checkCatalogCages(id);
     }
   }catch(e){
     st('cat-status','✗ '+e.message,'err'); prog('cat-prog',0);
@@ -2287,6 +2293,10 @@ function fillCatalogInfo(d){
   document.getElementById('cat-dl-obj-card').style.display = (isAnim || isBg) ? 'none' : '';
   document.getElementById('cat-dl-gltf-card').style.display = (isAnim || isBg) ? 'none' : '';
   document.getElementById('cat-dl-image-card').style.display = (!isAnim && isBg) ? 'block' : 'none';
+  // Cages only apply to real-mesh Layered Clothing items -- hidden here on every
+  // fresh item load, then checkCatalogCages(id) (called right after fillCatalogInfo,
+  // same as checkCatalogTextureVariants) shows it if this particular item has any.
+  document.getElementById('cat-dl-cages-card').style.display = 'none';
 }
 
 async function downloadCatalog(format){
@@ -2397,6 +2407,40 @@ async function checkCatalogTextureVariants(id){
     if(variants.includes('template')) templateBtn.style.display='inline-block';
     if(variants.includes('colormap') || variants.includes('decal')) colormapBtn.style.display='inline-block';
   }catch(e){ /* silently skip -- card just stays as fillCatalogInfo left it */ }
+}
+
+// Layered Clothing (jacket/pants/sweater-type 3D items) carry hidden WrapLayer cage
+// meshes the backend already knows how to find and convert -- this just asks "does
+// this specific item have any" (cheap, no mesh conversion) and shows the CAGES card
+// if so. Classic/rigid mesh accessories will almost always say no, which is correct.
+async function checkCatalogCages(id){
+  try{
+    const res = await fetch(`${BASE}/api/catalog/cages?asset_id=${id}&check=1`);
+    if(!res.ok) return;
+    const data = await res.json();
+    document.getElementById('cat-dl-cages-card').style.display = data.hasCages ? 'block' : 'none';
+  }catch(e){ /* silently skip -- card just stays hidden */ }
+}
+
+async function downloadCatalogCages(){
+  if(!currentAssetId) return;
+  const btn = document.getElementById('cat-dl-cages-btn');
+  btn.disabled = true;
+  st('cat-status',`⏳ Mengonversi cage mesh...`,'loading');
+  try{
+    const name = document.getElementById('cat-name').textContent || currentAssetId;
+    const res = await fetch(`${BASE}/api/catalog/cages?asset_id=${currentAssetId}&name=${encodeURIComponent(name)}`);
+    if(!res.ok){ const e = await res.json(); throw new Error(e.error||'Gagal mengunduh cage'); }
+    const blob = await res.blob();
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:`${name}_cages.zip`
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+    st('cat-status',`✓ Cage mesh berhasil diunduh!`,'ok');
+  }catch(e){
+    st('cat-status','✗ '+e.message,'err');
+  }finally{ btn.disabled=false; }
 }
 
 async function downloadCatalogImageVariant(variant){
