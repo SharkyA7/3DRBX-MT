@@ -3238,6 +3238,16 @@ def debug_cage_check():
                 })
             result["wrap_type_all_properties"] = all_props
 
+        # Also run this through the REAL production function (with its cache) --
+        # not just my from-scratch trace above -- so a stale cache entry or any
+        # divergence between the two would show up directly instead of being masked.
+        try:
+            prod_layers = _get_wrap_layers(file_id, s)
+            result["production_get_wrap_layers"] = prod_layers
+            result["production_has_cages"] = bool(prod_layers)
+        except Exception as e:
+            result["production_get_wrap_layers_error"] = str(e)
+
         return jsonify({**result, "ok": True}), 200
     except Exception as e:
         return jsonify({**result, "ok": False, "stage": "unexpected", "reason": str(e)}), 200
