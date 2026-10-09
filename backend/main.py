@@ -2500,10 +2500,11 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
                             rewired = _rewire_mtl_to_texture(files[mtl_index][1], tex_filename)
                             files[mtl_index] = (files[mtl_index][0], rewired)
                             wired_main_texture = True
-                        elif tex["kind"] == "template" and not wired_main_texture:
-                            rewired = _rewire_mtl_to_texture(files[mtl_index][1], tex_filename)
-                            files[mtl_index] = (files[mtl_index][0], rewired)
-                            wired_main_texture = True
+                        # NOTE: the flat Shirt/PantsTemplate is intentionally NOT wired
+                        # into the .mtl. Its layout does not match the exported mesh's
+                        # UVs (they are baked for the 3D-thumbnail texture, _TexN.png),
+                        # so using it renders black / misaligned. It stays in the ZIP
+                        # as an extra reference file only.
                 except: pass
         except Exception:
             pass
