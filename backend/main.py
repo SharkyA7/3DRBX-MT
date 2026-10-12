@@ -1805,13 +1805,15 @@ def catalog_browse():
         elif r.status_code == 429:
             return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
         else:
+            print(f"[browse] details search HTTP {r.status_code} params={params} body={(r.text or '')[:200]!r}")
             # Fallback: IDs-only search, then resolve details in one POST.
             r2 = s.get("https://catalog.roblox.com/v1/search/items",
                        params=params, timeout=12)
             if r2.status_code == 429:
                 return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
             if r2.status_code != 200:
-                return jsonify({"error": f"Pencarian katalog gagal (HTTP {r.status_code})."}), 502
+                print(f"[browse] ids search HTTP {r2.status_code} body={(r2.text or '')[:200]!r}")
+                return jsonify({"error": f"Pencarian katalog gagal (Roblox HTTP {r.status_code}/{r2.status_code}). Coba filter lain."}), 502
             b2 = r2.json()
             refs = [{"itemType": d.get("itemType", "Asset"), "id": d.get("id")}
                     for d in (b2.get("data") or []) if d.get("id")]
