@@ -1762,9 +1762,23 @@ _BROWSE_TAXONOMY = {
         "bodysuits":     {"hint": "bodysuit"},
         "shorts":        {"asset_types": {69}},
         "shoes":         {"asset_types": {70, 71}},
-        "classicshirts":   {"asset_types": {11}},
-        "classictshirts":  {"asset_types": {2}},
-        "classicpants":    {"asset_types": {12}},
+        # Classic clothing isn't returned by Roblox's plain Category=Clothing
+        # search. "variants" are candidate upstream searches tried in order, each
+        # probed with one page and accepted only if it yields items of the
+        # right real type; "hint" is a last-resort keyword used only when no
+        # variant works. Wrong guesses are harmless (they match nothing).
+        "classicshirts":   {"asset_types": {11}, "hint": "shirt", "hint_n_only": True,
+                            "variants": [{"Category": "Clothing", "Subcategory": "ClassicShirts"},
+                                         {"Category": "Clothing", "Subcategory": "Shirts"},
+                                         {"AssetTypes": "11"}]},
+        "classictshirts":  {"asset_types": {2},  "hint": "t-shirt", "hint_n_only": True,
+                            "variants": [{"Category": "Clothing", "Subcategory": "ClassicTShirts"},
+                                         {"Category": "Clothing", "Subcategory": "TShirts"},
+                                         {"AssetTypes": "2"}]},
+        "classicpants":    {"asset_types": {12}, "hint": "pants", "hint_n_only": True,
+                            "variants": [{"Category": "Clothing", "Subcategory": "ClassicPants"},
+                                         {"Category": "Clothing", "Subcategory": "Pants"},
+                                         {"AssetTypes": "12"}]},
     }},
     "accessories": {"roblox": "Accessories", "subs": {
         "head":     {"asset_types": {8}},
@@ -1804,17 +1818,21 @@ def _browse_bundle_type(v):
     return None
 
 def _browse_filter_for(group, sub):
-    """-> (asset_types|None, bundle_types|None, hint|None). None/None = no type filter."""
+    """-> dict with asset_types|None, bundle_types|None, hint|None, hint_n_only, variants."""
     g = _BROWSE_TAXONOMY[group]
     if sub:
         f = g["subs"][sub]
-        return f.get("asset_types"), f.get("bundle_types"), f.get("hint")
+        return {"asset_types": f.get("asset_types"), "bundle_types": f.get("bundle_types"),
+                "hint": f.get("hint"), "hint_n_only": f.get("hint_n_only", False),
+                "variants": f.get("variants", [])}
     if "asset_types" in g:                      # leaf group with its own types
-        return g["asset_types"], None, g.get("hint")
+        return {"asset_types": g["asset_types"], "bundle_types": None,
+                "hint": g.get("hint"), "hint_n_only": False, "variants": []}
     a, b = set(), set()                         # group-level = union of its subs
     for f in g["subs"].values():
         a |= f.get("asset_types", set()); b |= f.get("bundle_types", set())
-    return (a or None), (b or None), None
+    return {"asset_types": a or None, "bundle_types": b or None,
+            "hint": None, "hint_n_only": False, "variants": []}
 
 def _browse_match(item, asset_types, bundle_types):
     if not asset_types and not bundle_types: return True
@@ -1850,10 +1868,11 @@ def _browse_thumbs(s, asset_ids, bundle_ids):
         print(f"[browse] bundle thumbs failed: {type(e).__name__}: {e}")
     return out
 
-def _browse_page(s, params):
+def _browse_page(s, params, allow_fallback=True):
     """One upstream page -> (items, next_cursor, status). items is None on failure
     (status then holds Roblox's HTTP code). Falls back to an IDs-only search
-    plus one details POST if the details-search endpoint itself fails."""
+    plus one details POST if the details-search endpoint itself fails (skipped
+    for speculative probes, where a 400 just means 'wrong parameter')."""
     r = s.get("https://catalog.roblox.com/v1/search/items/details", params=params, timeout=10)
     if r.status_code == 200:
         b = r.json()
@@ -1861,6 +1880,8 @@ def _browse_page(s, params):
     if r.status_code == 429:
         return None, None, 429
     print(f"[browse] details search HTTP {r.status_code} params={params} body={(r.text or '')[:200]!r}")
+    if not allow_fallback:
+        return None, None, r.status_code
     r2 = s.get("https://catalog.roblox.com/v1/search/items", params=params, timeout=10)
     if r2.status_code != 200:
         print(f"[browse] ids search HTTP {r2.status_code} body={(r2.text or '')[:200]!r}")
@@ -1874,21 +1895,37 @@ def _browse_page(s, params):
         items = d.get("data") or []
     return items, b2.get("nextPageCursor"), 200
 
-def _browse_collect(s, base_params, cursor, asset_types, bundle_types, deadline):
+def _browse_collect(s, base_params, cursor, asset_types, bundle_types, deadline,
+                    max_pages=_BROWSE_MAX_PAGES, allow_fallback=True, info=None):
     """Page upstream until we have enough matches. Returns
     (matches, next_cursor, status, scanned). On an upstream error, status != 200
-    and `matches` holds whatever was gathered before it."""
+    and `matches` holds whatever was gathered before it. `info` (a dict) is
+    filled with a small diagnostic summary for ?debug=1."""
     out, cur, scanned, pages = [], cursor, 0, 0
-    while pages < _BROWSE_MAX_PAGES and (pages == 0 or time.time() < deadline):
+    seen = {}
+    status = 200
+    while pages < max_pages and (pages == 0 or time.time() < deadline):
         params = dict(base_params)
         if cur: params["Cursor"] = cur
-        items, nxt, status = _browse_page(s, params)
+        items, nxt, status = _browse_page(s, params, allow_fallback)
         if items is None:
-            return out, cur, status, scanned
+            break
         pages += 1; scanned += len(items)
+        for i in items:
+            k = (f"bundle:{i.get('bundleType')}" if i.get("itemType") == "Bundle"
+                 else f"asset:{i.get('assetType')}")
+            seen[k] = seen.get(k, 0) + 1
         out.extend(i for i in items if _browse_match(i, asset_types, bundle_types))
         cur = nxt
         if not cur or len(out) >= _BROWSE_WANT: break
+    if info is not None:
+        info.update({"upstreamStatus": status, "pages": pages, "scanned": scanned,
+                     "matched": len(out),
+                     "typesSeen": dict(sorted(seen.items(), key=lambda kv: -kv[1])[:8])})
+    if status != 200 and pages == 0:
+        return out, cursor, status, scanned
+    if status != 200:                      # error after some pages: keep what we have
+        return out, cur, 200, scanned
     return out, cur, 200, scanned
 
 @app.get("/api/catalog/browse")
@@ -1901,6 +1938,7 @@ def catalog_browse():
     sub    = (request.args.get("sub", "") or "").lower()
     sort   = (request.args.get("sort", "relevance") or "relevance").lower()
     cursor = (request.args.get("cursor", "") or "").strip()
+    debug  = request.args.get("debug", "") == "1"
 
     if group in _BROWSE_LEGACY: group, sub = _BROWSE_LEGACY[group]
     if group != "all" and group not in _BROWSE_TAXONOMY:
@@ -1910,57 +1948,87 @@ def catalog_browse():
         return jsonify({"error": "subcategory tidak valid"}), 400
     if sort not in _BROWSE_SORTS:
         return jsonify({"error": "sort tidak valid"}), 400
-    # Cursors are ours: "<mode>:<roblox cursor>", mode c = with Category hint,
-    # n = without. Only allow a safe charset/length.
-    if cursor and not re.fullmatch(r"[cn]:[A-Za-z0-9_\-=+/.]{1,500}", cursor):
+    # Cursors are ours: "<mode>:<roblox cursor>". Modes: c = with Roblox Category
+    # hint, n = no hint, v<K> = candidate search variant K. Safe charset/length only.
+    if cursor and not re.fullmatch(r"(?:[cn]|v\d{1,2}):[A-Za-z0-9_\-=+/.]{1,500}", cursor):
         return jsonify({"error": "cursor tidak valid"}), 400
 
     cache_key = f"catbrowse_{group}_{sub}_{sort}_{q.lower()}_{cursor}"
-    cached = cache_get(cache_key)
-    if cached: return jsonify(cached)
+    if not debug:
+        cached = cache_get(cache_key)
+        if cached: return jsonify(cached)
 
     try:
         s = get_scraper()
-        asset_types, bundle_types, hint = (None, None, None) if group == "all" else _browse_filter_for(group, sub)
-        keyword = " ".join(x for x in (q, hint) if x)
+        cfg = ({"asset_types": None, "bundle_types": None, "hint": None,
+                "hint_n_only": False, "variants": []}
+               if group == "all" else _browse_filter_for(group, sub))
+        asset_types, bundle_types = cfg["asset_types"], cfg["bundle_types"]
 
-        base = {"Limit": _BROWSE_LIMIT, "SortType": _BROWSE_SORTS[sort], "IncludeNotForSale": "false"}
-        if keyword: base["Keyword"] = keyword
         roblox_cat = None
         if group != "all":
             roblox_cat = (_BROWSE_TAXONOMY[group]["subs"].get(sub, {}).get("roblox")
                           or _BROWSE_TAXONOMY[group].get("roblox"))
 
+        # Ordered candidate searches: variants (most specific), then the Roblox
+        # Category hint, then no hint at all.
+        ladder = {}
+        for k, v in enumerate(cfg["variants"]): ladder[f"v{k}"] = dict(v)
+        if roblox_cat: ladder["c"] = {"Category": roblox_cat}
+        ladder["n"] = {}
+
         if cursor:
-            modes, rcursor = [cursor[0]], cursor[2:]
+            mode_id, rcursor = cursor.split(":", 1)
+            if mode_id not in ladder:
+                return jsonify({"error": "cursor tidak valid"}), 400
+            mode_ids = [mode_id]
         else:
-            modes, rcursor = (["c", "n"] if roblox_cat else ["n"]), ""
+            mode_ids, rcursor = list(ladder), ""
 
         deadline = time.time() + _BROWSE_BUDGET_S
-        chosen = None            # (mode, matches, next_cursor, scanned)
-        errors = []
-        for idx, mode in enumerate(modes):
-            params = dict(base)
-            if mode == "c" and roblox_cat: params["Category"] = roblox_cat
+        chosen, errors, trace, empty_ok = None, [], [], None
+        for idx, mode in enumerate(mode_ids):
+            if idx > 0 and time.time() > deadline:
+                break                      # out of time budget; use what we have
+            params = {"Limit": _BROWSE_LIMIT, "SortType": _BROWSE_SORTS[sort],
+                      "IncludeNotForSale": "false"}
+            params.update(ladder[mode])
+            hint = cfg["hint"] if (mode == "n" or not cfg["hint_n_only"]) else None
+            keyword = " ".join(x for x in (q, hint) if x)
+            if keyword: params["Keyword"] = keyword
+
             # Real-type filtering is always applied, except when Roblox's own
             # Category already scoped a whole sub-less group (mode c): then we
             # trust it rather than risk hiding legitimate items.
             at, bt = asset_types, bundle_types
             if mode == "c" and not sub and "asset_types" not in _BROWSE_TAXONOMY.get(group, {}):
                 at, bt = None, None
-            matches, nxt, status, scanned = _browse_collect(s, params, rcursor, at, bt, deadline)
+
+            speculative = mode.startswith("v")
+            info = {"mode": mode, "params": {k: v for k, v in params.items() if k != "Cursor"}}
+            matches, nxt, status, scanned = _browse_collect(
+                s, params, rcursor, at, bt, deadline,
+                max_pages=(1 if speculative and not cursor else _BROWSE_MAX_PAGES),
+                allow_fallback=not speculative, info=info)
+            trace.append(info)
             if status == 429:
                 return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
             if status != 200 and not matches:
                 errors.append(status); continue
-            last = idx == len(modes) - 1
-            if matches or scanned == 0 or last:
+            last = idx == len(mode_ids) - 1
+            if matches or last or (scanned == 0 and not speculative):
                 chosen = (mode, matches, nxt, scanned); break
-            # valid response but the hint filtered everything out -> try next mode
+            # valid response but nothing of the right type -> try the next candidate
+            empty_ok = (mode, matches, nxt, scanned)
+
+        if chosen is None and empty_ok is not None:
+            chosen = empty_ok              # ran out of candidates/time: an honest "nothing"
 
         if chosen is None:
-            return jsonify({"error": "Pencarian katalog gagal (Roblox HTTP "
-                            + "/".join(map(str, errors or ["?"])) + "). Coba filter lain."}), 502
+            body = {"error": "Pencarian katalog gagal (Roblox HTTP "
+                    + "/".join(map(str, errors or ["?"])) + "). Coba filter lain."}
+            if debug: body["debug"] = trace
+            return jsonify(body), 502
 
         mode, matches, nxt, _scanned = chosen
         asset_ids  = [i["id"] for i in matches if i.get("itemType", "Asset") == "Asset"  and i.get("id")]
@@ -1989,6 +2057,8 @@ def catalog_browse():
             })
 
         result = {"items": out_items, "nextCursor": f"{mode}:{nxt}" if nxt else None}
+        if debug:
+            return jsonify({**result, "debug": {"usedMode": mode, "attempts": trace}})
         cache_set(cache_key, result)
         return jsonify(result)
     except Exception as e:
