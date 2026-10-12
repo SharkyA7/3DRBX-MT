@@ -2654,6 +2654,17 @@ function bwRenderItems(items){
     grid.appendChild(card);
   });
 }
+// Browse goes through the Cloudflare edge so repeat searches are answered from
+// its shared cache. If the edge is unreachable, or hasn't been redeployed with
+// the browse route yet (it answers 404; the backend never does), go straight
+// to the backend instead of failing.
+async function bwFetch(qs){
+  try{
+    const r = await fetch(`${EDGE_BASE}/api/catalog/browse?${qs}`);
+    if(r.status !== 404) return r;
+  }catch(_){ /* network/CORS failure -> fall through */ }
+  return fetch(`${BASE}/api/catalog/browse?${qs}`);
+}
 async function browseCatalog(reset){
   if(bwLoading && !reset) return;
   const q = document.getElementById('bw-q').value.trim();
@@ -2678,7 +2689,7 @@ async function browseCatalog(reset){
   try{
     const qs = new URLSearchParams({ q, category: bwCategory, sub: bwSub, sort: document.getElementById('bw-sort').value });
     if(!reset && bwCursor) qs.set('cursor', bwCursor);
-    const res = await fetch(`${BASE}/api/catalog/browse?${qs}`);
+    const res = await bwFetch(qs);
     const data = await res.json().catch(()=>({}));
     if(myReq !== bwReq) return; // a newer search replaced this one
     if(!res.ok) throw new Error(data.error || res.statusText || bwT('Gagal memuat katalog','Failed to load catalog'));
