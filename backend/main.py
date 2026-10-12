@@ -1702,17 +1702,14 @@ def catalog_info():
 # and every card it returns feeds straight into the existing /api/catalog/info
 # + download flow by asset ID.
 #
-# NOTE: the Category/SortType values below follow Roblox's public catalog
-# search API as documented at the time of writing. Roblox changes this API
-# occasionally; if a filter stops working, this table is the one place to fix.
-_BROWSE_CATEGORIES = {
-    "all":         {},
-    "clothing":    {"Category": "Clothing"},
-    "accessories": {"Category": "Accessories"},
-    "bodyparts":   {"Category": "BodyParts"},
-    "animations":  {"Category": "AvatarAnimations"},
-    "gear":        {"Category": "Gear"},
-}
+# HOW FILTERING WORKS (and why it's built this way):
+# Roblox's own Category/Subcategory enum values are the part of its search API
+# that changes most and that we can't verify offline. So the *source of truth*
+# for a filter is each result's real assetType/bundleType, checked here. The
+# Roblox "Category" is only a hint to narrow the upstream search. If Roblox
+# rejects the hint (HTTP 400) or it yields nothing, we retry without it and
+# page through the unfiltered results instead -- slower, but still correct.
+# If a category misbehaves, fix its row in _BROWSE_TAXONOMY below.
 _BROWSE_SORTS = {          # our key -> Roblox SortType
     "relevance":  0,
     "favorited":  1,
@@ -1721,8 +1718,7 @@ _BROWSE_SORTS = {          # our key -> Roblox SortType
     "priceasc":   4,
     "pricedesc":  5,
 }
-# Roblox numeric AssetType -> readable label (only the common wearable ones;
-# anything else falls back to "Asset <n>").
+# Roblox numeric AssetType -> readable label.
 _BROWSE_ASSET_TYPE_NAMES = {
     2: "T-Shirt", 8: "Hat", 11: "Shirt", 12: "Pants", 17: "Head", 18: "Face",
     19: "Gear", 24: "Animation", 27: "Torso", 28: "Right Arm", 29: "Left Arm",
@@ -1731,10 +1727,100 @@ _BROWSE_ASSET_TYPE_NAMES = {
     61: "Emote", 64: "T-Shirt (Layered)", 65: "Shirt (Layered)",
     66: "Pants (Layered)", 67: "Jacket", 68: "Sweater", 69: "Shorts",
     70: "Left Shoe", 71: "Right Shoe", 72: "Dress/Skirt", 76: "Eyebrow",
-    77: "Eyelash", 78: "Mood", 79: "Dynamic Head",
+    77: "Eyelash", 78: "Mood", 79: "Dynamic Head", 92: "Background",
 }
-_BROWSE_LIMIT = 30
+# Some Roblox responses give the type as a name instead of a number.
+_BROWSE_ASSET_TYPE_BY_NAME = {
+    "tshirt": 2, "hat": 8, "shirt": 11, "pants": 12, "head": 17, "face": 18,
+    "gear": 19, "animation": 24, "hairaccessory": 41, "faceaccessory": 42,
+    "neckaccessory": 43, "shoulderaccessory": 44, "frontaccessory": 45,
+    "backaccessory": 46, "waistaccessory": 47, "emoteanimation": 61,
+    "tshirtaccessory": 64, "shirtaccessory": 65, "pantsaccessory": 66,
+    "jacketaccessory": 67, "sweateraccessory": 68, "shortsaccessory": 69,
+    "leftshoeaccessory": 70, "rightshoeaccessory": 71,
+    "dressskirtaccessory": 72, "dynamichead": 79,
+}
+_BROWSE_BUNDLE_TYPES = {1: "BodyParts", 2: "AvatarAnimations"}
+
+# group -> {"roblox": Category hint, "subs": {key: filter}}
+# Sub filter keys: asset_types (set of ints) | bundle_types (set of names) |
+# hint (extra keyword, for types that have no reliable asset-type ID) |
+# roblox (overrides the group's Category hint for this sub).
+_BROWSE_TAXONOMY = {
+    "body": {"roblox": "BodyParts", "subs": {
+        "fullbodies": {"bundle_types": {"BodyParts"}},
+        "hair":       {"asset_types": {41}, "roblox": "Accessories"},
+        "heads":      {"asset_types": {17, 79}},
+    }},
+    "clothing": {"roblox": "Clothing", "subs": {
+        "shirts":        {"asset_types": {65}},
+        "tshirts":       {"asset_types": {64}},
+        "sweaters":      {"asset_types": {68}},
+        "jackets":       {"asset_types": {67}},
+        "pants":         {"asset_types": {66}},
+        "dresses":       {"asset_types": {72}},
+        "bodysuits":     {"hint": "bodysuit"},
+        "shorts":        {"asset_types": {69}},
+        "shoes":         {"asset_types": {70, 71}},
+        "classicshirts":   {"asset_types": {11}},
+        "classictshirts":  {"asset_types": {2}},
+        "classicpants":    {"asset_types": {12}},
+    }},
+    "accessories": {"roblox": "Accessories", "subs": {
+        "head":     {"asset_types": {8}},
+        "face":     {"asset_types": {42}},
+        "neck":     {"asset_types": {43}},
+        "shoulder": {"asset_types": {44}},
+        "front":    {"asset_types": {45}},
+        "back":     {"asset_types": {46}},
+        "waist":    {"asset_types": {47}},
+        "gear":     {"asset_types": {19}, "roblox": "Gear"},
+    }},
+    "backgrounds": {"roblox": None, "subs": {}, "asset_types": {92}, "hint": "background"},
+    "animations": {"roblox": "AvatarAnimations", "subs": {
+        "bundles": {"bundle_types": {"AvatarAnimations"}},
+        "emotes":  {"asset_types": {61}},
+    }},
+}
+# Older clients sent flat category keys; keep them working.
+_BROWSE_LEGACY = {"bodyparts": ("body", ""), "gear": ("accessories", "gear")}
+
+_BROWSE_LIMIT      = 30     # items per upstream Roblox page
+_BROWSE_WANT       = 24     # stop paging once we have at least this many matches
+_BROWSE_MAX_PAGES  = 4      # upstream pages per request (bounds latency)
+_BROWSE_BUDGET_S   = 12     # wall-clock budget for one browse request
 _RBXCDN_RE = re.compile(r"^https://[a-z0-9\-]+\.rbxcdn\.com/")
+
+def _browse_asset_type(v):
+    if isinstance(v, int): return v
+    if isinstance(v, str):
+        if v.strip().isdigit(): return int(v)
+        return _BROWSE_ASSET_TYPE_BY_NAME.get(v.strip().lower().replace(" ", "").replace("-", ""))
+    return None
+
+def _browse_bundle_type(v):
+    if isinstance(v, int): return _BROWSE_BUNDLE_TYPES.get(v)
+    if isinstance(v, str): return v
+    return None
+
+def _browse_filter_for(group, sub):
+    """-> (asset_types|None, bundle_types|None, hint|None). None/None = no type filter."""
+    g = _BROWSE_TAXONOMY[group]
+    if sub:
+        f = g["subs"][sub]
+        return f.get("asset_types"), f.get("bundle_types"), f.get("hint")
+    if "asset_types" in g:                      # leaf group with its own types
+        return g["asset_types"], None, g.get("hint")
+    a, b = set(), set()                         # group-level = union of its subs
+    for f in g["subs"].values():
+        a |= f.get("asset_types", set()); b |= f.get("bundle_types", set())
+    return (a or None), (b or None), None
+
+def _browse_match(item, asset_types, bundle_types):
+    if not asset_types and not bundle_types: return True
+    if item.get("itemType", "Asset") == "Bundle":
+        return bool(bundle_types) and _browse_bundle_type(item.get("bundleType")) in bundle_types
+    return bool(asset_types) and _browse_asset_type(item.get("assetType")) in asset_types
 
 def _browse_thumbs(s, asset_ids, bundle_ids):
     """Batch-fetch small thumbnails. Never raises: a missing thumbnail must not
@@ -1764,78 +1850,133 @@ def _browse_thumbs(s, asset_ids, bundle_ids):
         print(f"[browse] bundle thumbs failed: {type(e).__name__}: {e}")
     return out
 
+def _browse_page(s, params):
+    """One upstream page -> (items, next_cursor, status). items is None on failure
+    (status then holds Roblox's HTTP code). Falls back to an IDs-only search
+    plus one details POST if the details-search endpoint itself fails."""
+    r = s.get("https://catalog.roblox.com/v1/search/items/details", params=params, timeout=10)
+    if r.status_code == 200:
+        b = r.json()
+        return (b.get("data") or []), b.get("nextPageCursor"), 200
+    if r.status_code == 429:
+        return None, None, 429
+    print(f"[browse] details search HTTP {r.status_code} params={params} body={(r.text or '')[:200]!r}")
+    r2 = s.get("https://catalog.roblox.com/v1/search/items", params=params, timeout=10)
+    if r2.status_code != 200:
+        print(f"[browse] ids search HTTP {r2.status_code} body={(r2.text or '')[:200]!r}")
+        return None, None, (429 if r2.status_code == 429 else r.status_code)
+    b2 = r2.json()
+    refs = [{"itemType": d.get("itemType", "Asset"), "id": d.get("id")}
+            for d in (b2.get("data") or []) if d.get("id")]
+    items = []
+    if refs:
+        d = rpost("https://catalog.roblox.com/v1/catalog/items/details", {"items": refs})
+        items = d.get("data") or []
+    return items, b2.get("nextPageCursor"), 200
+
+def _browse_collect(s, base_params, cursor, asset_types, bundle_types, deadline):
+    """Page upstream until we have enough matches. Returns
+    (matches, next_cursor, status, scanned). On an upstream error, status != 200
+    and `matches` holds whatever was gathered before it."""
+    out, cur, scanned, pages = [], cursor, 0, 0
+    while pages < _BROWSE_MAX_PAGES and (pages == 0 or time.time() < deadline):
+        params = dict(base_params)
+        if cur: params["Cursor"] = cur
+        items, nxt, status = _browse_page(s, params)
+        if items is None:
+            return out, cur, status, scanned
+        pages += 1; scanned += len(items)
+        out.extend(i for i in items if _browse_match(i, asset_types, bundle_types))
+        cur = nxt
+        if not cur or len(out) >= _BROWSE_WANT: break
+    return out, cur, 200, scanned
+
 @app.get("/api/catalog/browse")
 def catalog_browse():
     rl = check_rate_limit("browse", limit=30, window_s=60)
     if rl: return rl
 
-    q        = (request.args.get("q", "") or "").strip()[:100]
-    category = (request.args.get("category", "all") or "all").lower()
-    sort     = (request.args.get("sort", "relevance") or "relevance").lower()
-    cursor   = (request.args.get("cursor", "") or "").strip()
+    q      = (request.args.get("q", "") or "").strip()[:100]
+    group  = (request.args.get("category", "all") or "all").lower()
+    sub    = (request.args.get("sub", "") or "").lower()
+    sort   = (request.args.get("sort", "relevance") or "relevance").lower()
+    cursor = (request.args.get("cursor", "") or "").strip()
 
-    if category not in _BROWSE_CATEGORIES:
+    if group in _BROWSE_LEGACY: group, sub = _BROWSE_LEGACY[group]
+    if group != "all" and group not in _BROWSE_TAXONOMY:
         return jsonify({"error": "category tidak valid"}), 400
+    if group == "all": sub = ""
+    if sub and sub not in _BROWSE_TAXONOMY[group]["subs"]:
+        return jsonify({"error": "subcategory tidak valid"}), 400
     if sort not in _BROWSE_SORTS:
         return jsonify({"error": "sort tidak valid"}), 400
-    # Cursors are opaque tokens from Roblox; only allow a safe charset/length.
-    if cursor and not re.fullmatch(r"[A-Za-z0-9_\-=+/.]{1,500}", cursor):
+    # Cursors are ours: "<mode>:<roblox cursor>", mode c = with Category hint,
+    # n = without. Only allow a safe charset/length.
+    if cursor and not re.fullmatch(r"[cn]:[A-Za-z0-9_\-=+/.]{1,500}", cursor):
         return jsonify({"error": "cursor tidak valid"}), 400
 
-    cache_key = f"catbrowse_{category}_{sort}_{q.lower()}_{cursor}"
+    cache_key = f"catbrowse_{group}_{sub}_{sort}_{q.lower()}_{cursor}"
     cached = cache_get(cache_key)
     if cached: return jsonify(cached)
 
     try:
         s = get_scraper()
-        params = {"Limit": _BROWSE_LIMIT, "SortType": _BROWSE_SORTS[sort],
-                  "IncludeNotForSale": "false"}
-        params.update(_BROWSE_CATEGORIES[category])
-        if q:      params["Keyword"] = q
-        if cursor: params["Cursor"]  = cursor
+        asset_types, bundle_types, hint = (None, None, None) if group == "all" else _browse_filter_for(group, sub)
+        keyword = " ".join(x for x in (q, hint) if x)
 
-        items, next_cursor, prev_cursor = [], None, None
-        r = s.get("https://catalog.roblox.com/v1/search/items/details",
-                  params=params, timeout=12)
-        if r.status_code == 200:
-            body = r.json()
-            items       = body.get("data") or []
-            next_cursor = body.get("nextPageCursor")
-            prev_cursor = body.get("previousPageCursor")
-        elif r.status_code == 429:
-            return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
+        base = {"Limit": _BROWSE_LIMIT, "SortType": _BROWSE_SORTS[sort], "IncludeNotForSale": "false"}
+        if keyword: base["Keyword"] = keyword
+        roblox_cat = None
+        if group != "all":
+            roblox_cat = (_BROWSE_TAXONOMY[group]["subs"].get(sub, {}).get("roblox")
+                          or _BROWSE_TAXONOMY[group].get("roblox"))
+
+        if cursor:
+            modes, rcursor = [cursor[0]], cursor[2:]
         else:
-            print(f"[browse] details search HTTP {r.status_code} params={params} body={(r.text or '')[:200]!r}")
-            # Fallback: IDs-only search, then resolve details in one POST.
-            r2 = s.get("https://catalog.roblox.com/v1/search/items",
-                       params=params, timeout=12)
-            if r2.status_code == 429:
-                return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
-            if r2.status_code != 200:
-                print(f"[browse] ids search HTTP {r2.status_code} body={(r2.text or '')[:200]!r}")
-                return jsonify({"error": f"Pencarian katalog gagal (Roblox HTTP {r.status_code}/{r2.status_code}). Coba filter lain."}), 502
-            b2 = r2.json()
-            refs = [{"itemType": d.get("itemType", "Asset"), "id": d.get("id")}
-                    for d in (b2.get("data") or []) if d.get("id")]
-            next_cursor = b2.get("nextPageCursor")
-            prev_cursor = b2.get("previousPageCursor")
-            if refs:
-                d = rpost("https://catalog.roblox.com/v1/catalog/items/details", {"items": refs})
-                items = d.get("data") or []
+            modes, rcursor = (["c", "n"] if roblox_cat else ["n"]), ""
 
-        asset_ids  = [i["id"] for i in items if i.get("itemType", "Asset") == "Asset"  and i.get("id")]
-        bundle_ids = [i["id"] for i in items if i.get("itemType") == "Bundle" and i.get("id")]
+        deadline = time.time() + _BROWSE_BUDGET_S
+        chosen = None            # (mode, matches, next_cursor, scanned)
+        errors = []
+        for idx, mode in enumerate(modes):
+            params = dict(base)
+            if mode == "c" and roblox_cat: params["Category"] = roblox_cat
+            # Real-type filtering is always applied, except when Roblox's own
+            # Category already scoped a whole sub-less group (mode c): then we
+            # trust it rather than risk hiding legitimate items.
+            at, bt = asset_types, bundle_types
+            if mode == "c" and not sub and "asset_types" not in _BROWSE_TAXONOMY.get(group, {}):
+                at, bt = None, None
+            matches, nxt, status, scanned = _browse_collect(s, params, rcursor, at, bt, deadline)
+            if status == 429:
+                return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
+            if status != 200 and not matches:
+                errors.append(status); continue
+            last = idx == len(modes) - 1
+            if matches or scanned == 0 or last:
+                chosen = (mode, matches, nxt, scanned); break
+            # valid response but the hint filtered everything out -> try next mode
+
+        if chosen is None:
+            return jsonify({"error": "Pencarian katalog gagal (Roblox HTTP "
+                            + "/".join(map(str, errors or ["?"])) + "). Coba filter lain."}), 502
+
+        mode, matches, nxt, _scanned = chosen
+        asset_ids  = [i["id"] for i in matches if i.get("itemType", "Asset") == "Asset"  and i.get("id")]
+        bundle_ids = [i["id"] for i in matches if i.get("itemType") == "Bundle" and i.get("id")]
         thumbs = _browse_thumbs(s, asset_ids, bundle_ids)
 
         out_items = []
-        for i in items:
+        for i in matches:
             iid = i.get("id")
             if not iid: continue
             itype = i.get("itemType", "Asset")
             if itype == "Bundle":
                 label = "Bundle"
             else:
-                label = _BROWSE_ASSET_TYPE_NAMES.get(i.get("assetType"), f"Asset {i.get('assetType')}")
+                label = _BROWSE_ASSET_TYPE_NAMES.get(_browse_asset_type(i.get("assetType")),
+                                                     f"Asset {i.get('assetType')}")
             out_items.append({
                 "id": iid,
                 "itemType": itype,
@@ -1847,7 +1988,7 @@ def catalog_browse():
                 "thumbnailUrl": thumbs.get((itype, iid)),
             })
 
-        result = {"items": out_items, "nextCursor": next_cursor, "prevCursor": prev_cursor}
+        result = {"items": out_items, "nextCursor": f"{mode}:{nxt}" if nxt else None}
         cache_set(cache_key, result)
         return jsonify(result)
     except Exception as e:
