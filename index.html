@@ -170,10 +170,13 @@ select option{background:var(--s2)}
 .packed-remove:hover{filter:brightness(1.2)}
 /* ── Catalog browse (marketplace preview) ── */
 .bw-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
-.bw-chip{background:var(--s3);border:1px solid var(--border2);color:var(--muted);border-radius:999px;padding:6px 12px;font-family:var(--font-ui);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
+.bw-chip{flex:0 0 auto;background:var(--s3);border:1px solid var(--border2);color:var(--muted);border-radius:999px;padding:6px 12px;font-family:var(--font-ui);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
 .bw-chip:hover{color:var(--white)}
 .bw-chip.active{background:var(--accent);color:#000;border-color:var(--accent)}
-.bw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px}
+.bw-subchips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:4px;margin-top:8px;scrollbar-width:thin}
+.bw-subchips .bw-chip{flex:0 0 auto}
+.bw-scroll{max-height:min(70vh,620px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin-top:14px;padding-right:2px;scrollbar-width:thin}
+.bw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
 @media(max-width:460px){.bw-grid{grid-template-columns:repeat(2,1fr)}}
 .bw-item{background:var(--s2);border:1px solid var(--border2);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:border-color .15s;min-width:0}
 .bw-item:hover{border-color:var(--accent)}
@@ -1222,14 +1225,8 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <input type="text" id="bw-q" maxlength="200" autocomplete="off" data-t-ph-id="Cari nama item, atau tempel ID/link…" data-t-ph-en="Search item name, or paste ID/link…" placeholder="Cari nama item, atau tempel ID/link…" onkeydown="if(event.key==='Enter')browseCatalog(true)">
         <button class="btn" id="bw-btn" onclick="browseCatalog(true)">🔍 <span data-t-id="CARI" data-t-en="SEARCH">CARI</span></button>
       </div>
-      <div class="bw-chips" id="bw-chips">
-        <button class="bw-chip active" data-cat="all" onclick="bwSetCategory('all')"><span data-t-id="Semua" data-t-en="All">Semua</span></button>
-        <button class="bw-chip" data-cat="clothing" onclick="bwSetCategory('clothing')"><span data-t-id="Pakaian" data-t-en="Clothing">Pakaian</span></button>
-        <button class="bw-chip" data-cat="accessories" onclick="bwSetCategory('accessories')"><span data-t-id="Aksesoris" data-t-en="Accessories">Aksesoris</span></button>
-        <button class="bw-chip" data-cat="bodyparts" onclick="bwSetCategory('bodyparts')"><span data-t-id="Bagian Tubuh" data-t-en="Body Parts">Bagian Tubuh</span></button>
-        <button class="bw-chip" data-cat="animations" onclick="bwSetCategory('animations')"><span data-t-id="Animasi" data-t-en="Animations">Animasi</span></button>
-        <button class="bw-chip" data-cat="gear" onclick="bwSetCategory('gear')"><span data-t-id="Gear" data-t-en="Gear">Gear</span></button>
-      </div>
+      <div class="bw-chips" id="bw-chips"></div>
+      <div class="bw-chips bw-subchips" id="bw-subchips" style="display:none"></div>
       <div class="row" style="margin-top:10px">
         <select id="bw-sort" onchange="browseCatalog(true)">
           <option value="relevance" data-t-id="Paling Relevan" data-t-en="Most Relevant">Paling Relevan</option>
@@ -1241,8 +1238,10 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         </select>
       </div>
       <div class="status-box idle" id="bw-status" style="margin-top:12px"><div class="dot"></div><span id="bw-msg">Siap.</span></div>
-      <div class="bw-grid" id="bw-grid"></div>
-      <button class="btn btn-cyan" id="bw-more" style="display:none;width:100%;margin-top:12px" onclick="browseCatalog(false)">⬇ <span data-t-id="MUAT LEBIH BANYAK" data-t-en="LOAD MORE">MUAT LEBIH BANYAK</span></button>
+      <div class="bw-scroll" id="bw-scroll">
+        <div class="bw-grid" id="bw-grid"></div>
+        <button class="btn btn-cyan" id="bw-more" type="button" style="display:none;width:100%;margin-top:12px" onclick="browseCatalog(false)">⬇ <span data-t-id="MUAT LEBIH BANYAK" data-t-en="LOAD MORE">MUAT LEBIH BANYAK</span></button>
+      </div>
     </div>
 
     <div class="card">
@@ -2513,7 +2512,27 @@ async function downloadCatalogImageVariant(variant){
 // ── CATALOG BROWSE (marketplace preview) ───────────────────────────
 // State uses `var` on purpose: switchTab() can call bwInit() before this line
 // has executed, and `let` would throw a TDZ error in that case.
-var bwCategory = 'all', bwCursor = null, bwLoading = false, bwLoaded = false, bwReq = 0;
+var bwCategory = 'all', bwSub = '', bwCursor = null, bwLoading = false, bwLoaded = false, bwReq = 0;
+
+// Mirrors Roblox's marketplace menu. Keys must match _BROWSE_TAXONOMY in
+// backend/main.py. Each sub is [key, label-id, label-en].
+var BW_TAX = [
+  {key:'all', id:'Semua', en:'All', subs:[]},
+  {key:'body', id:'Tubuh', en:'Body', subs:[
+    ['fullbodies','Tubuh Penuh','Full Bodies'], ['hair','Rambut','Hair'], ['heads','Kepala','Heads']]},
+  {key:'clothing', id:'Pakaian', en:'Clothing', subs:[
+    ['shirts','Kemeja','Shirts'], ['tshirts','Kaos','T-Shirts'], ['sweaters','Sweater','Sweaters'],
+    ['jackets','Jaket','Jackets'], ['pants','Celana','Pants'], ['dresses','Gaun & Rok','Dresses & Skirts'],
+    ['bodysuits','Bodysuit','Bodysuits'], ['shorts','Celana Pendek','Shorts'], ['shoes','Sepatu','Shoes'],
+    ['classicshirts','Kemeja Klasik','Classic Shirts'], ['classictshirts','Kaos Klasik','Classic T-Shirts'],
+    ['classicpants','Celana Klasik','Classic Pants']]},
+  {key:'accessories', id:'Aksesoris', en:'Accessories', subs:[
+    ['head','Kepala','Head'], ['face','Wajah','Face'], ['neck','Leher','Neck'], ['shoulder','Bahu','Shoulder'],
+    ['front','Depan','Front'], ['back','Belakang','Back'], ['waist','Pinggang','Waist'], ['gear','Gear','Gear']]},
+  {key:'backgrounds', id:'Latar Belakang', en:'Backgrounds', subs:[]},
+  {key:'animations', id:'Animasi', en:'Animations', subs:[
+    ['bundles','Bundel','Bundles'], ['emotes','Emote','Emotes']]}
+];
 
 function bwT(idText, enText){
   return (typeof globalLang !== 'undefined' && globalLang === 'en') ? enText : idText;
@@ -2521,12 +2540,46 @@ function bwT(idText, enText){
 function bwInit(){
   if(bwLoaded) return;
   bwLoaded = true;
-  browseCatalog(true);
+  bwBuildChips();
+  return browseCatalog(true);
+}
+function bwMkChip(labelId, labelEn, active, onclick){
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'bw-chip' + (active ? ' active' : '');
+  const sp = document.createElement('span');
+  // data-t-* lets the existing language toggle re-translate these chips too.
+  sp.setAttribute('data-t-id', labelId);
+  sp.setAttribute('data-t-en', labelEn);
+  sp.textContent = bwT(labelId, labelEn);
+  b.appendChild(sp);
+  b.onclick = onclick;
+  return b;
+}
+function bwBuildChips(){
+  const wrap = document.getElementById('bw-chips');
+  wrap.innerHTML = '';
+  BW_TAX.forEach(t=>wrap.appendChild(bwMkChip(t.id, t.en, t.key===bwCategory, ()=>bwSetCategory(t.key))));
+  bwBuildSubChips();
+}
+function bwBuildSubChips(){
+  const wrap = document.getElementById('bw-subchips');
+  wrap.innerHTML = '';
+  const t = BW_TAX.find(x=>x.key===bwCategory);
+  if(!t || !t.subs.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  wrap.appendChild(bwMkChip('Semua', 'All', bwSub==='', ()=>bwSetSub('')));
+  t.subs.forEach(([k, i, e])=>wrap.appendChild(bwMkChip(i, e, bwSub===k, ()=>bwSetSub(k))));
 }
 function bwSetCategory(cat){
-  bwCategory = cat;
-  document.querySelectorAll('.bw-chip').forEach(b=>b.classList.toggle('active', b.dataset.cat===cat));
-  browseCatalog(true);
+  bwCategory = cat; bwSub = '';
+  bwBuildChips();
+  return browseCatalog(true);
+}
+function bwSetSub(sub){
+  bwSub = sub;
+  bwBuildSubChips();
+  return browseCatalog(true);
 }
 // A pasted numeric ID (5+ digits) or roblox.com catalog/bundles/library link
 // skips search and opens that item directly, like the old ID box did.
@@ -2611,14 +2664,19 @@ async function browseCatalog(reset){
     bwCursor = null;
     document.getElementById('bw-grid').innerHTML = '';
     document.getElementById('bw-more').style.display = 'none';
+    document.getElementById('bw-scroll').scrollTop = 0;
   }
   const myReq = ++bwReq;
   bwLoading = true;
   const btn = document.getElementById('bw-btn');
+  const moreBtn = document.getElementById('bw-more');
   btn.disabled = true;
+  // Disable (don't hide) Load more while loading: hiding a focused button
+  // makes some browsers jump the page, and the list keeps its scroll position.
+  moreBtn.disabled = true;
   st('bw-status', bwT('Memuat item…','Loading items…'), 'loading');
   try{
-    const qs = new URLSearchParams({ q, category: bwCategory, sort: document.getElementById('bw-sort').value });
+    const qs = new URLSearchParams({ q, category: bwCategory, sub: bwSub, sort: document.getElementById('bw-sort').value });
     if(!reset && bwCursor) qs.set('cursor', bwCursor);
     const res = await fetch(`${BASE}/api/catalog/browse?${qs}`);
     const data = await res.json().catch(()=>({}));
@@ -2638,7 +2696,7 @@ async function browseCatalog(reset){
   }catch(e){
     if(myReq === bwReq) st('bw-status', '✗ ' + e.message, 'err');
   }finally{
-    if(myReq === bwReq){ bwLoading = false; btn.disabled = false; }
+    if(myReq === bwReq){ bwLoading = false; btn.disabled = false; moreBtn.disabled = false; }
   }
 }
 
