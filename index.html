@@ -2688,7 +2688,10 @@ async function browseCatalog(reset){
     document.getElementById('bw-more').style.display = bwCursor ? 'block' : 'none';
     const total = document.getElementById('bw-grid').children.length;
     if(total === 0){
-      st('bw-status', bwT('Tidak ada item yang cocok.','No matching items.'), 'idle');
+      st('bw-status', bwSub
+        ? bwT('Roblox tidak mengembalikan item untuk filter ini. Coba kata kunci lain, atau tempel ID item langsung.',
+              'Roblox returned no items for this filter. Try a keyword, or paste an item ID directly.')
+        : bwT('Tidak ada item yang cocok.','No matching items.'), 'idle');
     }else{
       st('bw-status', bwT(`${total} item ditampilkan. Ketuk item untuk membukanya.`,
                           `${total} items shown. Tap an item to open it.`), 'ok');
