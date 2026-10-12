@@ -168,6 +168,23 @@ select option{background:var(--s2)}
 .packed-id{font-size:9px;color:var(--muted);margin-top:2px}
 .packed-remove{position:absolute;top:-6px;right:-6px;width:18px;height:18px;line-height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:12px;cursor:pointer;padding:0}
 .packed-remove:hover{filter:brightness(1.2)}
+/* ── Catalog browse (marketplace preview) ── */
+.bw-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.bw-chip{background:var(--s3);border:1px solid var(--border2);color:var(--muted);border-radius:999px;padding:6px 12px;font-family:var(--font-ui);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
+.bw-chip:hover{color:var(--white)}
+.bw-chip.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.bw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px}
+@media(max-width:460px){.bw-grid{grid-template-columns:repeat(2,1fr)}}
+.bw-item{background:var(--s2);border:1px solid var(--border2);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:border-color .15s;min-width:0}
+.bw-item:hover{border-color:var(--accent)}
+.bw-thumb{aspect-ratio:1/1;background:var(--s3);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:22px}
+.bw-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.bw-name{font-family:var(--font-ui);font-size:12px;font-weight:600;color:var(--white);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;min-height:2.6em;word-break:break-word}
+.bw-meta{font-family:var(--font-ui);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bw-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px}
+.bw-price{font-family:var(--font-ui);font-size:11px;font-weight:700;color:var(--green)}
+.bw-add{background:var(--s4);border:1px solid var(--border2);color:var(--white);border-radius:6px;padding:4px 8px;font-family:var(--font-ui);font-size:10px;font-weight:700;cursor:pointer}
+.bw-add:disabled{opacity:.6;cursor:default}
 .dl-title{font-family:var(--font-ui);font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .dl-desc{font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
@@ -1199,6 +1216,35 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 
   <!-- ── KATALOG PANEL ── -->
   <div class="panel" id="panel-catalog">
+    <div class="card" id="bw-card">
+      <div class="label">🛒 <span data-t-id="JELAJAHI MARKETPLACE" data-t-en="BROWSE MARKETPLACE">JELAJAHI MARKETPLACE</span></div>
+      <div class="row">
+        <input type="text" id="bw-q" maxlength="200" autocomplete="off" data-t-ph-id="Cari nama item, atau tempel ID/link…" data-t-ph-en="Search item name, or paste ID/link…" placeholder="Cari nama item, atau tempel ID/link…" onkeydown="if(event.key==='Enter')browseCatalog(true)">
+        <button class="btn" id="bw-btn" onclick="browseCatalog(true)">🔍 <span data-t-id="CARI" data-t-en="SEARCH">CARI</span></button>
+      </div>
+      <div class="bw-chips" id="bw-chips">
+        <button class="bw-chip active" data-cat="all" onclick="bwSetCategory('all')"><span data-t-id="Semua" data-t-en="All">Semua</span></button>
+        <button class="bw-chip" data-cat="clothing" onclick="bwSetCategory('clothing')"><span data-t-id="Pakaian" data-t-en="Clothing">Pakaian</span></button>
+        <button class="bw-chip" data-cat="accessories" onclick="bwSetCategory('accessories')"><span data-t-id="Aksesoris" data-t-en="Accessories">Aksesoris</span></button>
+        <button class="bw-chip" data-cat="bodyparts" onclick="bwSetCategory('bodyparts')"><span data-t-id="Bagian Tubuh" data-t-en="Body Parts">Bagian Tubuh</span></button>
+        <button class="bw-chip" data-cat="animations" onclick="bwSetCategory('animations')"><span data-t-id="Animasi" data-t-en="Animations">Animasi</span></button>
+        <button class="bw-chip" data-cat="gear" onclick="bwSetCategory('gear')"><span data-t-id="Gear" data-t-en="Gear">Gear</span></button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <select id="bw-sort" onchange="browseCatalog(true)">
+          <option value="relevance" data-t-id="Paling Relevan" data-t-en="Most Relevant">Paling Relevan</option>
+          <option value="bestseller" data-t-id="Terlaris" data-t-en="Best Selling">Terlaris</option>
+          <option value="newest" data-t-id="Terbaru" data-t-en="Newest">Terbaru</option>
+          <option value="favorited" data-t-id="Paling Difavoritkan" data-t-en="Most Favorited">Paling Difavoritkan</option>
+          <option value="priceasc" data-t-id="Harga: Rendah ke Tinggi" data-t-en="Price: Low to High">Harga: Rendah ke Tinggi</option>
+          <option value="pricedesc" data-t-id="Harga: Tinggi ke Rendah" data-t-en="Price: High to Low">Harga: Tinggi ke Rendah</option>
+        </select>
+      </div>
+      <div class="status-box idle" id="bw-status" style="margin-top:12px"><div class="dot"></div><span id="bw-msg">Siap.</span></div>
+      <div class="bw-grid" id="bw-grid"></div>
+      <button class="btn btn-cyan" id="bw-more" style="display:none;width:100%;margin-top:12px" onclick="browseCatalog(false)">⬇ <span data-t-id="MUAT LEBIH BANYAK" data-t-en="LOAD MORE">MUAT LEBIH BANYAK</span></button>
+    </div>
+
     <div class="card">
       <div class="label"><span data-t-id="CARI ITEM KATALOG" data-t-en="SEARCH CATALOG ITEM">CARI ITEM KATALOG</span></div>
       <div class="row">
@@ -2062,6 +2108,7 @@ function switchTab(name){
     t.classList.toggle('active', oc.includes("'"+name+"'"));
   });
   if(typeof Motion!=='undefined'&&next) animatePanelCards(next);
+  if(name==='catalog' && typeof bwInit==='function') bwInit();
 }
 
 let dropdownAnchorBtn = null;
@@ -2460,6 +2507,138 @@ async function downloadCatalogImageVariant(variant){
     st('cat-status',`✓ ${label} berhasil diunduh!`,'ok');
   }catch(e){
     st('cat-status','✗ '+e.message,'err');
+  }
+}
+
+// ── CATALOG BROWSE (marketplace preview) ───────────────────────────
+// State uses `var` on purpose: switchTab() can call bwInit() before this line
+// has executed, and `let` would throw a TDZ error in that case.
+var bwCategory = 'all', bwCursor = null, bwLoading = false, bwLoaded = false, bwReq = 0;
+
+function bwT(idText, enText){
+  return (typeof globalLang !== 'undefined' && globalLang === 'en') ? enText : idText;
+}
+function bwInit(){
+  if(bwLoaded) return;
+  bwLoaded = true;
+  browseCatalog(true);
+}
+function bwSetCategory(cat){
+  bwCategory = cat;
+  document.querySelectorAll('.bw-chip').forEach(b=>b.classList.toggle('active', b.dataset.cat===cat));
+  browseCatalog(true);
+}
+// A pasted numeric ID (5+ digits) or roblox.com catalog/bundles/library link
+// skips search and opens that item directly, like the old ID box did.
+function bwParseDirectId(text){
+  const t = (text||'').trim();
+  if(/^\d{5,}$/.test(t)) return parseInt(t);
+  const m = t.match(/roblox\.com\/(?:[a-z]{2}\/)?(?:catalog|bundles|library)\/(\d+)/i);
+  return m ? parseInt(m[1]) : null;
+}
+function bwOpenItem(id){
+  document.getElementById('cat-input').value = id;
+  fetchCatalog();
+  const card = document.getElementById('cat-input').closest('.card');
+  if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function bwPriceText(it){
+  if(typeof it.price === 'number') return it.price > 0 ? `R$ ${it.price.toLocaleString()}` : bwT('Gratis','Free');
+  if(it.priceStatus === 'Off Sale') return bwT('Tidak dijual','Off sale');
+  return bwT('Gratis','Free');
+}
+async function bwAddToPack(it, btn){
+  btn.disabled = true;
+  const r = await addPackedItemById(it.id);
+  if(r.ok){
+    renderPackedGrid();
+    btn.textContent = '✓';
+    st('bw-status', bwT(`✓ "${it.name}" ditambahkan ke pack (${packedItems.length} item). Buka PREVIEW CATALOG PACKED untuk mengunduh.`,
+                        `✓ "${it.name}" added to pack (${packedItems.length} item${packedItems.length===1?'':'s'}). Open PREVIEW CATALOG PACKED to download.`), 'ok');
+  }else if(r.duplicate){
+    btn.textContent = '✓';
+    st('bw-status', bwT('Item sudah ada di pack.','Item is already in the pack.'), 'ok');
+  }else{
+    btn.disabled = false;
+    st('bw-status', '✗ ' + r.error, 'err');
+  }
+}
+// Built with DOM APIs (textContent), never innerHTML: item names and creator
+// names are user-generated content from Roblox.
+function bwRenderItems(items){
+  const grid = document.getElementById('bw-grid');
+  items.forEach(it=>{
+    const card = document.createElement('div');
+    card.className = 'bw-item';
+    card.onclick = ()=>bwOpenItem(it.id);
+
+    const th = document.createElement('div');
+    th.className = 'bw-thumb';
+    if(it.thumbnailUrl && /^https:\/\/[a-z0-9-]+\.rbxcdn\.com\//.test(it.thumbnailUrl)){
+      const img = document.createElement('img');
+      img.src = it.thumbnailUrl; img.alt = ''; img.loading = 'lazy';
+      th.appendChild(img);
+    }else{
+      th.textContent = '🖼';
+    }
+    const name = document.createElement('div');
+    name.className = 'bw-name'; name.textContent = it.name; name.title = it.name;
+    const meta = document.createElement('div');
+    meta.className = 'bw-meta';
+    meta.textContent = it.creatorName ? `${it.typeLabel} · ${it.creatorName}` : it.typeLabel;
+
+    const foot = document.createElement('div');
+    foot.className = 'bw-foot';
+    const price = document.createElement('span');
+    price.className = 'bw-price'; price.textContent = bwPriceText(it);
+    const add = document.createElement('button');
+    add.className = 'bw-add'; add.textContent = '+ PACK';
+    add.title = bwT('Tambahkan ke Packed Catalog','Add to Packed Catalog');
+    add.onclick = (e)=>{ e.stopPropagation(); bwAddToPack(it, add); };
+    foot.append(price, add);
+
+    card.append(th, name, meta, foot);
+    grid.appendChild(card);
+  });
+}
+async function browseCatalog(reset){
+  if(bwLoading && !reset) return;
+  const q = document.getElementById('bw-q').value.trim();
+
+  if(reset){
+    const direct = bwParseDirectId(q);
+    if(direct){ bwOpenItem(direct); return; }
+    bwCursor = null;
+    document.getElementById('bw-grid').innerHTML = '';
+    document.getElementById('bw-more').style.display = 'none';
+  }
+  const myReq = ++bwReq;
+  bwLoading = true;
+  const btn = document.getElementById('bw-btn');
+  btn.disabled = true;
+  st('bw-status', bwT('Memuat item…','Loading items…'), 'loading');
+  try{
+    const qs = new URLSearchParams({ q, category: bwCategory, sort: document.getElementById('bw-sort').value });
+    if(!reset && bwCursor) qs.set('cursor', bwCursor);
+    const res = await fetch(`${BASE}/api/catalog/browse?${qs}`);
+    const data = await res.json().catch(()=>({}));
+    if(myReq !== bwReq) return; // a newer search replaced this one
+    if(!res.ok) throw new Error(data.error || res.statusText || bwT('Gagal memuat katalog','Failed to load catalog'));
+    const items = data.items || [];
+    bwRenderItems(items);
+    bwCursor = data.nextCursor || null;
+    document.getElementById('bw-more').style.display = bwCursor ? 'block' : 'none';
+    const total = document.getElementById('bw-grid').children.length;
+    if(total === 0){
+      st('bw-status', bwT('Tidak ada item yang cocok.','No matching items.'), 'idle');
+    }else{
+      st('bw-status', bwT(`${total} item ditampilkan. Ketuk item untuk membukanya.`,
+                          `${total} items shown. Tap an item to open it.`), 'ok');
+    }
+  }catch(e){
+    if(myReq === bwReq) st('bw-status', '✗ ' + e.message, 'err');
+  }finally{
+    if(myReq === bwReq){ bwLoading = false; btn.disabled = false; }
   }
 }
 
