@@ -1696,6 +1696,161 @@ def catalog_info():
         return jsonify(result)
     except Exception as e: return safe_error(e)
 
+# ── CATALOG BROWSE (marketplace preview) ────────────────────────────
+# Lets users search/browse the Roblox catalog from inside 3DRBXMT instead of
+# hunting for an asset ID on roblox.com first. Read-only, public data only,
+# and every card it returns feeds straight into the existing /api/catalog/info
+# + download flow by asset ID.
+#
+# NOTE: the Category/SortType values below follow Roblox's public catalog
+# search API as documented at the time of writing. Roblox changes this API
+# occasionally; if a filter stops working, this table is the one place to fix.
+_BROWSE_CATEGORIES = {
+    "all":         {},
+    "clothing":    {"Category": "Clothing"},
+    "accessories": {"Category": "Accessories"},
+    "bodyparts":   {"Category": "BodyParts"},
+    "animations":  {"Category": "AvatarAnimations"},
+    "gear":        {"Category": "Gear"},
+}
+_BROWSE_SORTS = {          # our key -> Roblox SortType
+    "relevance":  0,
+    "favorited":  1,
+    "bestseller": 2,
+    "newest":     3,
+    "priceasc":   4,
+    "pricedesc":  5,
+}
+# Roblox numeric AssetType -> readable label (only the common wearable ones;
+# anything else falls back to "Asset <n>").
+_BROWSE_ASSET_TYPE_NAMES = {
+    2: "T-Shirt", 8: "Hat", 11: "Shirt", 12: "Pants", 17: "Head", 18: "Face",
+    19: "Gear", 24: "Animation", 27: "Torso", 28: "Right Arm", 29: "Left Arm",
+    30: "Left Leg", 31: "Right Leg", 41: "Hair", 42: "Face Accessory",
+    43: "Neck", 44: "Shoulder", 45: "Front", 46: "Back", 47: "Waist",
+    61: "Emote", 64: "T-Shirt (Layered)", 65: "Shirt (Layered)",
+    66: "Pants (Layered)", 67: "Jacket", 68: "Sweater", 69: "Shorts",
+    70: "Left Shoe", 71: "Right Shoe", 72: "Dress/Skirt", 76: "Eyebrow",
+    77: "Eyelash", 78: "Mood", 79: "Dynamic Head",
+}
+_BROWSE_LIMIT = 30
+_RBXCDN_RE = re.compile(r"^https://[a-z0-9\-]+\.rbxcdn\.com/")
+
+def _browse_thumbs(s, asset_ids, bundle_ids):
+    """Batch-fetch small thumbnails. Never raises: a missing thumbnail must not
+    take the whole result list down with it."""
+    out = {}
+    try:
+        if asset_ids:
+            r = s.get("https://thumbnails.roblox.com/v1/assets",
+                      params={"assetIds": ",".join(map(str, asset_ids)),
+                              "size": "150x150", "format": "Png"}, timeout=10)
+            if r.status_code == 200:
+                for d in r.json().get("data", []):
+                    if d.get("imageUrl") and _RBXCDN_RE.match(d["imageUrl"]):
+                        out[("Asset", d.get("targetId"))] = d["imageUrl"]
+    except Exception as e:
+        print(f"[browse] asset thumbs failed: {type(e).__name__}: {e}")
+    try:
+        if bundle_ids:
+            r = s.get("https://thumbnails.roblox.com/v1/bundles/thumbnails",
+                      params={"bundleIds": ",".join(map(str, bundle_ids)),
+                              "size": "150x150", "format": "Png"}, timeout=10)
+            if r.status_code == 200:
+                for d in r.json().get("data", []):
+                    if d.get("imageUrl") and _RBXCDN_RE.match(d["imageUrl"]):
+                        out[("Bundle", d.get("targetId"))] = d["imageUrl"]
+    except Exception as e:
+        print(f"[browse] bundle thumbs failed: {type(e).__name__}: {e}")
+    return out
+
+@app.get("/api/catalog/browse")
+def catalog_browse():
+    rl = check_rate_limit("browse", limit=30, window_s=60)
+    if rl: return rl
+
+    q        = (request.args.get("q", "") or "").strip()[:100]
+    category = (request.args.get("category", "all") or "all").lower()
+    sort     = (request.args.get("sort", "relevance") or "relevance").lower()
+    cursor   = (request.args.get("cursor", "") or "").strip()
+
+    if category not in _BROWSE_CATEGORIES:
+        return jsonify({"error": "category tidak valid"}), 400
+    if sort not in _BROWSE_SORTS:
+        return jsonify({"error": "sort tidak valid"}), 400
+    # Cursors are opaque tokens from Roblox; only allow a safe charset/length.
+    if cursor and not re.fullmatch(r"[A-Za-z0-9_\-=+/.]{1,500}", cursor):
+        return jsonify({"error": "cursor tidak valid"}), 400
+
+    cache_key = f"catbrowse_{category}_{sort}_{q.lower()}_{cursor}"
+    cached = cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    try:
+        s = get_scraper()
+        params = {"Limit": _BROWSE_LIMIT, "SortType": _BROWSE_SORTS[sort],
+                  "IncludeNotForSale": "false"}
+        params.update(_BROWSE_CATEGORIES[category])
+        if q:      params["Keyword"] = q
+        if cursor: params["Cursor"]  = cursor
+
+        items, next_cursor, prev_cursor = [], None, None
+        r = s.get("https://catalog.roblox.com/v1/search/items/details",
+                  params=params, timeout=12)
+        if r.status_code == 200:
+            body = r.json()
+            items       = body.get("data") or []
+            next_cursor = body.get("nextPageCursor")
+            prev_cursor = body.get("previousPageCursor")
+        elif r.status_code == 429:
+            return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
+        else:
+            # Fallback: IDs-only search, then resolve details in one POST.
+            r2 = s.get("https://catalog.roblox.com/v1/search/items",
+                       params=params, timeout=12)
+            if r2.status_code == 429:
+                return jsonify({"error": "Roblox sedang membatasi pencarian. Coba lagi sebentar lagi."}), 429
+            if r2.status_code != 200:
+                return jsonify({"error": f"Pencarian katalog gagal (HTTP {r.status_code})."}), 502
+            b2 = r2.json()
+            refs = [{"itemType": d.get("itemType", "Asset"), "id": d.get("id")}
+                    for d in (b2.get("data") or []) if d.get("id")]
+            next_cursor = b2.get("nextPageCursor")
+            prev_cursor = b2.get("previousPageCursor")
+            if refs:
+                d = rpost("https://catalog.roblox.com/v1/catalog/items/details", {"items": refs})
+                items = d.get("data") or []
+
+        asset_ids  = [i["id"] for i in items if i.get("itemType", "Asset") == "Asset"  and i.get("id")]
+        bundle_ids = [i["id"] for i in items if i.get("itemType") == "Bundle" and i.get("id")]
+        thumbs = _browse_thumbs(s, asset_ids, bundle_ids)
+
+        out_items = []
+        for i in items:
+            iid = i.get("id")
+            if not iid: continue
+            itype = i.get("itemType", "Asset")
+            if itype == "Bundle":
+                label = "Bundle"
+            else:
+                label = _BROWSE_ASSET_TYPE_NAMES.get(i.get("assetType"), f"Asset {i.get('assetType')}")
+            out_items.append({
+                "id": iid,
+                "itemType": itype,
+                "name": i.get("name") or f"Item {iid}",
+                "typeLabel": label,
+                "creatorName": i.get("creatorName") or "",
+                "price": i.get("price"),
+                "priceStatus": i.get("priceStatus"),
+                "thumbnailUrl": thumbs.get((itype, iid)),
+            })
+
+        result = {"items": out_items, "nextCursor": next_cursor, "prevCursor": prev_cursor}
+        cache_set(cache_key, result)
+        return jsonify(result)
+    except Exception as e:
+        return safe_error(e)
+
 @app.get("/api/catalog/texture-variants")
 def catalog_texture_variants():
     """Tells the frontend which real texture kinds actually exist for an asset, so
