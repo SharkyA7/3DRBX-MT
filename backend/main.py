@@ -1383,25 +1383,33 @@ def procedural(av,name,rig=None):
     rt=rig if rig in ("R6","R15") else av.get("playerAvatarType","R6")
     W=sc.get("width",1);H=sc.get("height",1);HD=sc.get("head",1);D=sc.get("depth",1)
     p=[]
+    # Every part touches its neighbours and both rigs stand on y=0, so the two
+    # body types line up when imported side by side. Sizes are unchanged; only
+    # positions were fixed (the R6 head used to float a full stud above the
+    # torso, R15 had gaps at elbows/knees/shoulders and hovered above the ground).
     if rt!="R15":
-        p=[("Head",bco.get("headColorId",1004),0,5.6*H,0,1.2*HD,1.2*HD,1.2*HD),
+        # feet 0-2, torso 2-4, head sits on the torso (bottom at 4)
+        p=[("Head",bco.get("headColorId",1004),0,4*H+0.6*HD,0,1.2*HD,1.2*HD,1.2*HD),
            ("Torso",bco.get("torsoColorId",23),0,3*H,0,2*W,2*H,D),
            ("LArm",bco.get("leftArmColorId",1004),-1.5*W,3*H,0,W,2*H,D),
            ("RArm",bco.get("rightArmColorId",1004),1.5*W,3*H,0,W,2*H,D),
            ("LLeg",bco.get("leftLegColorId",194),-0.5*W,H,0,W,2*H,D),
            ("RLeg",bco.get("rightLegColorId",194),0.5*W,H,0,W,2*H,D)]
     else:
-        p=[("Head",bco.get("headColorId",1004),0,6.6*H,0,1.2*HD,1.2*HD,1.1*HD),
-           ("UpTorso",bco.get("torsoColorId",23),0,5.3*H,0,2*W,1.4*H,D),
-           ("LoTorso",bco.get("torsoColorId",23),0,4.2*H,0,1.8*W,0.9*H,0.9*D),
-           ("LUpArm",bco.get("leftArmColorId",1004),-1.5*W,5.3*H,0,0.9*W,1.2*H,0.9*D),
-           ("LLoArm",bco.get("leftArmColorId",1004),-1.5*W,3.85*H,0,0.85*W,1.1*H,0.85*D),
-           ("RUpArm",bco.get("rightArmColorId",1004),1.5*W,5.3*H,0,0.9*W,1.2*H,0.9*D),
-           ("RLoArm",bco.get("rightArmColorId",1004),1.5*W,3.85*H,0,0.85*W,1.1*H,0.85*D),
-           ("LUpLeg",bco.get("leftLegColorId",194),-0.55*W,3.1*H,0,0.9*W,1.3*H,0.9*D),
-           ("LLoLeg",bco.get("leftLegColorId",194),-0.55*W,1.65*H,0,0.85*W,1.2*H,0.85*D),
-           ("RUpLeg",bco.get("rightLegColorId",194),0.55*W,3.1*H,0,0.9*W,1.3*H,0.9*D),
-           ("RLoLeg",bco.get("rightLegColorId",194),0.55*W,1.65*H,0,0.85*W,1.2*H,0.85*D)]
+        # stack (in H): lower leg 0-1.2, upper leg 1.2-2.5, lower torso 2.5-3.4,
+        # upper torso 3.4-4.8, head from 4.8; arms hang from the top of the
+        # upper torso (upper arm 3.6-4.8, lower arm 2.5-3.6) beside it at 1.45*W.
+        p=[("Head",bco.get("headColorId",1004),0,4.8*H+0.6*HD,0,1.2*HD,1.2*HD,1.1*HD),
+           ("UpTorso",bco.get("torsoColorId",23),0,4.1*H,0,2*W,1.4*H,D),
+           ("LoTorso",bco.get("torsoColorId",23),0,2.95*H,0,1.8*W,0.9*H,0.9*D),
+           ("LUpArm",bco.get("leftArmColorId",1004),-1.45*W,4.2*H,0,0.9*W,1.2*H,0.9*D),
+           ("LLoArm",bco.get("leftArmColorId",1004),-1.45*W,3.05*H,0,0.85*W,1.1*H,0.85*D),
+           ("RUpArm",bco.get("rightArmColorId",1004),1.45*W,4.2*H,0,0.9*W,1.2*H,0.9*D),
+           ("RLoArm",bco.get("rightArmColorId",1004),1.45*W,3.05*H,0,0.85*W,1.1*H,0.85*D),
+           ("LUpLeg",bco.get("leftLegColorId",194),-0.55*W,1.85*H,0,0.9*W,1.3*H,0.9*D),
+           ("LLoLeg",bco.get("leftLegColorId",194),-0.55*W,0.6*H,0,0.85*W,1.2*H,0.85*D),
+           ("RUpLeg",bco.get("rightLegColorId",194),0.55*W,1.85*H,0,0.9*W,1.3*H,0.9*D),
+           ("RLoLeg",bco.get("rightLegColorId",194),0.55*W,0.6*H,0,0.85*W,1.2*H,0.85*D)]
     def box(cx,cy,cz,w,h,d):
         hx,hy,hz=w/2,h/2,d/2
         v=[(cx-hx,cy-hy,cz-hz),(cx+hx,cy-hy,cz-hz),(cx+hx,cy+hy,cz-hz),(cx-hx,cy+hy,cz-hz),
