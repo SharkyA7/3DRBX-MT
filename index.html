@@ -1206,11 +1206,23 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           </div>
         </div>
         <div class="api-note" id="av-note" style="display:none"></div>
-        <div id="av-procedural" style="display:none;margin-top:14px">
+        <!-- Body type (R6 / R15) block model. Always visible: it also converts an
+             R15 avatar to R6 (and back), not only a fallback when 3D is missing. -->
+        <div id="av-procedural" style="margin-top:14px">
           <div style="background:rgba(0,255,153,.06);border:1px solid rgba(0,255,153,.2);border-radius:4px;padding:14px">
-            <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⚙ PROCEDURAL MODEL</div>
-            <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:12px">3D Roblox tidak tersedia. Model dibuat dari body colors avatar kamu.</div>
-            <button class="btn btn-green" onclick="downloadProcedural()">⬇ DOWNLOAD PROCEDURAL OBJ</button>
+            <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#00ff99;margin-bottom:8px">⚙ BODY TYPE · R6 ⇄ R15</div>
+            <div style="font-size:10px;color:#aaa;line-height:1.8;margin-bottom:10px">
+              <span data-t-id="Ekspor model blok sebagai R6 atau R15, apa pun body type avatar aslinya. Dibuat dari warna &amp; skala avatar, bukan mesh asli (tanpa baju/aksesori)." data-t-en="Export a block model as R6 or R15, whatever the avatar's own body type. Built from the avatar's colors &amp; scales, not the real mesh (no clothing/accessories).">Ekspor model blok sebagai R6 atau R15, apa pun body type avatar aslinya. Dibuat dari warna &amp; skala avatar, bukan mesh asli (tanpa baju/aksesori).</span>
+            </div>
+            <div class="row">
+              <select id="av-rig-select" onchange="updateRigNote()" style="flex:1;min-width:150px">
+                <option value="auto" data-t-id="Auto (sesuai avatar)" data-t-en="Auto (match avatar)">Auto (sesuai avatar)</option>
+                <option value="r6">R6</option>
+                <option value="r15">R15</option>
+              </select>
+              <button class="btn btn-green" id="btn-procedural" onclick="downloadProcedural()">⬇ <span data-t-id="DOWNLOAD MODEL BLOK (OBJ)" data-t-en="DOWNLOAD BLOCK MODEL (OBJ)">DOWNLOAD MODEL BLOK (OBJ)</span></button>
+            </div>
+            <div style="margin-top:8px;font-size:9px;color:var(--gray)" id="av-rig-note"></div>
           </div>
         </div>
       </div>
@@ -2227,6 +2239,7 @@ function fillAvatarProfile(d){
   document.getElementById('av-name').textContent    = d.username||'—';
   document.getElementById('av-id').textContent      = d.userId||'—';
   document.getElementById('av-rig').textContent     = d.rigType||'—';
+  updateRigNote(d.rigType);
   document.getElementById('av-created').textContent = d.created
     ? new Date(d.created).toLocaleDateString('id-ID',{year:'numeric',month:'short',day:'numeric'})
     : '—';
@@ -3187,6 +3200,7 @@ const ROUTES=[
   ['GET','GET /api/avatar/3d-urls?user=','URL .obj & .mtl dari Roblox CDN'],
   ['GET','GET /api/avatar/download?user=&format=','ZIP berisi OBJ/GLTF avatar'],
   ['GET','GET /api/avatar/wearing?user=','Daftar Asset ID yang dipakai avatar'],
+  ['GET','GET /api/avatar/procedural-download?user=&rig=','ZIP model blok R6/R15 (rig=auto|r6|r15)'],
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
@@ -3330,15 +3344,47 @@ async function downloadReal_OLD(){
   }
 }
 
+// Shows "Original rig: R15 -> exported as R6 (converted)" under the selector.
+function updateRigNote(own){
+  const note=document.getElementById('av-rig-note');
+  if(!note) return;
+  own = own || (currentUser && currentUser.rigType) || null;
+  if(!own){ note.textContent=''; return; }
+  const sel=document.getElementById('av-rig-select').value;
+  const target = sel==='auto' ? own : sel.toUpperCase();
+  note.textContent = target!==own
+    ? bwT(`Rig asli: ${own} → diekspor sebagai ${target} (konversi)`, `Original rig: ${own} → exported as ${target} (converted)`)
+    : bwT(`Rig asli: ${own} → diekspor sebagai ${own}`, `Original rig: ${own} → exported as ${own}`);
+}
+
 async function downloadProcedural(){
   const user=document.getElementById('av-input').value.trim();
-  if(!user)return;
+  if(!user) return;
+  const rig=(document.getElementById('av-rig-select')||{}).value||'auto';
+  const btn=document.getElementById('btn-procedural');
+  if(btn) btn.disabled=true;
+  st('av-status', bwT('⏳ Membuat model blok…','⏳ Building block model…'), 'loading');
   try{
-    const res=await fetch('${BASE}/api/avatar/procedural-download?user='+encodeURIComponent(user));
+    const res=await fetch(`${BASE}/api/avatar/procedural-download?user=${encodeURIComponent(user)}&rig=${encodeURIComponent(rig)}`);
+    if(!res.ok){
+      const t=await res.text();
+      let e={error:t}; try{e=JSON.parse(t);}catch(_){}
+      throw e;
+    }
     const blob=await res.blob();
-    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:user+'_procedural.zip'});
+    const safe=user.replace(/[^\w.-]+/g,'_');
+    const a=Object.assign(document.createElement('a'),{
+      href:URL.createObjectURL(blob),
+      download:`${safe}_${rig==='auto'?'procedural':rig}.zip`
+    });
     a.click();
-  }catch(e){alert('Error: '+e.message);}
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    st('av-status', bwT('✓ Model blok selesai! Buka ZIP → import .obj.','✓ Block model ready! Open the ZIP → import the .obj.'), 'ok');
+  }catch(e){
+    showApiError('av-status', e.error?e:{message:e.message});
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 
 // ── I18N ─────────────────────────────────────────────────────────
