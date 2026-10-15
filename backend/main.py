@@ -1375,9 +1375,12 @@ def bc(cid):
     h=COLORS.get(cid,"#A3A2A5").lstrip("#")
     return tuple(int(h[i:i+2],16)/255 for i in(0,2,4))
 
-def procedural(av,name):
+def procedural(av,name,rig=None):
+    """Block-model avatar built from body colors/scales. `rig` ("R6"/"R15")
+    overrides the avatar's own body type -- that is how R6 <-> R15 conversion
+    works here: same user colors/scales, other block layout."""
     sc=av.get("scales",{}); bco=av.get("bodyColors",{})
-    rt=av.get("playerAvatarType","R6")
+    rt=rig if rig in ("R6","R15") else av.get("playerAvatarType","R6")
     W=sc.get("width",1);H=sc.get("height",1);HD=sc.get("head",1);D=sc.get("depth",1)
     p=[]
     if rt!="R15":
@@ -1550,6 +1553,9 @@ def avatar_download_full():
 def avatar_procedural_download():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
+    rig_arg=(request.args.get("rig","auto") or "auto").lower()
+    if rig_arg not in ("auto","r6","r15"):
+        return jsonify({"error":"rig harus auto, r6, atau r15"}),400
     rl = check_rate_limit("avatar-download", limit=15, window_s=60)
     if rl: return rl
     try:
@@ -1557,11 +1563,18 @@ def avatar_procedural_download():
         av=rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
         info=rget(f"https://users.roblox.com/v1/users/{uid}")
         name=info.get("name",str(uid))
-        obj_t,mtl_t=procedural(av,name)
+        own_rig=av.get("playerAvatarType","R6")
+        rig=own_rig if rig_arg=="auto" else rig_arg.upper()
+        obj_t,mtl_t=procedural(av,name,rig)
         buf=io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             zf.writestr(f"{name}.obj",obj_t)
             zf.writestr(f"{name}.mtl",mtl_t)
+            zf.writestr("README.txt",
+                f"Avatar: {name}\nOriginal rig: {own_rig}\nExported as: {rig}"
+                f"{' (converted)' if rig!=own_rig else ''}\n\n"
+                "Block model built from the avatar's body colors and scales.\n"
+                "It is NOT the avatar's real mesh: clothing and accessories are not included.\n")
             try:
                 th=rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
                 tu=(th.get("data") or [{}])[0].get("imageUrl")
@@ -1569,7 +1582,7 @@ def avatar_procedural_download():
             except: pass
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{name}_procedural.zip"'})
+            headers={"Content-Disposition":f'attachment; filename="{name}_procedural_{rig}.zip"'})
     except Exception as e: return safe_error(e)
 
 _ANIMATION_ASSET_TYPE_IDS = {24, 61}  # 24=Animation (classic), 61=EmoteAnimation
