@@ -4483,12 +4483,29 @@ def uv_checker_page():
 
 # ── ROBLOX OAUTH 2.0 ENDPOINTS ───────────────────────────────────
 
+def _oauth_redirect(location):
+    """Redirect that must never be cached: the success redirect carries the
+    access token (in the URL fragment)."""
+    resp = redirect(location)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+def _oauth_fail(code):
+    """Send the user back to the site with a short, safe error code the page
+    turns into a popup. Never put exception text or other raw data in here."""
+    import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9_\-]{1,40}", code or ""):
+        code = "unknown"
+    resp = _oauth_redirect(f"/?oauth_error={code}")
+    resp.delete_cookie("oauth_state")
+    return resp
+
 @app.get("/auth/login")
 def auth_login():
     """Step 1: Redirect user ke Roblox OAuth page."""
     import secrets, urllib.parse
     if not OAUTH_CLIENT_ID:
-        return jsonify({"error": "OAuth not configured yet - waiting for Roblox app approval"}), 503
+        return _oauth_fail("not_configured")
 
     state = secrets.token_urlsafe(16)
     params = {
@@ -4500,7 +4517,7 @@ def auth_login():
     }
     auth_url = OAUTH_AUTH_URL + "?" + urllib.parse.urlencode(params)
 
-    resp = redirect(auth_url)
+    resp = _oauth_redirect(auth_url)
     resp.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="Lax", secure=True)
     return resp
 
@@ -4509,19 +4526,21 @@ def auth_callback():
     """Step 2: Roblox redirect ke sini dengan authorization code."""
     import base64, urllib.parse
     if not OAUTH_CLIENT_ID:
-        return jsonify({"error": "OAuth not configured yet"}), 503
+        return _oauth_fail("not_configured")
 
     code_param = request.args.get("code", "")
     state = request.args.get("state", "")
     error = request.args.get("error", "")
 
     if error:
-        return redirect(f"/?oauth_error={urllib.parse.quote(error)}")
+        return _oauth_fail(error)          # e.g. access_denied when the user cancels
 
     # Verify state
     saved_state = request.cookies.get("oauth_state", "")
     if not saved_state or saved_state != state:
-        return redirect("/?oauth_error=invalid_state")
+        return _oauth_fail("invalid_state")
+    if not code_param:
+        return _oauth_fail("missing_code")
 
     # Exchange code for token
     try:
@@ -4536,32 +4555,41 @@ def auth_callback():
         }, timeout=15)
 
         if token_resp.status_code != 200:
-            return redirect(f"/?oauth_error=token_exchange_failed")
+            return _oauth_fail("token_exchange_failed")
 
         token_data = token_resp.json()
         access_token = token_data.get("access_token", "")
+        if not access_token:
+            return _oauth_fail("token_exchange_failed")
 
-        # Get user info
+        # Get user info. Identity is the whole point of the login (saved
+        # catalogs belong to this Roblox user ID), so a failed lookup is a
+        # failed login rather than a "success" with empty fields.
         userinfo_resp = requests.get(OAUTH_USERINFO_URL, headers={
             "Authorization": f"Bearer {access_token}"
         }, timeout=10)
         userinfo = userinfo_resp.json() if userinfo_resp.status_code == 200 else {}
+        if not userinfo.get("sub"):
+            return _oauth_fail("userinfo_failed")
 
-        # Redirect ke frontend dengan token (stored di client-side)
-        import urllib.parse
+        # The token goes back in the URL *fragment* (#...), not the query string:
+        # fragments are never sent to servers, so they stay out of server logs
+        # and Referer headers. The page reads it once, stores it in
+        # sessionStorage, and removes it from the address bar.
         params = urllib.parse.urlencode({
             "oauth_success": "1",
             "access_token": access_token,
-            "username": userinfo.get("name", ""),
+            "username": userinfo.get("preferred_username") or userinfo.get("name", ""),
             "user_id": userinfo.get("sub", ""),
             "expires_in": token_data.get("expires_in", 3600)
         })
-        resp = redirect(f"/?{params}")
+        resp = _oauth_redirect(f"/#{params}")
         resp.delete_cookie("oauth_state")
         return resp
 
     except Exception as e:
-        return redirect(f"/?oauth_error={urllib.parse.quote(str(e))}")
+        print(f"[oauth] callback failed: {type(e).__name__}: {e}")
+        return _oauth_fail("server_error")
 
 @app.get("/auth/me")
 def auth_me():
