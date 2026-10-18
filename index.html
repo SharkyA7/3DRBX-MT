@@ -308,6 +308,11 @@ footer{text-align:center;padding:20px;font-family:var(--font-ui);font-size:11px;
 .nudge-btn-continue{background:transparent;color:var(--muted);border:1px solid var(--border2);
   border-radius:8px;font-family:var(--font-ui);font-size:13px;font-weight:500;padding:11px;cursor:pointer;}
 .nudge-btn-continue:hover{color:var(--white);border-color:var(--muted);}
+/* Roblox login result popup (reuses the nudge look; sits above every other modal) */
+#oauth-popup{z-index:100001}
+.nudge-box.oa-ok{border-color:var(--green);box-shadow:0 0 40px rgba(0,255,153,.15)}
+.nudge-box.oa-err{border-color:#ff4d6d;box-shadow:0 0 40px rgba(255,77,109,.18)}
+.nudge-box.oa-info{border-color:var(--accent)}
 
 
 .fetch-progress-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
@@ -1019,6 +1024,18 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
     <div class="nudge-actions">
       <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/login'">🔑 Login dengan Roblox</button>
       <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
+    </div>
+  </div>
+</div>
+
+<div class="nudge-overlay" id="oauth-popup" style="display:none" role="dialog" aria-live="polite" onclick="if(event.target===this)closeOauthPopup()">
+  <div class="nudge-box" id="oauth-popup-box">
+    <div class="nudge-icon" id="oauth-popup-icon">✅</div>
+    <div class="nudge-title" id="oauth-popup-title"></div>
+    <div class="nudge-body" id="oauth-popup-body"></div>
+    <div class="nudge-actions">
+      <button class="nudge-btn-login" id="oauth-popup-retry" style="display:none" onclick="location.href='/auth/login'">🔑 <span data-t-id="COBA LOGIN LAGI" data-t-en="TRY LOGIN AGAIN">COBA LOGIN LAGI</span></button>
+      <button class="nudge-btn-continue" id="oauth-popup-close" onclick="closeOauthPopup()"><span data-t-id="Tutup" data-t-en="Close">Tutup</span></button>
     </div>
   </div>
 </div>
@@ -2521,6 +2538,154 @@ async function downloadCatalogImageVariant(variant){
     st('cat-status','✗ '+e.message,'err');
   }
 }
+
+// ── ROBLOX LOGIN (OAuth 2.0) ────────────────────────────────────────
+// The backend sends the user back to "/#oauth_success=1&access_token=..." (a URL
+// fragment, so it never reaches server logs). We read it once, keep it in
+// sessionStorage only (cleared when the tab closes), and wipe it from the
+// address bar. Only the Roblox user ID is ever sent on to our own endpoints.
+var OAUTH_KEY = 'rbx3d_oauth', oauthPopupTimer = null;
+
+function oaT(idText, enText){
+  return (typeof globalLang !== 'undefined' && globalLang === 'en') ? enText : idText;
+}
+function oauthGet(){
+  try{
+    const o = JSON.parse(sessionStorage.getItem(OAUTH_KEY) || 'null');
+    if(!o || !o.token) return null;
+    if(o.exp && Date.now() > o.exp){ sessionStorage.removeItem(OAUTH_KEY); return null; }
+    return o;
+  }catch(_){ return null; }
+}
+function oauthSet(o){ try{ sessionStorage.setItem(OAUTH_KEY, JSON.stringify(o)); }catch(_){} }
+// Headers for calls that need the logged-in user (used by Custom Catalog).
+function oauthAuthHeaders(){
+  const o = oauthGet();
+  return o ? { Authorization: 'Bearer ' + o.token } : {};
+}
+function oauthRender(){
+  const o = oauthGet();
+  const bar = document.getElementById('oauth-bar');
+  const name = document.getElementById('oauth-username');
+  const login = document.getElementById('btn-login-header');
+  if(bar)   bar.style.display = o ? 'flex' : 'none';
+  if(name)  name.textContent = o ? ('👤 ' + o.username) : '';
+  if(login) login.style.display = o ? 'none' : 'inline-flex';
+}
+
+// Short codes from the backend -> [Indonesian, English]. Unknown codes fall back
+// to a generic message; the code itself is shown so it can be reported.
+var OAUTH_ERRORS = {
+  access_denied:         ['Kamu membatalkan izin di halaman Roblox, jadi akunmu belum terhubung.',
+                          'You cancelled the permission request on Roblox, so your account was not connected.'],
+  invalid_state:         ['Sesi login tidak cocok atau sudah kedaluwarsa. Coba login lagi.',
+                          'The login session did not match or has expired. Please try again.'],
+  missing_code:          ['Roblox tidak mengirim kode otorisasi. Coba login lagi.',
+                          'Roblox did not send an authorization code. Please try again.'],
+  token_exchange_failed: ['Roblox menolak otorisasi akunmu. Coba lagi sebentar lagi.',
+                          'Roblox rejected the authorization. Please try again in a moment.'],
+  userinfo_failed:       ['Login berhasil di Roblox, tapi profil akunmu tidak bisa dibaca. Coba lagi.',
+                          'Roblox accepted the login, but your profile could not be read. Please try again.'],
+  not_configured:        ['Login Roblox belum aktif di server ini.',
+                          'Roblox login is not enabled on this server yet.'],
+  server_error:          ['Terjadi kesalahan di server saat memproses login. Coba lagi nanti.',
+                          'The server hit an error while processing the login. Please try again later.'],
+  session_expired:       ['Sesi login kamu sudah berakhir. Login lagi untuk melanjutkan.',
+                          'Your login session has ended. Log in again to continue.']
+};
+
+// All dynamic text goes through textContent / text nodes, never innerHTML:
+// usernames and error codes come from the URL.
+function oauthPopup(kind, title, bodyParts, autoCloseMs, canRetry){
+  const ov = document.getElementById('oauth-popup');
+  if(!ov) return;
+  document.getElementById('oauth-popup-box').className = 'nudge-box oa-' + kind;
+  document.getElementById('oauth-popup-icon').textContent = ({ok:'✅', err:'⚠️', info:'👋'})[kind] || 'ℹ️';
+  document.getElementById('oauth-popup-title').textContent = title;
+  const body = document.getElementById('oauth-popup-body');
+  body.textContent = '';
+  bodyParts.forEach(part=>{
+    if(typeof part === 'string'){ body.appendChild(document.createTextNode(part)); }
+    else{ const b = document.createElement('strong'); b.textContent = part.strong; body.appendChild(b); }
+  });
+  document.getElementById('oauth-popup-retry').style.display = canRetry ? 'block' : 'none';
+  ov.style.display = 'flex';
+  clearTimeout(oauthPopupTimer);
+  if(autoCloseMs) oauthPopupTimer = setTimeout(closeOauthPopup, autoCloseMs);
+}
+function closeOauthPopup(){
+  clearTimeout(oauthPopupTimer);
+  const ov = document.getElementById('oauth-popup');
+  if(ov) ov.style.display = 'none';
+}
+function oauthExpire(){
+  try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
+  oauthRender();
+  const m = OAUTH_ERRORS.session_expired;
+  oauthPopup('err', oaT('Sesi berakhir','Session ended'), [oaT(m[0], m[1])], 0, true);
+}
+function oauthLogout(){
+  try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
+  oauthRender();
+  fetch(`${BASE}/auth/logout`).catch(()=>{});
+  oauthPopup('info', oaT('Logout berhasil','Logged out'),
+             [oaT('Kamu sudah keluar. Sampai jumpa lagi!','You are logged out. See you soon!')], 3500, false);
+}
+async function oauthVerify(){
+  if(!oauthGet()) return;
+  try{
+    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders() });
+    if(r.status === 401) oauthExpire();      // Roblox no longer accepts the token
+  }catch(_){ /* offline: keep the session; it is re-checked when actually used */ }
+}
+function oauthInit(){
+  const hadStored = (()=>{ try{ return !!sessionStorage.getItem(OAUTH_KEY); }catch(_){ return false; } })();
+  const hash  = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const query = new URLSearchParams(location.search);
+  let outcome = null;
+
+  if(hash.get('oauth_success') === '1' && hash.get('access_token')){
+    const expiresIn = Math.max(60, parseInt(hash.get('expires_in'), 10) || 3600);
+    oauthSet({
+      token: hash.get('access_token'),
+      username: hash.get('username') || 'Roblox user',
+      userId: hash.get('user_id') || '',
+      exp: Date.now() + expiresIn*1000 - 30000
+    });
+    outcome = { ok: true };
+    history.replaceState(null, '', location.pathname + location.search);   // wipe the token from the address bar
+  }else if(query.get('oauth_error')){
+    outcome = { err: query.get('oauth_error') };
+    query.delete('oauth_error');
+    const qs = query.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+
+  oauthRender();
+
+  if(outcome && outcome.ok){
+    const o = oauthGet();
+    oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
+               [oaT('Halo, ','Hi, '), {strong: o.username}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
+               6000, false);
+  }else if(outcome && outcome.err){
+    const code = /^[\w-]{1,40}$/.test(outcome.err) ? outcome.err : 'unknown';
+    const m = OAUTH_ERRORS[code];
+    oauthPopup('err', oaT('Gagal otorisasi akun','Authorization failed'),
+               [m ? oaT(m[0], m[1]) : oaT('Terjadi kesalahan saat login.','Something went wrong while logging in.'), ' (' + code + ')'],
+               0, code !== 'not_configured');
+  }else if(hadStored && !oauthGet()){
+    oauthExpire();                            // a saved login timed out while the tab was closed/idle
+  }else if(oauthGet()){
+    oauthVerify();
+  }
+}
+document.addEventListener('DOMContentLoaded', oauthInit);
+// Logged-in sessions end quietly when Roblox's token lifetime runs out: tell the user.
+setInterval(()=>{
+  const bar = document.getElementById('oauth-bar');
+  if(bar && bar.style.display === 'flex' && !oauthGet()) oauthExpire();
+}, 30000);
 
 // ── CATALOG BROWSE (marketplace preview) ───────────────────────────
 // State uses `var` on purpose: switchTab() can call bwInit() before this line
@@ -4659,7 +4824,7 @@ function trackFetchAction(){
   count += 1;
   localStorage.setItem('rbx3d_fetch_count', count.toString());
   updateProgressBars(count);
-  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1';
+  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1' || (typeof oauthGet === 'function' && !!oauthGet());
   if(count % 5 === 0 && !alreadyDismissed){
     showNudge();
   }
