@@ -50,7 +50,7 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
     <div class="section-title">OVERVIEW</div>
     <p>This Privacy Policy describes how <span class="highlight">ROBLOX 3D DOWNLOADER</span> ("the Tool", "we", "us") collects, uses, and handles information when you use our service at <strong>getrbx3d.qzz.io</strong>.</p>
     <p>This Tool is operated by an independent developer and is <span class="highlight">not affiliated with, endorsed by, or sponsored by Roblox Corporation</span>.</p>
-    <p class="updated">Last updated: June 2026</p>
+    <p class="updated">Last updated: October 2026</p>
   </div>
 
   <div class="card">
@@ -65,10 +65,18 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
     <ul>
       <li>If you choose to authenticate via Roblox OAuth 2.0, we receive an <strong>access token</strong> and basic profile information (Roblox username, user ID) from Roblox.</li>
       <li>OAuth tokens are used solely to authenticate API requests on your behalf and are stored temporarily in your browser session only — never in our database or server storage.</li>
+      <li>When you use a feature that needs your identity (such as saving a Custom Catalog), your browser sends the token to our server, which checks it with Roblox. To avoid asking Roblox on every request, the server keeps a one-way hash of the token, with your Roblox user ID and username, in temporary memory for up to one minute. The token itself is never saved.</li>
       <li>We do not access, read, or store your Roblox password.</li>
       <li>We only request the minimum OAuth scopes necessary to provide the service.</li>
     </ul>
-    <p><strong>1.3 Automatically Collected Data</strong></p>
+    <p><strong>1.3 Custom Catalogs (only if you save one)</strong></p>
+    <ul>
+      <li>When you log in with Roblox and save a Custom Catalog, we store: the catalog's <strong>share code</strong>, its <strong>name</strong> (chosen by you), its <strong>visibility</strong> (public or private), the <strong>list of items</strong> in it (Roblox item IDs, item types and names), your <strong>Roblox user ID</strong> and <strong>Roblox username</strong>, and the creation/update times.</li>
+      <li>We do <strong>not</strong> store your access token, your password, or any 3D files. Item files are always fetched fresh from Roblox when someone downloads a catalog.</li>
+      <li><strong>Private</strong> catalogs can only be opened by you, while logged in. <strong>Public</strong> catalogs can be opened by anyone who has the code, and show the catalog's name, its items, and your Roblox <em>username</em> (never your user ID).</li>
+      <li>Each account can keep up to 20 catalogs of up to 50 items each. An item list you are still building (not saved) is kept only in your browser session and is cleared when you close the tab.</li>
+    </ul>
+    <p><strong>1.4 Automatically Collected Data</strong></p>
     <ul>
       <li><strong>Server logs</strong> — standard web server logs may include your IP address, browser type, and request timestamps. These are retained for a maximum of 7 days for debugging purposes and are never sold or shared.</li>
       <li>We do not use tracking pixels, fingerprinting, or behavioral analytics.</li>
@@ -82,6 +90,7 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
       <li>Fulfill your requests (fetching avatar/catalog/audio/3D model data from Roblox APIs)</li>
       <li>Authenticate API requests to Roblox on your behalf (via OAuth token or server cookie)</li>
       <li>Convert and deliver 3D asset files (RBXM → GLB/OBJ) back to your browser</li>
+      <li>Save, list, and share the Custom Catalogs you choose to create, and show you the ones you own</li>
       <li>Diagnose technical errors and maintain service stability</li>
     </ul>
     <p><span class="highlight">We do not:</span></p>
@@ -96,7 +105,7 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
   <div class="card">
     <div class="section-title">3. DATA STORAGE & RETENTION</div>
     <ul>
-      <li><span class="highlight">No persistent user accounts</span> — we do not require registration and do not maintain user records.</li>
+      <li><span class="highlight">No registration</span> — you can use the Tool without logging in. The only personal data we keep is what you choose to save as a Custom Catalog (see 1.3), stored in a database until you delete it.</li>
       <li><span class="highlight">No asset storage</span> — 3D files, textures, audio, and mesh data are proxied directly to your browser and never written to permanent storage on our end.</li>
       <li><span class="highlight">No cookie tracking</span> — we do not set tracking cookies. Any session-related data is stored in your browser's memory and cleared when you close the page.</li>
       <li>Server-side authentication cookies (.ROBLOSECURITY or OAuth tokens) used to communicate with Roblox APIs are stored as environment variables or temporary session state, not in a database.</li>
@@ -110,6 +119,7 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
       <li><strong>Roblox Corporation</strong> — all asset data is fetched from Roblox's public and authenticated APIs. Your interactions with those APIs are subject to <a href="https://en.help.roblox.com/hc/en-us/articles/115004647846" style="color:var(--green)">Roblox's Privacy Policy</a>.</li>
       <li><strong>Vercel</strong> — our hosting provider. Vercel may collect server-side telemetry per their own privacy policy.</li>
       <li><strong>Cloudflare</strong> — used for DNS and CDN. Cloudflare may process network-level data per their own privacy policy.</li>
+      <li><strong>Supabase</strong> — hosts the database that stores saved Custom Catalogs. Supabase processes that data per their own privacy policy.</li>
     </ul>
     <p>We have no control over the data practices of these third parties.</p>
   </div>
@@ -123,13 +133,15 @@ footer{text-align:center;padding:20px;font-size:9px;color:var(--gray)}
   <div class="card">
     <div class="section-title">6. SECURITY</div>
     <p>We implement reasonable technical measures to protect information in transit, including HTTPS/TLS encryption for all connections. However, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security.</p>
-    <p>Since we do not store personal data persistently, the risk of a data breach affecting your personal information is minimal.</p>
+    <p>The only personal data we store persistently is the Roblox user ID, username and item lists tied to Custom Catalogs you save. The database is locked so that only our server, using a secret key, can read or write it; it is not open to the public.</p>
   </div>
 
   <div class="card">
     <div class="section-title">7. YOUR RIGHTS</div>
-    <p>Since we do not maintain persistent user records or databases of personal information, there is typically no stored data to access, correct, or delete. However, you may:</p>
+    <p>Apart from the Custom Catalogs you choose to save, we do not keep personal data about you. You may:</p>
     <ul>
+      <li><strong>View, edit, or delete</strong> your saved Custom Catalogs yourself at any time (CUSTOM tab → MY CATALOGS). Deleting a catalog removes it permanently and its code stops working. You can also switch a catalog between public and private by editing it.</li>
+      <li>Ask us to delete everything stored under your Roblox account — contact us (section 9) with your Roblox username.</li>
       <li>Revoke OAuth access granted to this Tool at any time via your <a href="https://www.roblox.com/my/account#!/privacy" style="color:var(--green)">Roblox account settings</a></li>
       <li>Clear your browser session/cache to remove any locally stored session data</li>
       <li>Contact us if you believe we have inadvertently retained data about you</li>
