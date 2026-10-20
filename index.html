@@ -3073,6 +3073,30 @@ async function ccEnrich(items){
     return { id:i.id, itemType:i.itemType, available: m.available, name: m.available ? m.name : '', thumbnailUrl: ccSafeThumb(m.thumbnailUrl) };
   });
 }
+// Backup for ccEnrich: ask /api/catalog/info (the endpoint Packed Catalog already
+// uses) about each item, four at a time, filling the preview in as answers arrive.
+// `out` is updated in place and handed to onProgress after every item.
+async function ccEnrichViaInfo(items, onProgress){
+  const out = items.map(i=>({ id:i.id, itemType:i.itemType, name:'', thumbnailUrl:null }));
+  let next = 0;
+  async function worker(){
+    while(next < items.length){
+      const idx = next++;
+      try{
+        const res = await fetch(`${BASE}/api/catalog/info?asset_id=${items[idx].id}`);
+        if(res.ok){
+          const d = await res.json();
+          out[idx] = { id:items[idx].id, itemType:items[idx].itemType, available:true, name:d.name || '', thumbnailUrl:ccSafeThumb(d.thumbnailUrl) };
+        }else if(res.status === 404){
+          out[idx].available = false;
+        }
+      }catch(_){ /* leave this one as an ID */ }
+      if(onProgress) onProgress(out);
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return out;
+}
 function ccRenderLoaded(){
   const c = ccLoaded;
   ccEl('cc-loaded').style.display = 'block';
@@ -3103,13 +3127,26 @@ async function ccLoadCode(raw){
                  items: (cat.items || []).map(i=>({ id:i.id, itemType:ccType(i.itemType), name:'', thumbnailUrl:null })) };
     ccRenderLoaded();
     st('cc-load-status', oaT('Memeriksa item di Roblox…','Checking items on Roblox…'), 'loading');
-    try{ ccLoaded.items = await ccEnrich(ccLoaded.items); }catch(_){ /* keep IDs only */ }
+    try{
+      ccLoaded.items = await ccEnrich(ccLoaded.items);
+    }catch(_){
+      // The batch lookup is unavailable (older backend, or Roblox refused it): go item by item.
+      try{
+        ccLoaded.items = await ccEnrichViaInfo(ccLoaded.items, list=>{
+          if(my === ccLoadReq){ ccLoaded.items = list; ccRenderLoaded(); }
+        });
+      }catch(__){ /* keep IDs only */ }
+    }
     if(my !== ccLoadReq) return;
     ccRenderLoaded();
     const missing = ccLoaded.items.filter(i=>i.available === false).length;
-    st('cc-load-status', missing
-        ? oaT(`✓ Dimuat. ${missing} item tidak ditemukan di katalog Roblox.`, `✓ Loaded. ${missing} item(s) not found in the Roblox catalog.`)
-        : oaT('✓ Katalog dimuat.','✓ Catalog loaded.'), missing ? 'idle' : 'ok');
+    const noPreview = ccLoaded.items.every(i=>!i.name && !i.thumbnailUrl && i.available === undefined);
+    st('cc-load-status',
+       noPreview ? oaT('✓ Katalog dimuat, tapi pratinjau belum tersedia saat ini. Download tetap bisa dipakai.',
+                       '✓ Catalog loaded, but previews are unavailable right now. Download still works.')
+       : missing ? oaT(`✓ Dimuat. ${missing} item tidak ditemukan di katalog Roblox.`, `✓ Loaded. ${missing} item(s) not found in the Roblox catalog.`)
+                 : oaT('✓ Katalog dimuat.','✓ Catalog loaded.'),
+       (noPreview || missing) ? 'idle' : 'ok');
   }catch(e){
     if(my === ccLoadReq) ccShowError('cc-load-status', e);
   }finally{
