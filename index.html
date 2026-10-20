@@ -188,6 +188,24 @@ select option{background:var(--s2)}
 .bw-price{font-family:var(--font-ui);font-size:11px;font-weight:700;color:var(--green)}
 .bw-add{background:var(--s4);border:1px solid var(--border2);color:var(--white);border-radius:6px;padding:4px 8px;font-family:var(--font-ui);font-size:10px;font-weight:700;cursor:pointer}
 .bw-add:disabled{opacity:.6;cursor:default}
+/* ── Custom Catalog ── */
+.cc-code{font-family:'Press Start 2P',monospace;font-size:clamp(15px,5vw,24px);letter-spacing:.12em;color:var(--accent);text-align:center;padding:16px 8px;background:var(--s3);border:1px dashed var(--accent);border-radius:10px;word-break:break-all;user-select:all}
+.cc-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--border2);color:var(--muted)}
+.cc-badge.pub{color:var(--green);border-color:rgba(0,255,153,.4)}
+.cc-badge.priv{color:var(--amber);border-color:rgba(255,190,60,.4)}
+.cc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.cc-actions .btn{flex:1;min-width:140px}
+.cc-mini{background:var(--s4);border:1px solid var(--border2);color:var(--white);border-radius:6px;padding:7px 10px;font-family:var(--font-ui);font-size:10px;font-weight:700;cursor:pointer}
+.cc-mini:hover{border-color:var(--accent)}
+.cc-mini.danger{color:#ff4d6d;border-color:rgba(255,77,109,.4)}
+.cc-warn{font-size:9px;color:var(--amber);line-height:1.4}
+.cc-banner{display:none;align-items:center;justify-content:space-between;gap:8px;background:rgba(80,232,244,.08);border:1px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px}
+.cc-empty{display:none;text-align:center;color:var(--gray);font-size:11px;padding:18px 8px;border:1px dashed var(--border2);border-radius:10px;margin-top:12px}
+.cc-mine-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px;background:var(--s2);border:1px solid var(--border2);border-radius:10px;margin-top:8px}
+.cc-mine-info{min-width:0;flex:1}
+.cc-mine-name{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-mine-meta{font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cc-mine-btns{display:flex;gap:6px;flex-shrink:0}
 .dl-title{font-family:var(--font-ui);font-size:12px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .dl-desc{font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em}
@@ -1143,6 +1161,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
   <div class="tabs">
     <div class="tab tab-primary active" onclick="switchTab('avatar')"><img class="nav-icon" src="/icons/AVATAR.svg" alt=""> <span data-t-id="AVATAR" data-t-en="AVATAR">AVATAR</span></div>
     <div class="tab tab-primary" onclick="switchTab('catalog')"><img class="nav-icon" src="/icons/CATALOG.svg" alt=""> <span data-t-id="KATALOG" data-t-en="CATALOG">KATALOG</span></div>
+    <div class="tab tab-primary" onclick="switchTab('custom')"><img class="nav-icon" src="/icons/CUSTOM CATALOG.svg" alt=""> <span data-t-id="CUSTOM" data-t-en="CUSTOM">CUSTOM</span></div>
     <div class="tab tab-primary" onclick="switchTab('audio')"><img class="nav-icon" src="/icons/AUDIO.svg" alt=""> <span data-t-id="AUDIO" data-t-en="AUDIO">AUDIO</span></div>
     <div class="tab tab-primary" onclick="switchTab('model3d')"><img class="nav-icon" src="/icons/3D ASSETS MODEL.svg" alt=""> <span data-t-id="3D MODEL" data-t-en="3D MODEL">3D MODEL</span></div>
     <div class="tab-dropdown">
@@ -1264,6 +1283,10 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           <option value="favorited" data-t-id="Paling Difavoritkan" data-t-en="Most Favorited">Paling Difavoritkan</option>
           <option value="priceasc" data-t-id="Harga: Rendah ke Tinggi" data-t-en="Price: Low to High">Harga: Rendah ke Tinggi</option>
           <option value="pricedesc" data-t-id="Harga: Tinggi ke Rendah" data-t-en="Price: High to Low">Harga: Tinggi ke Rendah</option>
+        </select>
+        <select id="bw-dest" onchange="bwRelabelAdd()">
+          <option value="pack" data-t-id="📦 Kirim ke: Packed Catalog" data-t-en="📦 Send to: Packed Catalog">📦 Kirim ke: Packed Catalog</option>
+          <option value="custom" data-t-id="🧩 Kirim ke: Custom Catalog" data-t-en="🧩 Send to: Custom Catalog">🧩 Kirim ke: Custom Catalog</option>
         </select>
       </div>
       <div class="status-box idle" id="bw-status" style="margin-top:12px"><div class="dot"></div><span id="bw-msg">Siap.</span></div>
@@ -1400,6 +1423,88 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
   </div>
 
   <!-- ── 2D ASSETS PANEL ── -->
+  <div class="panel" id="panel-custom">
+    <!-- Login gate: building a list and loading public codes never needs it; only SAVING does -->
+    <div class="card" id="cc-login-card">
+      <div class="label">🔑 <span data-t-id="LOGIN ROBLOX" data-t-en="ROBLOX LOGIN">LOGIN ROBLOX</span></div>
+      <div style="font-size:11px;color:var(--gray);line-height:1.7;margin-bottom:12px">
+        <span data-t-id="Kamu bisa menyusun katalog dan memuat kode publik tanpa login. Login hanya dibutuhkan untuk MENYIMPAN katalog dan membuat kode. Daftar itemmu tidak hilang saat login." data-t-en="You can build a catalog and load public codes without logging in. Login is only needed to SAVE a catalog and get a code. Your item list is kept while you log in.">Kamu bisa menyusun katalog dan memuat kode publik tanpa login. Login hanya dibutuhkan untuk MENYIMPAN katalog dan membuat kode. Daftar itemmu tidak hilang saat login.</span>
+      </div>
+      <button class="btn" type="button" onclick="location.href='/auth/login'">🔑 <span data-t-id="LOGIN DENGAN ROBLOX" data-t-en="LOG IN WITH ROBLOX">LOGIN DENGAN ROBLOX</span></button>
+    </div>
+
+    <!-- Builder -->
+    <div class="card" id="cc-builder-card">
+      <div class="label">🧩 <span data-t-id="CUSTOM CATALOG AVATAR" data-t-en="CUSTOM CATALOG AVATAR">CUSTOM CATALOG AVATAR</span></div>
+      <div class="cc-banner" id="cc-edit-banner">
+        <span id="cc-edit-text"></span>
+        <button class="cc-mini" type="button" onclick="ccNew()">＋ <span data-t-id="BARU" data-t-en="NEW">BARU</span></button>
+      </div>
+      <div class="row">
+        <input type="text" id="cc-name" maxlength="40" autocomplete="off" oninput="ccSaveDraft()" data-t-ph-id="Nama katalog…" data-t-ph-en="Catalog name…" placeholder="Nama katalog…">
+        <select id="cc-vis" onchange="ccSaveDraft()">
+          <option value="private" data-t-id="🔒 Privat (hanya aku)" data-t-en="🔒 Private (only me)">🔒 Privat (hanya aku)</option>
+          <option value="public" data-t-id="🌐 Publik (siapa pun dengan kode)" data-t-en="🌐 Public (anyone with the code)">🌐 Publik (siapa pun dengan kode)</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="cc-add-input" autocomplete="off" onkeydown="if(event.key==='Enter')ccAddFromInput()" data-t-ph-id="Asset ID atau link katalog…" data-t-ph-en="Asset ID or catalog link…" placeholder="Asset ID atau link katalog…">
+        <button class="btn" type="button" id="cc-add-btn" onclick="ccAddFromInput()">＋ <span data-t-id="TAMBAH" data-t-en="ADD">TAMBAH</span></button>
+      </div>
+      <div class="cc-actions" style="margin-top:10px">
+        <button class="cc-mini" type="button" onclick="switchTab('catalog')">🛒 <span data-t-id="Cari di Marketplace" data-t-en="Browse Marketplace">Cari di Marketplace</span></button>
+        <button class="cc-mini" type="button" onclick="ccImportPacked()">📦 <span data-t-id="Import dari Packed" data-t-en="Import from Packed">Import dari Packed</span></button>
+        <button class="cc-mini danger" type="button" onclick="ccClear()">✕ <span data-t-id="Kosongkan" data-t-en="Clear">Kosongkan</span></button>
+      </div>
+      <div class="status-box idle" id="cc-status" style="margin-top:12px"><div class="dot"></div><span>Siap.</span></div>
+      <div style="margin-top:10px;font-size:10px;color:var(--gray)"><span data-t-id="ITEM" data-t-en="ITEMS">ITEM</span> <span id="cc-count">0/50</span></div>
+      <div class="cc-empty" id="cc-empty"><span data-t-id="Belum ada item. Tambahkan lewat ID/link, atau pilih dari Marketplace (ubah “Kirim ke” jadi Custom Catalog)." data-t-en="No items yet. Add one by ID/link, or pick from the Marketplace (set “Send to” to Custom Catalog).">Belum ada item. Tambahkan lewat ID/link, atau pilih dari Marketplace (ubah “Kirim ke” jadi Custom Catalog).</span></div>
+      <div class="bw-scroll" id="cc-scroll"><div class="bw-grid" id="cc-grid"></div></div>
+      <div class="cc-actions">
+        <button class="btn btn-green" type="button" id="cc-save-btn" onclick="ccSave()">💾 <span id="cc-save-label">SIMPAN &amp; BUAT KODE</span></button>
+        <button class="btn btn-cyan" type="button" id="cc-dl-btn" onclick="ccDownloadBuilder()">⬇ <span data-t-id="DOWNLOAD ZIP" data-t-en="DOWNLOAD ZIP">DOWNLOAD ZIP</span></button>
+      </div>
+      <div class="prog"><div class="prog-fill" id="cc-prog"></div></div>
+      <div id="cc-result" style="display:none;margin-top:14px">
+        <div class="cc-code" id="cc-code-text"></div>
+        <div class="cc-actions">
+          <button class="cc-mini" type="button" onclick="ccCopy('code')">📋 <span data-t-id="Salin kode" data-t-en="Copy code">Salin kode</span></button>
+          <button class="cc-mini" type="button" onclick="ccCopy('link')">🔗 <span data-t-id="Salin link" data-t-en="Copy link">Salin link</span></button>
+        </div>
+        <div id="cc-result-note" style="margin-top:10px;font-size:10px;color:var(--gray);line-height:1.6"></div>
+      </div>
+    </div>
+
+    <!-- Use a code -->
+    <div class="card">
+      <div class="label">🎟️ <span data-t-id="GUNAKAN KODE" data-t-en="USE A CODE">GUNAKAN KODE</span></div>
+      <div class="row">
+        <input type="text" id="cc-code-input" maxlength="12" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase" placeholder="K7M2-Q9XA" onkeydown="if(event.key==='Enter')ccLoadCode()">
+        <button class="btn" type="button" id="cc-load-btn" onclick="ccLoadCode()">🔍 <span data-t-id="MUAT" data-t-en="LOAD">MUAT</span></button>
+      </div>
+      <div class="status-box idle" id="cc-load-status" style="margin-top:12px"><div class="dot"></div><span>Masukkan kode katalog.</span></div>
+      <div id="cc-loaded" style="display:none;margin-top:14px">
+        <div style="font-weight:700;font-size:14px;word-break:break-word" id="cc-loaded-title"></div>
+        <div class="cc-mine-meta" style="margin:6px 0 10px"><span id="cc-loaded-owner"></span><span class="cc-badge" id="cc-loaded-vis"></span><span id="cc-loaded-count"></span></div>
+        <div class="bw-scroll"><div class="bw-grid" id="cc-loaded-grid"></div></div>
+        <div class="cc-actions">
+          <button class="btn btn-green" type="button" id="cc-loaded-dl" onclick="ccDownloadLoaded()">⬇ <span data-t-id="DOWNLOAD KATALOG" data-t-en="DOWNLOAD CATALOG">DOWNLOAD KATALOG</span></button>
+          <button class="btn" type="button" id="cc-loaded-edit" onclick="ccEditLoaded()">✎ <span id="cc-loaded-edit-label">EDIT</span></button>
+        </div>
+        <div class="prog"><div class="prog-fill" id="cc-loaded-prog"></div></div>
+      </div>
+    </div>
+
+    <!-- My catalogs (logged in only) -->
+    <div class="card" id="cc-mine-card" style="display:none">
+      <div class="label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📁 <span data-t-id="KATALOG SAYA" data-t-en="MY CATALOGS">KATALOG SAYA</span> <span id="cc-mine-count" style="color:var(--gray)"></span></span>
+        <button class="cc-mini" type="button" onclick="ccLoadMine()">↻</button>
+      </div>
+      <div id="cc-mine-list"></div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-image2d">
     <div class="card">
       <div class="label"><span data-t-id="CARI 2D ASSET" data-t-en="SEARCH 2D ASSET">CARI 2D ASSET</span></div>
@@ -2137,6 +2242,7 @@ function switchTab(name){
   });
   if(typeof Motion!=='undefined'&&next) animatePanelCards(next);
   if(name==='catalog' && typeof bwInit==='function') bwInit();
+  if(name==='custom' && typeof ccRenderAuth==='function') ccRenderAuth();
 }
 
 let dropdownAnchorBtn = null;
@@ -2571,6 +2677,7 @@ function oauthRender(){
   if(bar)   bar.style.display = o ? 'flex' : 'none';
   if(name)  name.textContent = o ? ('👤 ' + o.username) : '';
   if(login) login.style.display = o ? 'none' : 'inline-flex';
+  if(typeof ccRenderAuth === 'function') ccRenderAuth();   // Custom Catalog shows/hides its login + "my catalogs" cards
 }
 
 // Short codes from the backend -> [Indonesian, English]. Unknown codes fall back
@@ -2687,6 +2794,430 @@ setInterval(()=>{
   if(bar && bar.style.display === 'flex' && !oauthGet()) oauthExpire();
 }, 30000);
 
+// ── CUSTOM CATALOG (build, save, share by code) ─────────────────────
+// Building a list and loading PUBLIC codes need no login. Saving needs the Roblox
+// login (the backend verifies the token with Roblox and ties the catalog to the
+// Roblox user ID). The list being built survives the login round-trip because it
+// is kept in sessionStorage. Names inside someone else's catalog are never shown
+// as stored: they are re-read from Roblox by ID, and everything is set with
+// textContent, never innerHTML.
+var CC_DRAFT_KEY = 'rbx3d_cc_draft', CC_MAX = 50;
+var CC_RBXCDN = /^https:\/\/[a-z0-9-]+\.rbxcdn\.com\//;
+var CC_CODE_RE = /^[A-Z2-9]{4}-[A-Z2-9]{4}$/;
+var ccItems = [], ccEditing = null, ccLoaded = null, ccLastCode = null, ccLoadReq = 0;
+
+function ccEl(id){ return document.getElementById(id); }
+function ccType(t){ return t === 'Bundle' ? 'Bundle' : 'Asset'; }
+function ccValidItem(x){ return !!x && Number.isInteger(x.id) && x.id > 0 && (x.itemType === 'Asset' || x.itemType === 'Bundle'); }
+function ccSafeThumb(u){ return (typeof u === 'string' && CC_RBXCDN.test(u)) ? u : null; }
+
+// ── draft (survives the Roblox login redirect) ──
+function ccSaveDraft(){
+  try{
+    sessionStorage.setItem(CC_DRAFT_KEY, JSON.stringify({
+      name: ccEl('cc-name').value, vis: ccEl('cc-vis').value, editing: ccEditing,
+      items: ccItems.map(i=>({ id:i.id, itemType:i.itemType, name:i.name||'', thumbnailUrl:i.thumbnailUrl||null }))
+    }));
+  }catch(_){}
+}
+function ccRestoreDraft(){
+  try{
+    const d = JSON.parse(sessionStorage.getItem(CC_DRAFT_KEY) || 'null');
+    if(!d || typeof d !== 'object') return;
+    ccItems = (Array.isArray(d.items) ? d.items : []).filter(ccValidItem).slice(0, CC_MAX)
+      .map(i=>({ id:i.id, itemType:ccType(i.itemType), name:String(i.name||'').slice(0,100), thumbnailUrl:ccSafeThumb(i.thumbnailUrl) }));
+    ccEl('cc-name').value = typeof d.name === 'string' ? d.name.slice(0,40) : '';
+    ccEl('cc-vis').value  = d.vis === 'public' ? 'public' : 'private';
+    ccEditing = (typeof d.editing === 'string' && CC_CODE_RE.test(d.editing)) ? d.editing : null;
+  }catch(_){}
+}
+
+// ── API helper: adds the Roblox token, turns failures into {error, code, status} ──
+async function ccApi(method, path, body){
+  const headers = Object.assign({}, oauthAuthHeaders());
+  if(body) headers['Content-Type'] = 'application/json';
+  let res;
+  try{
+    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  }catch(_){
+    throw { error: oaT('Tidak bisa menghubungi server.','Could not reach the server.') };
+  }
+  let data = {};
+  try{ data = await res.json(); }catch(_){}
+  if(!res.ok){
+    if(res.status === 401 && data.code === 'session_expired' && typeof oauthExpire === 'function') oauthExpire();
+    throw { error: data.error || res.statusText, code: data.code, status: res.status };
+  }
+  return data;
+}
+function ccShowError(statusId, e){
+  st(statusId, '✗ ' + ((e && (e.error || e.message)) || oaT('Terjadi kesalahan.','Something went wrong.')), 'err');
+}
+
+// ── rendering ──
+function ccCard(it, onRemove){
+  const card = document.createElement('div');
+  card.className = 'bw-item';
+  const th = document.createElement('div');
+  th.className = 'bw-thumb';
+  const thumb = ccSafeThumb(it.thumbnailUrl);
+  if(thumb){
+    const img = document.createElement('img');
+    img.src = thumb; img.alt = ''; img.loading = 'lazy';
+    th.appendChild(img);
+  }else{
+    th.textContent = '🖼';
+  }
+  const name = document.createElement('div');
+  name.className = 'bw-name'; name.textContent = it.name || ('#' + it.id); name.title = it.name || ('#' + it.id);
+  const meta = document.createElement('div');
+  meta.className = 'bw-meta'; meta.textContent = `${it.itemType === 'Bundle' ? 'Bundle' : 'Asset'} · ${it.id}`;
+  card.append(th, name, meta);
+  if(it.available === false){
+    const w = document.createElement('div');
+    w.className = 'cc-warn';
+    w.textContent = oaT('⚠ tidak ditemukan di katalog Roblox','⚠ not found in the Roblox catalog');
+    card.appendChild(w);
+  }
+  if(onRemove){
+    const foot = document.createElement('div');
+    foot.className = 'bw-foot';
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'bw-add'; rm.textContent = '✕ ' + oaT('HAPUS','REMOVE');
+    rm.onclick = onRemove;
+    foot.appendChild(rm);
+    card.appendChild(foot);
+  }
+  return card;
+}
+function ccRenderGrid(grid, items, onRemove){
+  grid.textContent = '';
+  items.forEach((it, i)=>grid.appendChild(ccCard(it, onRemove ? ()=>onRemove(i) : null)));
+}
+function ccRenderBuilder(){
+  ccRenderGrid(ccEl('cc-grid'), ccItems, i=>{ ccItems.splice(i, 1); ccAfterChange(); });
+  ccEl('cc-count').textContent = `${ccItems.length}/${CC_MAX}`;
+  ccEl('cc-empty').style.display = ccItems.length ? 'none' : 'block';
+  const banner = ccEl('cc-edit-banner');
+  if(ccEditing){
+    banner.style.display = 'flex';
+    ccEl('cc-edit-text').textContent = oaT('Mengedit katalog ', 'Editing catalog ') + ccEditing;
+  }else{
+    banner.style.display = 'none';
+  }
+  ccEl('cc-save-label').textContent = ccEditing ? oaT('SIMPAN PERUBAHAN','SAVE CHANGES') : oaT('SIMPAN & BUAT KODE','SAVE & GET CODE');
+}
+function ccAfterChange(){ ccRenderBuilder(); ccSaveDraft(); }
+
+// ── editing the list ──
+// Returns {ok} | {duplicate, error} | {error}. `quiet` skips the re-render (bulk adds).
+function ccAddItem(it, quiet){
+  if(ccItems.length >= CC_MAX) return { ok:false, error: oaT(`Maksimal ${CC_MAX} item per katalog.`, `Maximum ${CC_MAX} items per catalog.`) };
+  const type = ccType(it.itemType);
+  if(ccItems.some(x=>x.id === it.id && x.itemType === type)) return { ok:false, duplicate:true, error: oaT('Item sudah ada di daftar.','Item is already in the list.') };
+  ccItems.push({ id: it.id, itemType: type, name: String(it.name || '').slice(0,100), thumbnailUrl: ccSafeThumb(it.thumbnailUrl) });
+  if(!quiet) ccAfterChange();
+  return { ok:true };
+}
+async function ccAddFromInput(){
+  const input = ccEl('cc-add-input');
+  const id = extractCatalogIdFromLine(input.value);
+  if(!id){ st('cc-status', oaT('Masukkan Asset ID atau link katalog yang valid.','Enter a valid asset ID or catalog link.'), 'err'); return; }
+  const btn = ccEl('cc-add-btn');
+  btn.disabled = true;
+  st('cc-status', oaT('Mengambil detail item…','Fetching item details…'), 'loading');
+  try{
+    const res = await fetch(`${BASE}/api/catalog/info?asset_id=${id}`);
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || oaT('Item tidak ditemukan','Item not found'));
+    if(data.isAnimationBundle) throw new Error(oaT(`"${data.name}" adalah Animation Bundle: hanya data gerakan, tidak ada mesh 3D.`, `"${data.name}" is an Animation Bundle: motion data only, no 3D mesh.`));
+    const r = ccAddItem({ id, itemType: data.isBundle ? 'Bundle' : 'Asset', name: data.name, thumbnailUrl: data.thumbnailUrl });
+    if(r.ok){
+      input.value = ''; input.focus();
+      st('cc-status', oaT(`✓ "${data.name}" ditambahkan (${ccItems.length}/${CC_MAX}).`, `✓ "${data.name}" added (${ccItems.length}/${CC_MAX}).`), 'ok');
+    }else{
+      st('cc-status', '✗ ' + r.error, 'err');
+    }
+  }catch(e){
+    st('cc-status', '✗ ' + e.message, 'err');
+  }finally{
+    btn.disabled = false;
+  }
+}
+function ccImportPacked(){
+  if(typeof packedItems === 'undefined' || !packedItems.length){
+    st('cc-status', oaT('Packed Catalog masih kosong.','Packed Catalog is empty.'), 'err'); return;
+  }
+  let added = 0, skipped = 0;
+  packedItems.forEach(p=>{
+    const r = ccAddItem({ id:p.id, itemType: p.isBundle ? 'Bundle' : 'Asset', name:p.name, thumbnailUrl:p.thumbnailUrl }, true);
+    if(r.ok) added++; else skipped++;
+  });
+  ccAfterChange();
+  st('cc-status', oaT(`✓ ${added} item diimpor dari Packed Catalog${skipped ? `, ${skipped} dilewati (duplikat/penuh)` : ''}.`,
+                      `✓ ${added} items imported from Packed Catalog${skipped ? `, ${skipped} skipped (duplicate/full)` : ''}.`), 'ok');
+}
+function ccClear(){
+  if(!ccItems.length) return;
+  if(!confirm(oaT('Kosongkan semua item di daftar ini?','Remove every item from this list?'))) return;
+  ccItems = []; ccAfterChange();
+}
+function ccNew(){
+  if(ccItems.length && !confirm(oaT('Mulai katalog baru? Daftar item saat ini akan dikosongkan.','Start a new catalog? The current item list will be cleared.'))) return;
+  ccItems = []; ccEditing = null; ccLastCode = null;
+  ccEl('cc-name').value = ''; ccEl('cc-vis').value = 'private';
+  ccEl('cc-result').style.display = 'none';
+  ccAfterChange();
+}
+
+// ── save / share ──
+function ccNeedLogin(){
+  st('cc-status', oaT('🔑 Login Roblox dulu untuk menyimpan. Daftar itemmu tetap aman saat login.','🔑 Log in with Roblox to save. Your item list stays safe while you log in.'), 'err');
+  const card = ccEl('cc-login-card');
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+function ccShowResult(cat){
+  ccLastCode = cat.code;
+  ccEl('cc-result').style.display = 'block';
+  ccEl('cc-code-text').textContent = cat.code;
+  ccEl('cc-result-note').textContent = cat.visibility === 'public'
+    ? oaT('🌐 Publik: siapa pun yang punya kode ini bisa memuat dan mengunduh katalogmu.','🌐 Public: anyone with this code can load and download your catalog.')
+    : oaT('🔒 Privat: hanya kamu (setelah login Roblox) yang bisa membuka kode ini.','🔒 Private: only you (logged in with Roblox) can open this code.');
+}
+async function ccSave(){
+  if(!oauthGet()){ ccNeedLogin(); return; }
+  const name = ccEl('cc-name').value.trim();
+  if(!name){ st('cc-status', oaT('Isi nama katalog dulu.','Give the catalog a name first.'), 'err'); ccEl('cc-name').focus(); return; }
+  if(!ccItems.length){ st('cc-status', oaT('Tambahkan minimal 1 item.','Add at least 1 item.'), 'err'); return; }
+  const body = { name, visibility: ccEl('cc-vis').value,
+                 items: ccItems.map(i=>({ id:i.id, itemType:i.itemType, name:i.name||'' })) };
+  const btn = ccEl('cc-save-btn');
+  btn.disabled = true;
+  st('cc-status', oaT('Menyimpan…','Saving…'), 'loading');
+  try{
+    const cat = ccEditing ? await ccApi('PUT', `/api/custom-catalog/${ccEditing}`, body)
+                          : await ccApi('POST', '/api/custom-catalog', body);
+    ccEditing = cat.code;
+    ccShowResult(cat);
+    ccAfterChange();
+    st('cc-status', oaT('✓ Tersimpan! Bagikan kodenya.','✓ Saved! Share the code.'), 'ok');
+    ccLoadMine();
+  }catch(e){
+    ccShowError('cc-status', e);
+  }finally{
+    btn.disabled = false;
+  }
+}
+async function ccCopyText(text, statusId){
+  try{ await navigator.clipboard.writeText(text); }
+  catch(_){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(__){}
+    document.body.removeChild(ta);
+  }
+  st(statusId, oaT('✓ Disalin: ','✓ Copied: ') + text, 'ok');
+}
+function ccCopy(what){
+  if(!ccLastCode) return;
+  ccCopyText(what === 'link' ? `${location.origin}/?cc=${ccLastCode}` : ccLastCode, 'cc-status');
+}
+
+// ── download ──
+async function ccBatchDownload(items, baseName, progId, statusId, btn){
+  if(!items.length) return;
+  btn.disabled = true; prog(progId, 15);
+  st(statusId, oaT(`⏳ Membungkus ${items.length} item (OBJ+Texture)…`, `⏳ Packing ${items.length} items (OBJ+Texture)…`), 'loading');
+  try{
+    const res = await fetch(`${BASE}/api/v2/item-batch`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items.map(it=>({ id: it.id, name: it.name || ('item_' + it.id), isBundle: it.itemType === 'Bundle' })) })
+    });
+    if(!res.ok){
+      let e = {}; try{ e = await res.json(); }catch(_){}
+      throw new Error(e.error || oaT('Gagal membuat ZIP','Failed to build the ZIP'));
+    }
+    prog(progId, 90);
+    const blob = await res.blob();
+    const safe = (baseName || 'custom_catalog').replace(/[^\w.-]+/g, '_').slice(0, 40) || 'custom_catalog';
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${safe}_${items.length}items.zip` });
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    prog(progId, 100);
+    st(statusId, oaT(`✓ Download selesai! ${items.length} item dalam satu ZIP.`, `✓ Download complete! ${items.length} items in one ZIP.`), 'ok');
+  }catch(e){
+    st(statusId, '✗ ' + e.message, 'err'); prog(progId, 0);
+  }finally{
+    btn.disabled = false;
+  }
+}
+function ccDownloadBuilder(){
+  if(!ccItems.length){ st('cc-status', oaT('Daftar masih kosong.','The list is empty.'), 'err'); return; }
+  return ccBatchDownload(ccItems, ccEl('cc-name').value.trim(), 'cc-prog', 'cc-status', ccEl('cc-dl-btn'));
+}
+
+// ── use a code ──
+// Roblox's own name/thumbnail for each ID (the stored names are never displayed).
+async function ccEnrich(items){
+  const assets  = items.filter(i=>i.itemType === 'Asset').map(i=>i.id);
+  const bundles = items.filter(i=>i.itemType === 'Bundle').map(i=>i.id);
+  const qs = new URLSearchParams({ assets: assets.join(','), bundles: bundles.join(',') });
+  const res = await fetch(`${BASE}/api/catalog/items-meta?${qs}`);
+  if(!res.ok) throw new Error('meta');
+  const data = await res.json();
+  const map = new Map((data.items || []).map(x=>[x.itemType + ':' + x.id, x]));
+  return items.map(i=>{
+    const m = map.get(i.itemType + ':' + i.id);
+    if(!m) return { id:i.id, itemType:i.itemType, name:'', thumbnailUrl:null };
+    return { id:i.id, itemType:i.itemType, available: m.available, name: m.available ? m.name : '', thumbnailUrl: ccSafeThumb(m.thumbnailUrl) };
+  });
+}
+function ccRenderLoaded(){
+  const c = ccLoaded;
+  ccEl('cc-loaded').style.display = 'block';
+  ccEl('cc-loaded-title').textContent = c.name;
+  ccEl('cc-loaded-owner').textContent = c.ownerName ? oaT('oleh ','by ') + c.ownerName : '';
+  const vis = ccEl('cc-loaded-vis');
+  vis.textContent = c.visibility === 'public' ? oaT('🌐 Publik','🌐 Public') : oaT('🔒 Privat','🔒 Private');
+  vis.className = 'cc-badge ' + (c.visibility === 'public' ? 'pub' : 'priv');
+  ccEl('cc-loaded-count').textContent = `${c.items.length} ${oaT('item','items')}`;
+  ccEl('cc-loaded-edit-label').textContent = c.isOwner ? oaT('EDIT KATALOG INI','EDIT THIS CATALOG') : oaT('SALIN KE BUILDER','COPY TO BUILDER');
+  ccRenderGrid(ccEl('cc-loaded-grid'), c.items, null);
+}
+async function ccLoadCode(raw){
+  const input = ccEl('cc-code-input');
+  const compact = String(raw !== undefined ? raw : input.value).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if(compact.length !== 8){ st('cc-load-status', oaT('Kode terdiri dari 8 karakter, contoh: K7M2-Q9XA.','A code has 8 characters, e.g. K7M2-Q9XA.'), 'err'); return; }
+  const code = compact.slice(0,4) + '-' + compact.slice(4);
+  input.value = code;
+  const my = ++ccLoadReq;
+  const btn = ccEl('cc-load-btn');
+  btn.disabled = true;
+  ccEl('cc-loaded').style.display = 'none';
+  st('cc-load-status', oaT('Memuat katalog…','Loading catalog…'), 'loading');
+  try{
+    const cat = await ccApi('GET', `/api/custom-catalog/${code}`);
+    if(my !== ccLoadReq) return;
+    ccLoaded = { code: cat.code, name: cat.name, visibility: cat.visibility, ownerName: cat.ownerName || '', isOwner: !!cat.isOwner,
+                 items: (cat.items || []).map(i=>({ id:i.id, itemType:ccType(i.itemType), name:'', thumbnailUrl:null })) };
+    ccRenderLoaded();
+    st('cc-load-status', oaT('Memeriksa item di Roblox…','Checking items on Roblox…'), 'loading');
+    try{ ccLoaded.items = await ccEnrich(ccLoaded.items); }catch(_){ /* keep IDs only */ }
+    if(my !== ccLoadReq) return;
+    ccRenderLoaded();
+    const missing = ccLoaded.items.filter(i=>i.available === false).length;
+    st('cc-load-status', missing
+        ? oaT(`✓ Dimuat. ${missing} item tidak ditemukan di katalog Roblox.`, `✓ Loaded. ${missing} item(s) not found in the Roblox catalog.`)
+        : oaT('✓ Katalog dimuat.','✓ Catalog loaded.'), missing ? 'idle' : 'ok');
+  }catch(e){
+    if(my === ccLoadReq) ccShowError('cc-load-status', e);
+  }finally{
+    if(my === ccLoadReq) btn.disabled = false;
+  }
+}
+function ccDownloadLoaded(){
+  if(!ccLoaded) return;
+  return ccBatchDownload(ccLoaded.items, ccLoaded.name, 'cc-loaded-prog', 'cc-load-status', ccEl('cc-loaded-dl'));
+}
+function ccEditLoaded(){
+  if(!ccLoaded) return;
+  if(ccItems.length && !confirm(oaT('Daftar di builder akan diganti dengan katalog ini. Lanjut?','The builder list will be replaced with this catalog. Continue?'))) return;
+  ccItems = ccLoaded.items.slice(0, CC_MAX).map(i=>({ id:i.id, itemType:i.itemType, name:i.name || '', thumbnailUrl:i.thumbnailUrl || null }));
+  if(ccLoaded.isOwner){
+    ccEditing = ccLoaded.code;
+    ccEl('cc-name').value = ccLoaded.name; ccEl('cc-vis').value = ccLoaded.visibility;
+  }else{
+    ccEditing = null;                                    // a copy becomes a new catalog of your own
+    ccEl('cc-name').value = ccLoaded.name.slice(0, 40); ccEl('cc-vis').value = 'private';
+  }
+  ccEl('cc-result').style.display = 'none';
+  ccAfterChange();
+  ccEl('cc-builder-card').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── my catalogs ──
+async function ccLoadMine(){
+  if(!oauthGet()) return;
+  const list = ccEl('cc-mine-list');
+  try{
+    const data = await ccApi('GET', '/api/custom-catalogs');
+    list.textContent = '';
+    ccEl('cc-mine-count').textContent = `${data.catalogs.length}/${data.limit || 20}`;
+    if(!data.catalogs.length){
+      const p = document.createElement('div');
+      p.className = 'cc-empty'; p.style.display = 'block';
+      p.textContent = oaT('Belum ada katalog tersimpan.','No saved catalogs yet.');
+      list.appendChild(p);
+      return;
+    }
+    data.catalogs.forEach(c=>{
+      const row = document.createElement('div'); row.className = 'cc-mine-row';
+      const info = document.createElement('div'); info.className = 'cc-mine-info';
+      const nm = document.createElement('div'); nm.className = 'cc-mine-name'; nm.textContent = c.name; nm.title = c.name;
+      const meta = document.createElement('div'); meta.className = 'cc-mine-meta';
+      const badge = document.createElement('span');
+      badge.className = 'cc-badge ' + (c.visibility === 'public' ? 'pub' : 'priv');
+      badge.textContent = c.visibility === 'public' ? '🌐' : '🔒';
+      const code = document.createElement('span'); code.textContent = c.code;
+      const cnt = document.createElement('span'); cnt.textContent = `${(c.items || []).length} ${oaT('item','items')}`;
+      meta.append(badge, code, cnt);
+      info.append(nm, meta);
+      const btns = document.createElement('div'); btns.className = 'cc-mine-btns';
+      const mk = (label, title, fn, cls)=>{
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'cc-mini' + (cls ? ' ' + cls : ''); b.textContent = label; b.title = title; b.onclick = fn;
+        return b;
+      };
+      btns.append(
+        mk('↗', oaT('Buka','Open'), ()=>{ ccEl('cc-code-input').value = c.code; ccLoadCode(c.code); ccEl('cc-code-input').scrollIntoView({behavior:'smooth', block:'center'}); }),
+        mk('📋', oaT('Salin kode','Copy code'), ()=>ccCopyText(c.code, 'cc-load-status')),
+        mk('🗑', oaT('Hapus','Delete'), ()=>ccDelete(c.code), 'danger')
+      );
+      row.append(info, btns);
+      list.appendChild(row);
+    });
+  }catch(e){
+    list.textContent = '';
+    const p = document.createElement('div');
+    p.className = 'cc-warn'; p.textContent = '✗ ' + ((e && e.error) || oaT('Gagal memuat daftar.','Could not load the list.'));
+    list.appendChild(p);
+  }
+}
+async function ccDelete(code){
+  if(!confirm(oaT(`Hapus katalog ${code}? Kodenya tidak akan bisa dipakai lagi.`, `Delete catalog ${code}? Its code will stop working.`))) return;
+  try{
+    await ccApi('DELETE', `/api/custom-catalog/${code}`);
+    if(ccEditing === code){ ccEditing = null; ccEl('cc-result').style.display = 'none'; ccAfterChange(); }
+    if(ccLoaded && ccLoaded.code === code){ ccLoaded = null; ccEl('cc-loaded').style.display = 'none'; }
+    st('cc-load-status', oaT('✓ Katalog dihapus.','✓ Catalog deleted.'), 'ok');
+    ccLoadMine();
+  }catch(e){
+    ccShowError('cc-load-status', e);
+  }
+}
+
+// Login-dependent cards: called from oauthRender() and when the tab opens.
+function ccRenderAuth(){
+  const login = ccEl('cc-login-card'), mine = ccEl('cc-mine-card');
+  if(!login || !mine) return;
+  const o = (typeof oauthGet === 'function') ? oauthGet() : null;
+  login.style.display = o ? 'none' : 'block';
+  mine.style.display  = o ? 'block' : 'none';
+  if(!o){ ccEl('cc-mine-list').textContent = ''; return; }
+  const panel = ccEl('panel-custom');
+  if(panel && panel.classList.contains('active')) ccLoadMine();
+}
+function ccBoot(){
+  ccRestoreDraft();
+  ccRenderBuilder();
+  ccRenderAuth();
+  // Share link: https://<site>/?cc=K7M2-Q9XA opens the tab with that code loaded.
+  const q = new URLSearchParams(location.search).get('cc');
+  if(q && /^[A-Za-z0-9-]{8,12}$/.test(q)){ switchTab('custom'); ccLoadCode(q); }
+}
+document.addEventListener('DOMContentLoaded', ccBoot);
+
 // ── CATALOG BROWSE (marketplace preview) ───────────────────────────
 // State uses `var` on purpose: switchTab() can call bwInit() before this line
 // has executed, and `let` would throw a TDZ error in that case.
@@ -2778,7 +3309,31 @@ function bwPriceText(it){
   if(it.priceStatus === 'Off Sale') return bwT('Tidak dijual','Off sale');
   return bwT('Gratis','Free');
 }
+function bwDest(){ const e = document.getElementById('bw-dest'); return e && e.value === 'custom' ? 'custom' : 'pack'; }
+function bwDestLabel(){ return bwDest() === 'custom' ? '+ CUSTOM' : '+ PACK'; }
+function bwDestTitle(){
+  return bwDest() === 'custom' ? bwT('Tambahkan ke Custom Catalog','Add to Custom Catalog')
+                               : bwT('Tambahkan ke Packed Catalog','Add to Packed Catalog');
+}
+// Switching the destination relabels (and re-enables) every card's button.
+function bwRelabelAdd(){
+  document.querySelectorAll('.bw-add').forEach(b=>{ b.textContent = bwDestLabel(); b.title = bwDestTitle(); b.disabled = false; });
+}
+function bwAddToCustom(it, btn){
+  const r = ccAddItem({ id: it.id, itemType: it.itemType, name: it.name, thumbnailUrl: it.thumbnailUrl });
+  if(r.ok){
+    btn.textContent = '✓'; btn.disabled = true;
+    st('bw-status', bwT(`✓ "${it.name}" ditambahkan ke Custom Catalog (${ccItems.length}/${CC_MAX}). Buka tab CUSTOM untuk menyimpan.`,
+                        `✓ "${it.name}" added to Custom Catalog (${ccItems.length}/${CC_MAX}). Open the CUSTOM tab to save.`), 'ok');
+  }else if(r.duplicate){
+    btn.textContent = '✓'; btn.disabled = true;
+    st('bw-status', bwT('Item sudah ada di Custom Catalog.','Item is already in the Custom Catalog.'), 'ok');
+  }else{
+    st('bw-status', '✗ ' + r.error, 'err');
+  }
+}
 async function bwAddToPack(it, btn){
+  if(bwDest() === 'custom'){ bwAddToCustom(it, btn); return; }
   btn.disabled = true;
   const r = await addPackedItemById(it.id);
   if(r.ok){
@@ -2823,8 +3378,8 @@ function bwRenderItems(items){
     const price = document.createElement('span');
     price.className = 'bw-price'; price.textContent = bwPriceText(it);
     const add = document.createElement('button');
-    add.className = 'bw-add'; add.textContent = '+ PACK';
-    add.title = bwT('Tambahkan ke Packed Catalog','Add to Packed Catalog');
+    add.className = 'bw-add'; add.textContent = bwDestLabel();
+    add.title = bwDestTitle();
     add.onclick = (e)=>{ e.stopPropagation(); bwAddToPack(it, add); };
     foot.append(price, add);
 
@@ -3370,6 +3925,13 @@ const ROUTES=[
   ['GET','GET /api/catalog/download?asset_id=&format=','ZIP berisi OBJ/GLTF item'],
   ['GET','GET /api/catalog/raw?asset_id=','File mentah (.mesh/.rbxm) tanpa konversi'],
   ['POST','POST /api/v2/item-batch','ZIP tunggal berisi banyak item/bundle katalog (OBJ+MTL+texture, per folder, nama presisi via body JSON)'],
+  ['GET','GET /api/catalog/browse?q=&category=&sub=&sort=','Cari/jelajahi marketplace Roblox (kategori seperti menu Roblox)'],
+  ['GET','GET /api/catalog/items-meta?assets=&bundles=','Nama + thumbnail resmi dari Roblox untuk daftar ID (maks 50)'],
+  ['POST','POST /api/custom-catalog','Simpan Custom Catalog → kode (butuh login Roblox: Authorization: Bearer)'],
+  ['GET','GET /api/custom-catalog/{code}','Muat Custom Catalog; privat hanya untuk pemiliknya'],
+  ['PUT','PUT /api/custom-catalog/{code}','Ubah nama/visibility/item (hanya pemilik)'],
+  ['DELETE','DELETE /api/custom-catalog/{code}','Hapus Custom Catalog (hanya pemilik)'],
+  ['GET','GET /api/custom-catalogs','Daftar Custom Catalog milikmu (login Roblox)'],
   ['GET','GET /api/catalog/image?asset_id=','Gambar 2D asli item (Background/Decal/Image — bukan mesh)'],
   ['POST','POST /api/v2/image-batch','ZIP berisi banyak gambar 2D sekaligus (Decal/Image/Face/GUI/Background)'],
   ['GET','GET /api/2d/font?id=','ZIP: Font Family manifest + semua file .ttf/.otf per Face'],
