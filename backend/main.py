@@ -1890,6 +1890,40 @@ def _browse_thumbs(s, asset_ids, bundle_ids):
         print(f"[browse] bundle thumbs failed: {type(e).__name__}: {e}")
     return out
 
+def _rbx_batch_details(s, refs):
+    """POST catalog/v1/catalog/items/details with Roblox's CSRF handshake: the first
+    POST is answered 403 + an x-csrf-token header, and must be repeated with that
+    token. (The plain rpost() helper skips the handshake, so it fails here.)
+    Returns the list of detail dicts; raises on any other failure."""
+    url = "https://catalog.roblox.com/v1/catalog/items/details"
+    body = {"items": refs}
+    r = s.post(url, json=body, timeout=6)
+    if r.status_code == 403 and r.headers.get("x-csrf-token"):
+        r = s.post(url, json=body, headers={"X-CSRF-TOKEN": r.headers["x-csrf-token"]}, timeout=6)
+    if r.status_code != 200:
+        raise RuntimeError(f"batch details HTTP {r.status_code}")
+    return r.json().get("data") or []
+
+def _rbx_details_each(s, order, deadline):
+    """Last resort when the batch call is unavailable: ask for each item on its own
+    (the same GET the rest of the app already relies on), a few at a time, and stop
+    when the time budget is spent. -> {(itemType, id): details}"""
+    from concurrent.futures import ThreadPoolExecutor
+    def one(ref):
+        t, i = ref
+        if time.time() > deadline: return t, i, None
+        try:
+            r = s.get(f"https://catalog.roblox.com/v1/catalog/items/{i}/details",
+                      params={"itemType": t}, timeout=4)
+            return t, i, (r.json() if r.status_code == 200 else None)
+        except Exception:
+            return t, i, None
+    out = {}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for t, i, d in ex.map(one, order):
+            if d: out[(t, i)] = d
+    return out
+
 def _browse_page(s, params, allow_fallback=True):
     """One upstream page -> (items, next_cursor, status). items is None on failure
     (status then holds Roblox's HTTP code). Falls back to an IDs-only search
@@ -1913,8 +1947,7 @@ def _browse_page(s, params, allow_fallback=True):
             for d in (b2.get("data") or []) if d.get("id")]
     items = []
     if refs:
-        d = rpost("https://catalog.roblox.com/v1/catalog/items/details", {"items": refs})
-        items = d.get("data") or []
+        items = _rbx_batch_details(s, refs)
     return items, b2.get("nextPageCursor"), 200
 
 def _browse_collect(s, base_params, cursor, asset_types, bundle_types, deadline,
@@ -2119,9 +2152,18 @@ def catalog_items_meta():
     try:
         s = get_scraper()
         order = [("Asset", i) for i in assets] + [("Bundle", i) for i in bundles]
-        d = rpost("https://catalog.roblox.com/v1/catalog/items/details",
-                  {"items": [{"itemType": t, "id": i} for t, i in order]})
-        found = {(x.get("itemType", "Asset"), x.get("id")): x for x in (d.get("data") or [])}
+        found, batch_ok = {}, True
+        try:
+            for x in _rbx_batch_details(s, [{"itemType": t, "id": i} for t, i in order]):
+                found[(x.get("itemType", "Asset"), x.get("id"))] = x
+        except Exception as e:
+            batch_ok = False
+            print(f"[items-meta] batch failed: {type(e).__name__}: {e}")
+        if not batch_ok:
+            found.update(_rbx_details_each(s, order, time.time() + 6))
+            if not found:
+                # Nothing came back at all: that's an outage, not "every item was removed".
+                return jsonify({"error": "Roblox tidak merespons. Coba lagi sebentar lagi."}), 502
         thumbs = _browse_thumbs(s, assets, bundles)
         items = []
         for t, i in order:
