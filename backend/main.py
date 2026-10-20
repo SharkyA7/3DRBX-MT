@@ -1823,7 +1823,8 @@ _BROWSE_LEGACY = {"bodyparts": ("body", ""), "gear": ("accessories", "gear")}
 _BROWSE_LIMIT      = 30     # items per upstream Roblox page
 _BROWSE_WANT       = 24     # stop paging once we have at least this many matches
 _BROWSE_MAX_PAGES  = 4      # upstream pages per request (bounds latency)
-_BROWSE_BUDGET_S   = 12     # wall-clock budget for one browse request
+_BROWSE_BUDGET_S   = 7      # wall-clock budget for one browse request: Vercel's default
+                            # function limit is 10s (Hobby), so stop searching well before it
 _RBXCDN_RE = re.compile(r"^https://[a-z0-9\-]+\.rbxcdn\.com/")
 
 def _browse_asset_type(v):
@@ -1869,7 +1870,7 @@ def _browse_thumbs(s, asset_ids, bundle_ids):
         if asset_ids:
             r = s.get("https://thumbnails.roblox.com/v1/assets",
                       params={"assetIds": ",".join(map(str, asset_ids)),
-                              "size": "150x150", "format": "Png"}, timeout=10)
+                              "size": "150x150", "format": "Png"}, timeout=6)
             if r.status_code == 200:
                 for d in r.json().get("data", []):
                     if d.get("imageUrl") and _RBXCDN_RE.match(d["imageUrl"]):
@@ -1880,7 +1881,7 @@ def _browse_thumbs(s, asset_ids, bundle_ids):
         if bundle_ids:
             r = s.get("https://thumbnails.roblox.com/v1/bundles/thumbnails",
                       params={"bundleIds": ",".join(map(str, bundle_ids)),
-                              "size": "150x150", "format": "Png"}, timeout=10)
+                              "size": "150x150", "format": "Png"}, timeout=6)
             if r.status_code == 200:
                 for d in r.json().get("data", []):
                     if d.get("imageUrl") and _RBXCDN_RE.match(d["imageUrl"]):
@@ -1894,7 +1895,7 @@ def _browse_page(s, params, allow_fallback=True):
     (status then holds Roblox's HTTP code). Falls back to an IDs-only search
     plus one details POST if the details-search endpoint itself fails (skipped
     for speculative probes, where a 400 just means 'wrong parameter')."""
-    r = s.get("https://catalog.roblox.com/v1/search/items/details", params=params, timeout=10)
+    r = s.get("https://catalog.roblox.com/v1/search/items/details", params=params, timeout=6)
     if r.status_code == 200:
         b = r.json()
         return (b.get("data") or []), b.get("nextPageCursor"), 200
@@ -1903,7 +1904,7 @@ def _browse_page(s, params, allow_fallback=True):
     print(f"[browse] details search HTTP {r.status_code} params={params} body={(r.text or '')[:200]!r}")
     if not allow_fallback:
         return None, None, r.status_code
-    r2 = s.get("https://catalog.roblox.com/v1/search/items", params=params, timeout=10)
+    r2 = s.get("https://catalog.roblox.com/v1/search/items", params=params, timeout=6)
     if r2.status_code != 200:
         print(f"[browse] ids search HTTP {r2.status_code} body={(r2.text or '')[:200]!r}")
         return None, None, (429 if r2.status_code == 429 else r.status_code)
@@ -2080,6 +2081,60 @@ def catalog_browse():
         result = {"items": out_items, "nextCursor": f"{mode}:{nxt}" if nxt else None}
         if debug:
             return jsonify({**result, "debug": {"usedMode": mode, "attempts": trace}})
+        cache_set(cache_key, result)
+        return jsonify(result)
+    except Exception as e:
+        return safe_error(e)
+
+@app.get("/api/catalog/items-meta")
+def catalog_items_meta():
+    """Roblox's own name + thumbnail for a list of items, by ID.
+    Used when showing a saved Custom Catalog: the names stored inside a public
+    catalog were typed by whoever made it, so they are never trusted for display.
+    GET ?assets=1,2,3&bundles=4,5  (max 50 in total)."""
+    rl = check_rate_limit("items_meta", limit=30, window_s=60)
+    if rl: return rl
+
+    def parse(name):
+        out = []
+        for part in (request.args.get(name, "") or "").split(","):
+            part = part.strip()
+            if not part: continue
+            if not re.fullmatch(r"\d{1,16}", part): return None
+            out.append(int(part))
+        return list(dict.fromkeys(out))          # de-duplicate, keep order
+
+    assets, bundles = parse("assets"), parse("bundles")
+    if assets is None or bundles is None:
+        return jsonify({"error": "ID tidak valid"}), 400
+    if not assets and not bundles:
+        return jsonify({"items": []})
+    if len(assets) + len(bundles) > 50:
+        return jsonify({"error": "Maksimal 50 item per permintaan"}), 400
+
+    cache_key = "itemsmeta_" + ",".join(map(str, assets)) + "_" + ",".join(map(str, bundles))
+    cached = cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    try:
+        s = get_scraper()
+        order = [("Asset", i) for i in assets] + [("Bundle", i) for i in bundles]
+        d = rpost("https://catalog.roblox.com/v1/catalog/items/details",
+                  {"items": [{"itemType": t, "id": i} for t, i in order]})
+        found = {(x.get("itemType", "Asset"), x.get("id")): x for x in (d.get("data") or [])}
+        thumbs = _browse_thumbs(s, assets, bundles)
+        items = []
+        for t, i in order:
+            x = found.get((t, i)) or {}
+            items.append({
+                "id": i, "itemType": t,
+                # False = Roblox returned nothing for this ID (removed, or not a catalog item).
+                "available": bool(x),
+                "name": x.get("name") or "",
+                "creatorName": x.get("creatorName") or "",
+                "thumbnailUrl": thumbs.get((t, i)),
+            })
+        result = {"items": items}
         cache_set(cache_key, result)
         return jsonify(result)
     except Exception as e:
@@ -4672,6 +4727,265 @@ def maintenance_toggle():
     new_state = not get_maintenance_state()
     set_maintenance_state(new_state)
     return jsonify({"active": new_state})
+
+# ── CUSTOM CATALOG (saved, shareable catalogs) ──────────────────────
+# A user builds a list of Roblox items, saves it, and gets a share code. Anyone
+# with the code of a PUBLIC catalog can load and download it; a PRIVATE one only
+# loads for its creator. The creator is identified by their Roblox user ID,
+# verified server-side through Roblox OAuth (the Bearer token the site sends) --
+# the client can never just claim to be someone.
+#
+# Storage is the Supabase table `custom_catalogs` (see custom_catalogs.sql). Row
+# Level Security is on with no policies, so only this backend can touch it, and it
+# must use the service_role key: set SUPABASE_SERVICE_KEY (falls back to
+# SUPABASE_KEY, which only works if that key bypasses RLS).
+#
+# Only IDs, item types and names are stored -- never tokens, never 3D files.
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+_CC_ALPHABET     = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"   # no I, L, O, 0, 1: easy to read out and type
+_CC_CODE_RE      = re.compile(r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
+_CC_MAX_CATALOGS = 20      # per Roblox account
+_CC_MAX_ITEMS    = 50      # per catalog
+_CC_MAX_NAME     = 40
+_CC_TOKEN_TTL    = 60      # seconds a verified token is remembered (keyed by hash)
+_cc_token_cache  = {}
+
+def _cc_db_ready():
+    return bool(SUPABASE_URL and (SUPABASE_SERVICE_KEY or SUPABASE_KEY))
+
+def _cc_headers(prefer=None):
+    key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    h = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if prefer: h["Prefer"] = prefer
+    return h
+
+def _cc_url():
+    return f"{SUPABASE_URL}/rest/v1/custom_catalogs"
+
+def _cc_json(obj, status=200):
+    # Private catalogs and per-user lists: never let a cache keep them.
+    resp = jsonify(obj); resp.status_code = status
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+def _cc_err(message, status, code=None):
+    body = {"error": message}
+    if code: body["code"] = code
+    return _cc_json(body, status)
+
+def _cc_norm_code(raw):
+    c = re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
+    if len(c) != 8: return None
+    c = c[:4] + "-" + c[4:]
+    return c if _CC_CODE_RE.match(c) else None
+
+def _cc_new_code():
+    a = "".join(secrets.choice(_CC_ALPHABET) for _ in range(8))
+    return a[:4] + "-" + a[4:]
+
+def _cc_clean_name(raw):
+    if not isinstance(raw, str): return None, "Nama katalog wajib diisi."
+    name = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", raw)).strip()
+    if not name: return None, "Nama katalog wajib diisi."
+    if len(name) > _CC_MAX_NAME: return None, f"Nama katalog maksimal {_CC_MAX_NAME} karakter."
+    return name, None
+
+def _cc_clean_items(raw):
+    if not isinstance(raw, list): return None, "items harus berupa daftar."
+    out, seen = [], set()
+    for it in raw:
+        if not isinstance(it, dict): return None, "Ada item yang tidak valid."
+        rid = it.get("id")
+        if isinstance(rid, bool) or not (isinstance(rid, int) or (isinstance(rid, str) and rid.isdigit())):
+            return None, "Ada ID item yang tidak valid."
+        iid = int(rid)
+        if not (0 < iid < 2**53): return None, "Ada ID item yang tidak valid."
+        itype = it.get("itemType", "Asset")
+        if itype not in ("Asset", "Bundle"): return None, "itemType harus Asset atau Bundle."
+        if (itype, iid) in seen: continue
+        seen.add((itype, iid))
+        nm = it.get("name", "")
+        nm = re.sub(r"[\x00-\x1f\x7f]", "", nm if isinstance(nm, str) else "").strip()[:100]
+        out.append({"id": iid, "itemType": itype, "name": nm})
+    if not out: return None, "Katalog harus punya minimal 1 item."
+    if len(out) > _CC_MAX_ITEMS: return None, f"Maksimal {_CC_MAX_ITEMS} item per katalog."
+    return out, None
+
+def _cc_auth():
+    """Verify the Roblox Bearer token with Roblox itself. -> (user, error_response)
+    where user = {"id": "<roblox user id>", "name": "<username>"}."""
+    import hashlib
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None, _cc_err("Login Roblox diperlukan untuk ini.", 401, "login_required")
+    token = header[7:].strip()
+    if not token or len(token) > 4096:
+        return None, _cc_err("Sesi login tidak valid. Login lagi.", 401, "session_expired")
+    key = hashlib.sha256(token.encode()).hexdigest()      # never keep the token itself
+    now = time.time()
+    hit = _cc_token_cache.get(key)
+    if hit and hit[2] > now:
+        return {"id": hit[0], "name": hit[1]}, None
+    try:
+        r = requests.get(OAUTH_USERINFO_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    except Exception as e:
+        print(f"[custom-catalog] userinfo failed: {type(e).__name__}: {e}")
+        return None, _cc_err("Tidak bisa memverifikasi login ke Roblox. Coba lagi.", 503, "auth_unavailable")
+    if r.status_code in (401, 403):
+        return None, _cc_err("Sesi login kamu sudah berakhir. Login lagi.", 401, "session_expired")
+    if r.status_code != 200:
+        return None, _cc_err("Tidak bisa memverifikasi login ke Roblox. Coba lagi.", 503, "auth_unavailable")
+    info = r.json()
+    uid = str(info.get("sub", ""))
+    if not re.fullmatch(r"\d{1,20}", uid):
+        return None, _cc_err("Sesi login kamu sudah berakhir. Login lagi.", 401, "session_expired")
+    name = str(info.get("preferred_username") or info.get("name") or "")[:40]
+    if len(_cc_token_cache) > 500:
+        _cc_token_cache.clear()
+    _cc_token_cache[key] = (uid, name, now + _CC_TOKEN_TTL)
+    return {"id": uid, "name": name}, None
+
+def _cc_public(row, viewer_id):
+    """What other people may see. owner_id is deliberately never included."""
+    return {
+        "code": row["code"], "name": row["name"], "visibility": row["visibility"],
+        "ownerName": row.get("owner_name", ""), "items": row["items"],
+        "createdAt": row.get("created_at"), "updatedAt": row.get("updated_at"),
+        "isOwner": viewer_id is not None and row.get("owner_id") == viewer_id,
+    }
+
+def _cc_unavailable():
+    return _cc_err("Custom Catalog belum aktif di server ini (database belum dikonfigurasi).", 503, "not_configured")
+
+_CC_NOT_FOUND = "Kode tidak ditemukan. Kalau ini katalog privat milikmu, login dulu."
+
+@app.post("/api/custom-catalog")
+def cc_create():
+    rl = check_rate_limit("cc_write", limit=20, window_s=60)
+    if rl: return rl
+    if not _cc_db_ready(): return _cc_unavailable()
+    user, err = _cc_auth()
+    if err: return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict): return _cc_err("Body harus berupa JSON.", 400)
+    name, e = _cc_clean_name(body.get("name"))
+    if e: return _cc_err(e, 400)
+    vis = body.get("visibility", "private")
+    if vis not in ("public", "private"): return _cc_err("visibility harus public atau private.", 400)
+    items, e = _cc_clean_items(body.get("items"))
+    if e: return _cc_err(e, 400)
+    try:
+        r = requests.get(_cc_url(), headers=_cc_headers(),
+                         params={"owner_id": f"eq.{user['id']}", "select": "code"}, timeout=10)
+        if r.status_code != 200: raise RuntimeError(f"supabase list HTTP {r.status_code}: {r.text[:200]}")
+        if len(r.json()) >= _CC_MAX_CATALOGS:
+            return _cc_err(f"Batas {_CC_MAX_CATALOGS} katalog per akun tercapai. Hapus salah satu dulu.", 409, "limit_reached")
+        for _ in range(6):                      # retry if a random code collides
+            row = {"code": _cc_new_code(), "owner_id": user["id"], "owner_name": user["name"],
+                   "name": name, "visibility": vis, "items": items}
+            r = requests.post(_cc_url(), headers=_cc_headers("return=representation"), json=row, timeout=10)
+            if r.status_code in (200, 201):
+                return _cc_json(_cc_public(r.json()[0], user["id"]), 201)
+            if r.status_code == 409: continue
+            raise RuntimeError(f"supabase insert HTTP {r.status_code}: {r.text[:200]}")
+        return _cc_err("Gagal membuat kode unik. Coba lagi.", 503)
+    except Exception as e:
+        return safe_error(e)
+
+@app.get("/api/custom-catalogs")
+def cc_list_mine():
+    rl = check_rate_limit("cc_read", limit=60, window_s=60)
+    if rl: return rl
+    if not _cc_db_ready(): return _cc_unavailable()
+    user, err = _cc_auth()
+    if err: return err
+    try:
+        r = requests.get(_cc_url(), headers=_cc_headers(),
+                         params={"owner_id": f"eq.{user['id']}", "select": "*", "order": "updated_at.desc"}, timeout=10)
+        if r.status_code != 200: raise RuntimeError(f"supabase list HTTP {r.status_code}: {r.text[:200]}")
+        return _cc_json({"catalogs": [_cc_public(row, user["id"]) for row in r.json()],
+                         "limit": _CC_MAX_CATALOGS})
+    except Exception as e:
+        return safe_error(e)
+
+@app.get("/api/custom-catalog/<code>")
+def cc_get(code):
+    rl = check_rate_limit("cc_read", limit=60, window_s=60)
+    if rl: return rl
+    if not _cc_db_ready(): return _cc_unavailable()
+    code = _cc_norm_code(code)
+    if not code: return _cc_err("Format kode tidak valid (contoh: K7M2-Q9XA).", 400, "bad_code")
+    viewer = None
+    if request.headers.get("Authorization"):
+        user, _err = _cc_auth()                 # optional: only used to recognise the owner
+        viewer = user["id"] if user else None
+    try:
+        r = requests.get(_cc_url(), headers=_cc_headers(),
+                         params={"code": f"eq.{code}", "select": "*", "limit": "1"}, timeout=10)
+        if r.status_code != 200: raise RuntimeError(f"supabase get HTTP {r.status_code}: {r.text[:200]}")
+        rows = r.json()
+        # A private catalog looks exactly like a missing one to everyone but its owner.
+        if not rows or (rows[0]["visibility"] != "public" and rows[0]["owner_id"] != viewer):
+            return _cc_err(_CC_NOT_FOUND, 404, "not_found")
+        return _cc_json(_cc_public(rows[0], viewer))
+    except Exception as e:
+        return safe_error(e)
+
+@app.put("/api/custom-catalog/<code>")
+def cc_update(code):
+    rl = check_rate_limit("cc_write", limit=20, window_s=60)
+    if rl: return rl
+    if not _cc_db_ready(): return _cc_unavailable()
+    code = _cc_norm_code(code)
+    if not code: return _cc_err("Format kode tidak valid (contoh: K7M2-Q9XA).", 400, "bad_code")
+    user, err = _cc_auth()
+    if err: return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict): return _cc_err("Body harus berupa JSON.", 400)
+    patch = {}
+    if "name" in body:
+        name, e = _cc_clean_name(body["name"])
+        if e: return _cc_err(e, 400)
+        patch["name"] = name
+    if "visibility" in body:
+        if body["visibility"] not in ("public", "private"): return _cc_err("visibility harus public atau private.", 400)
+        patch["visibility"] = body["visibility"]
+    if "items" in body:
+        items, e = _cc_clean_items(body["items"])
+        if e: return _cc_err(e, 400)
+        patch["items"] = items
+    if not patch: return _cc_err("Tidak ada yang diubah.", 400)
+    from datetime import datetime, timezone
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        # Filter on BOTH code and owner: someone else's catalog simply doesn't match.
+        r = requests.patch(_cc_url(), headers=_cc_headers("return=representation"),
+                           params={"code": f"eq.{code}", "owner_id": f"eq.{user['id']}"}, json=patch, timeout=10)
+        if r.status_code != 200: raise RuntimeError(f"supabase update HTTP {r.status_code}: {r.text[:200]}")
+        rows = r.json()
+        if not rows: return _cc_err(_CC_NOT_FOUND, 404, "not_found")
+        return _cc_json(_cc_public(rows[0], user["id"]))
+    except Exception as e:
+        return safe_error(e)
+
+@app.delete("/api/custom-catalog/<code>")
+def cc_delete(code):
+    rl = check_rate_limit("cc_write", limit=20, window_s=60)
+    if rl: return rl
+    if not _cc_db_ready(): return _cc_unavailable()
+    code = _cc_norm_code(code)
+    if not code: return _cc_err("Format kode tidak valid (contoh: K7M2-Q9XA).", 400, "bad_code")
+    user, err = _cc_auth()
+    if err: return err
+    try:
+        r = requests.delete(_cc_url(), headers=_cc_headers("return=representation"),
+                            params={"code": f"eq.{code}", "owner_id": f"eq.{user['id']}"}, timeout=10)
+        if r.status_code not in (200, 204): raise RuntimeError(f"supabase delete HTTP {r.status_code}: {r.text[:200]}")
+        if r.status_code == 200 and not r.json(): return _cc_err(_CC_NOT_FOUND, 404, "not_found")
+        return _cc_json({"deleted": True, "code": code})
+    except Exception as e:
+        return safe_error(e)
 
 def _repair_zip_signature(data: bytes) -> bytes:
     """
