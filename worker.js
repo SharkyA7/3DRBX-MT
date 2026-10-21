@@ -23,7 +23,10 @@ const CACHEABLE_PATHS = new Set([
 // answer repeats without waking the backend (or Roblox). Unlike the immutable
 // asset bytes above, the catalog changes -- new items, new sort order -- so this
 // is cached for minutes, not days. path -> TTL in seconds.
-const SHORT_TTL_PATHS = new Map([["/api/catalog/browse", 300]]);
+const SHORT_TTL_PATHS = new Map([
+  ["/api/catalog/browse", 300],      // marketplace search pages
+  ["/api/catalog/items-meta", 600],  // Roblox's name + thumbnail for a list of item IDs
+]);
 
 // Only these query params reach the backend/cache key for browse. Anything else
 // is dropped, so junk params can't be used to dodge the cache and hammer the
@@ -41,9 +44,38 @@ const BACKEND_ORIGIN = "https://getrbx3d.qzz.io";
 // a manual purge.
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
+// items-meta: the same set of IDs always gets the same cache entry, whatever
+// order they were asked in. The page matches results by "type:id", not by
+// position, so sorting here is safe.
+function canonicalItemsMetaUrl(url) {
+  const out = new URL(url.origin + url.pathname);
+  for (const key of ["assets", "bundles"]) {
+    const ids = (url.searchParams.get(key) || "")
+      .split(",").map((x) => x.trim()).filter(Boolean);
+    // Anything that isn't plain digits is left as-is: the backend rejects it
+    // with a 400, which is never cached.
+    const sorted = ids.every((x) => /^\d{1,16}$/.test(x))
+      ? [...new Set(ids.map(Number))].sort((a, b) => a - b).join(",")
+      : ids.join(",");
+    if (sorted !== "") out.searchParams.set(key, sorted);
+  }
+  return out;
+}
+
+// Whether a successful backend answer is worth keeping at the edge.
+// browse: only pages that actually have items (an empty page can be a Roblox
+//   hiccup). items-meta: only if Roblox knew at least one of the items (an
+//   all-"not found" answer could equally be a hiccup).
+function worthCaching(pathname, body) {
+  if (!body || !Array.isArray(body.items)) return false;
+  if (pathname === "/api/catalog/items-meta") return body.items.some((i) => i && i.available);
+  return body.items.length > 0;
+}
+
 // One canonical URL per distinct browse query: only known params, trimmed and
 // lower-cased `q`, stable order. "Shirt" and "shirt " share one cache entry.
 function canonicalBrowseUrl(url) {
+  if (url.pathname === "/api/catalog/items-meta") return canonicalItemsMetaUrl(url);
   const out = new URL(url.origin + url.pathname);
   for (const key of BROWSE_PARAMS) {
     let v = url.searchParams.get(key);
@@ -140,8 +172,7 @@ export default {
       const text = await backendResponse.text();
       let hasItems = false;
       try {
-        const body = JSON.parse(text);
-        hasItems = Array.isArray(body.items) && body.items.length > 0;
+        hasItems = worthCaching(url.pathname, JSON.parse(text));
       } catch (_) { /* not JSON -> don't cache */ }
 
       const response = new Response(text, backendResponse);
