@@ -3063,7 +3063,7 @@ async function ccEnrich(items){
   const assets  = items.filter(i=>i.itemType === 'Asset').map(i=>i.id);
   const bundles = items.filter(i=>i.itemType === 'Bundle').map(i=>i.id);
   const qs = new URLSearchParams({ assets: assets.join(','), bundles: bundles.join(',') });
-  const res = await fetch(`${BASE}/api/catalog/items-meta?${qs}`);
+  const res = await edgeGet(`/api/catalog/items-meta?${qs}`);
   if(!res.ok) throw new Error('meta');
   const data = await res.json();
   const map = new Map((data.items || []).map(x=>[x.itemType + ':' + x.id, x]));
@@ -3428,6 +3428,16 @@ function bwRenderItems(items){
 // its shared cache. If the edge is unreachable, or hasn't been redeployed with
 // the browse route yet (it answers 404; the backend never does), go straight
 // to the backend instead of failing.
+// GET through the Cloudflare edge (shared cache). If the edge is unreachable or
+// hasn't been redeployed with this route yet (it answers 404; the backend never
+// does for these paths), go straight to the backend instead of failing.
+async function edgeGet(pathAndQuery){
+  try{
+    const r = await fetch(`${EDGE_BASE}${pathAndQuery}`);
+    if(r.status !== 404) return r;
+  }catch(_){ /* network/CORS failure -> fall through */ }
+  return fetch(`${BASE}${pathAndQuery}`);
+}
 async function bwFetch(qs){
   try{
     const r = await fetch(`${EDGE_BASE}/api/catalog/browse?${qs}`);
