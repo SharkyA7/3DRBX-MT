@@ -7,6 +7,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 def safe_filename(name):
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
 
+def content_disposition(filename):
+    """A Content-Disposition value that survives any filename.
+    HTTP header values must be latin-1. Item names are not: a name such as
+    "୨୧ : black tank top" slips through str.isalnum() (Unicode digits and
+    letters count as alphanumeric), and putting it in the header made the server
+    crash *after* the app had already answered 200 (Vercel: FUNCTION_INVOCATION_FAILED).
+    Send an ASCII fallback in filename="" and the real name, percent-encoded, in
+    filename*= (RFC 5987), which every current browser understands."""
+    from urllib.parse import quote
+    name = str(filename).replace("\r", " ").replace("\n", " ").strip() or "download"
+    ascii_name = re.sub(r'[^A-Za-z0-9._ \-]', '_', name).strip() or "download"
+    value = 'attachment; filename="%s"' % ascii_name
+    if ascii_name != name:
+        value += f"; filename*=UTF-8''{quote(name, safe='')}"
+    return value
+
 def safe_error(e, status=500):
     """Log the real exception server-side, return a generic message to the client
     so internal details (paths, library internals, stack traces) never leak out."""
@@ -1554,7 +1570,7 @@ def avatar_download_full():
                 zf.writestr("README.txt",f"Avatar: {name} (Procedural)\nOBJ: geometry dengan warna dasar\nTextures: preview thumbnail di textures/\nDi Prisma 3D: Import OBJ -> Material -> load texture\nDi Nomad Sculpt: Import -> OBJ")
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{name}_full.zip"'})
+            headers={"Content-Disposition":content_disposition(f"{name}_full.zip")})
     except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/procedural-download")
@@ -1590,7 +1606,7 @@ def avatar_procedural_download():
             except: pass
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{name}_procedural_{rig}.zip"'})
+            headers={"Content-Disposition":content_disposition(f"{name}_procedural_{rig}.zip")})
     except Exception as e: return safe_error(e)
 
 _ANIMATION_ASSET_TYPE_IDS = {24, 61}  # 24=Animation (classic), 61=EmoteAnimation
@@ -2225,7 +2241,7 @@ def catalog_image():
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
         if variant: safe_name = f"{safe_name}_{variant}"
         content, ctype, ext, tint = _fetch_asset_image_bytes(file_id, s, variant=variant)
-        headers = {"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'}
+        headers = {"Content-Disposition": content_disposition(f"{safe_name}.{ext}")}
         if tint:
             headers["X-Background-Tint"] = ",".join(str(v) for v in tint)
         return Response(content, mimetype=ctype or "image/png", headers=headers)
@@ -2392,7 +2408,7 @@ def catalog_cages():
             zf.writestr("README.txt", readme)
         buf.seek(0)
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}_cages.zip"'})
+            headers={"Content-Disposition": content_disposition(f"{safe_name}_cages.zip")})
     except Exception as e:
         return safe_error(e)
 
@@ -2424,7 +2440,7 @@ def api_2d_font():
             )
         buf.seek(0)
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}_font.zip"'})
+            headers={"Content-Disposition": content_disposition(f"{safe_name}_font.zip")})
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh font: {e}"}), 502
 
@@ -2450,7 +2466,7 @@ def api_2d_video():
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
         content, seg_count = fetch_video_ts(file_id, s)
         return Response(content, mimetype="video/mp2t",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}.ts"'})
+            headers={"Content-Disposition": content_disposition(f"{safe_name}.ts")})
     except Exception as e:
         return jsonify({"error": f"Gagal mengunduh video: {e}"}), 502
 
@@ -2656,7 +2672,7 @@ def catalog_download_full():
         buf.seek(0)
         fname = f"{safe}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+            headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return safe_error(e)
 
 # Set True saat maintenance
@@ -2758,7 +2774,7 @@ def avatar_smart_download():
                 f"{'NOTE: Procedural model (R6 tidak didukung Roblox 3D API)' if 'procedural' in method else 'Real mesh dari Roblox CDN'}")
         buf.seek(0)
         return Response(buf.read(),mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
+            headers={"Content-Disposition":content_disposition(f"{name}_avatar.zip")})
     except Exception as e: return safe_error(e)
 
 def get_hash_url(h):
@@ -3126,7 +3142,7 @@ def avatar_v2():
 
         buf.seek(0)
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{name}_avatar.zip"'})
+            headers={"Content-Disposition":content_disposition(f"{name}_avatar.zip")})
     except Exception as e: return handle_roblox_error(e, "avatar_download")
 
 BATCH_WORKERS = 6  # concurrent Roblox fetches per request — enough to cut wall time
@@ -3243,7 +3259,7 @@ def item_v2():
         buf.seek(0)
         fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+            headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
 
 MAX_BATCH_ITEMS = 25
@@ -3399,7 +3415,7 @@ def item_batch_v2():
         buf.seek(0)
         fname = f"catalog_packed_{len(used_folders)}items.zip"
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+            headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return handle_roblox_error(e, "catalog_item_batch_download")
 
 def _resolve_image_batch_entry(raw_id, known_name, s):
@@ -3484,7 +3500,7 @@ def image_batch_v2():
         buf.seek(0)
         fname = f"image2d_packed_{len(used_names)}items.zip"
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":f'attachment; filename="{fname}"'})
+            headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return handle_roblox_error(e, "image_batch_download")
 
 @app.get("/api/proxy/avatar-3d")
@@ -3609,7 +3625,7 @@ def audio_download():
             )
         buf.seek(0)
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{safe}_audio.zip"'})
+            headers={"Content-Disposition": content_disposition(f"{safe}_audio.zip")})
     except Exception as e: return handle_roblox_error(e, "audio_download")
 
 # Railway / production WSGI entry point
@@ -4297,7 +4313,7 @@ def model_download():
             content,
             mimetype="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{asset_id}.rbxm"',
+                "Content-Disposition": content_disposition(f"{asset_id}.rbxm"),
                 "Content-Length": str(len(content))
             }
         )
@@ -5250,7 +5266,7 @@ def prisma_convert():
         return Response(
             out_buffer.read(),
             mimetype="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{base_name}_converted.zip"'}
+            headers={"Content-Disposition": content_disposition(f"{base_name}_converted.zip")}
         )
 
     except zf_module.BadZipFile:
@@ -5927,7 +5943,7 @@ def animation_download_full():
             content,
             mimetype=mimetype,
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_name}.{ext}"',
+                "Content-Disposition": content_disposition(f"{safe_name}.{ext}"),
                 "X-Animation-Joints": str(meta["joints"]),
                 "X-Animation-Frames": str(meta["frames"]),
                 "X-Animation-Duration": str(meta["duration_s"]),
@@ -5999,7 +6015,7 @@ def animation_download_bundle():
         buf.seek(0)
         safe_bundle_name = safe_filename(bundle["name"])
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{safe_bundle_name}_{fmt}.zip"'})
+            headers={"Content-Disposition": content_disposition(f"{safe_bundle_name}_{fmt}.zip")})
     except RBXMParseError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
