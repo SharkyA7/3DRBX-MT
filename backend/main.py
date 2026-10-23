@@ -362,7 +362,65 @@ def add_cors(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    _apply_cache_policy(response)
     return response
+
+# ── CACHE POLICY (keeps Vercel "Fast Origin Transfer" down) ──────────
+# Every response a function sends to Vercel's edge counts as Fast Origin Transfer.
+# If a response says Cache-Control: s-maxage=N, Vercel's CDN keeps it and answers
+# repeats itself WITHOUT running the function, so a popular item's ZIP is
+# generated once per N seconds instead of once per download.
+# Only public, URL-determined GET responses are listed. Anything personal or
+# private (/auth/*, /api/custom-catalog*, maintenance, debug) is deliberately
+# absent and already sends no-store.
+_CACHE_TTL = {
+    # item downloads: same item + same query string = same bytes
+    "/api/catalog/download-full": 7200,
+    "/api/v2/item": 7200,
+    "/api/v2/item-batch": 7200,          # GET form only; POSTs are never cached
+    "/api/animation/download-bundle": 7200,
+    "/api/animation/download-full": 7200,
+    "/api/v2/model/download": 7200,
+    "/api/audio/download": 7200,
+    # raw asset bytes by ID: effectively immutable
+    "/api/v2/model/mesh": 86400,
+    "/api/v2/model/mesh-union": 86400,
+    "/api/v2/model/texture": 86400,
+    "/api/catalog/image": 86400,
+    "/api/2d/font": 86400,
+    "/api/2d/video": 7200,
+    # lookups
+    "/api/catalog/cages": 7200,
+    "/api/catalog/texture-variants": 7200,
+    "/api/catalog/info": 600,
+    "/api/v2/model/info": 600,
+    "/api/animation/info": 600,
+    "/api/audio/info": 600,
+    "/api/catalog/browse": 300,
+    "/api/catalog/items-meta": 600,
+    # avatars change when their owner changes outfit: keep these short
+    "/api/avatar/info": 120,
+    "/api/avatar/wearing": 120,
+    "/api/avatar/3d-urls": 120,
+    "/api/avatar/download-full": 300,
+    "/api/avatar/smart-download": 300,
+    "/api/avatar/procedural-download": 300,
+    "/api/v2/avatar": 300,
+}
+
+def _apply_cache_policy(response):
+    """Add Cache-Control: public, s-maxage=N to successful public GET responses.
+    Never overrides a header a route already set, never caches errors, requests
+    carrying an Authorization header, or ?debug=1 diagnostics."""
+    if request.method != "GET" or response.status_code != 200:
+        return
+    if "Cache-Control" in response.headers:
+        return
+    if request.headers.get("Authorization") or request.args.get("debug") == "1":
+        return
+    ttl = _CACHE_TTL.get(request.path)
+    if ttl:
+        response.headers["Cache-Control"] = f"public, s-maxage={ttl}"
 
 COOKIE  = os.getenv("ROBLOX_COOKIE","")
 
