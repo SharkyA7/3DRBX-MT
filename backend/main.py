@@ -3207,9 +3207,331 @@ BATCH_WORKERS = 6  # concurrent Roblox fetches per request — enough to cut wal
                     # meaningfully within Vercel's function timeout, low enough not to
                     # look like abuse to Roblox's Cloudflare protection
 
+# ── FBX EXPORT (Catalog only) ─────────────────────────────────────────────
+# Pure-Python binary FBX 7.4 writer (struct + zlib only, no new dependencies, so
+# it runs on Vercel serverless where Blender/bpy cannot). It converts the OBJ+MTL
+# that the Catalog item download already produces into a static-mesh .fbx:
+# geometry, normals, UVs, one material and (if the MTL has one) a diffuse texture.
+# Deliberately NOT wired into item-batch (Packed), avatar or any other feature.
+# No skeleton/skinning/animation -- static meshes only.
+import array as _fbx_array
+import sys as _fbx_sys
+import zlib as _fbx_zlib
+
+_FBX_VERSION = 7400
+_FBX_NULL_RECORD = b"\x00" * 13   # sentinel that closes a node's children (7.4: 13 bytes)
+
+
+class _FbxNode:
+    __slots__ = ("name", "props", "children")
+
+    def __init__(self, name, props=None):
+        self.name = name
+        self.props = props or []     # [(type_char, value), ...]
+        self.children = []
+
+    def add(self, name, *props):
+        n = _FbxNode(name, list(props))
+        self.children.append(n)
+        return n
+
+
+def _fbx_prop(p):
+    t, v = p
+    if t == "C":
+        return b"C" + struct.pack("<B", 1 if v else 0)
+    if t == "I":
+        return b"I" + struct.pack("<i", int(v))
+    if t == "L":
+        return b"L" + struct.pack("<q", int(v))
+    if t == "D":
+        return b"D" + struct.pack("<d", float(v))
+    if t == "S":
+        data = v if isinstance(v, bytes) else str(v).encode("utf-8")
+        return b"S" + struct.pack("<I", len(data)) + data
+    if t == "R":
+        return b"R" + struct.pack("<I", len(v)) + bytes(v)
+    if t in ("d", "i"):
+        arr = _fbx_array.array(t, v)
+        if _fbx_sys.byteorder == "big":
+            arr.byteswap()
+        raw = arr.tobytes()
+        comp = _fbx_zlib.compress(raw, 6)
+        if len(comp) < len(raw):
+            enc, data = 1, comp
+        else:
+            enc, data = 0, raw
+        return t.encode() + struct.pack("<III", len(v), enc, len(data)) + data
+    raise ValueError(f"unknown FBX property type {t!r}")
+
+
+def _fbx_write_node(out, node):
+    start = len(out)
+    blob = b"".join(_fbx_prop(p) for p in node.props)
+    name = node.name.encode("ascii")
+    out += b"\x00\x00\x00\x00"                                  # end offset (patched below)
+    out += struct.pack("<II", len(node.props), len(blob))
+    out += struct.pack("<B", len(name)) + name + blob
+    for c in node.children:
+        _fbx_write_node(out, c)
+    if node.children:
+        out += _FBX_NULL_RECORD
+    struct.pack_into("<I", out, start, len(out))                # absolute offset of node end
+
+
+def _fbx_p70(parent, name, ptype, label, flags, *vals):
+    """One Properties70 entry. vals are (type_char, value) tuples."""
+    parent.add("P", ("S", name), ("S", ptype), ("S", label), ("S", flags), *vals)
+
+
+def _fbx_name(name, cls):
+    return ("S", name.replace("\x00", "").encode("utf-8") + b"\x00\x01" + cls.encode("ascii"))
+
+
+def _obj_parse(obj_text):
+    """Minimal OBJ reader -> (verts, uvs, normals, polys); poly = [(vi, ti, ni), ...] 0-based, -1 = absent."""
+    verts, uvs, norms, polys = [], [], [], []
+    for line in obj_text.splitlines():
+        if not line or line[0] == "#":
+            continue
+        p = line.split()
+        if not p:
+            continue
+        k = p[0]
+        if k == "v" and len(p) >= 4:
+            verts.append((float(p[1]), float(p[2]), float(p[3])))
+        elif k == "vt" and len(p) >= 2:
+            uvs.append((float(p[1]), float(p[2]) if len(p) > 2 else 0.0))
+        elif k == "vn" and len(p) >= 4:
+            norms.append((float(p[1]), float(p[2]), float(p[3])))
+        elif k == "f" and len(p) >= 4:
+            poly = []
+            for tok in p[1:]:
+                f = tok.split("/")
+                vi = int(f[0])
+                ti = int(f[1]) if len(f) > 1 and f[1] else 0
+                ni = int(f[2]) if len(f) > 2 and f[2] else 0
+                vi = vi + len(verts) if vi < 0 else vi - 1
+                ti = (ti + len(uvs) if ti < 0 else ti - 1) if ti else -1
+                ni = (ni + len(norms) if ni < 0 else ni - 1) if ni else -1
+                poly.append((vi, ti, ni))
+            polys.append(poly)
+    return verts, uvs, norms, polys
+
+
+def _mtl_basics(mtl_text):
+    """(diffuse_rgb, texture_basename_or_None) from an MTL string."""
+    kd, tex = (0.8, 0.8, 0.8), None
+    for line in (mtl_text or "").splitlines():
+        p = line.strip().split()
+        if len(p) >= 4 and p[0] == "Kd":
+            try:
+                kd = (float(p[1]), float(p[2]), float(p[3]))
+            except ValueError:
+                pass
+        elif len(p) >= 2 and p[0] == "map_Kd" and tex is None:
+            tex = p[-1].replace("\\", "/").split("/")[-1]
+    return kd, tex
+
+
+def obj_to_fbx_bytes(obj_text, mtl_text="", name="mesh"):
+    """OBJ (+MTL) text -> binary FBX 7.4 bytes. Raises ValueError on an unusable mesh."""
+    verts, uvs, norms, polys = _obj_parse(obj_text)
+    if not verts or not polys:
+        raise ValueError("mesh kosong (tidak ada vertex/face)")
+    nv, nt, nn = len(verts), len(uvs), len(norms)
+    for poly in polys:
+        for vi, ti, ni in poly:
+            if not (0 <= vi < nv) or ti >= nt or ni >= nn:
+                raise ValueError("index OBJ di luar jangkauan")
+    has_uv = nt > 0 and all(ti >= 0 for poly in polys for _, ti, _ in poly)
+    has_nrm = nn > 0 and all(ni >= 0 for poly in polys for _, _, ni in poly)
+
+    vflat = [c for v in verts for c in v]
+    pvi, uvidx, nflat = [], [], []
+    for poly in polys:
+        last = len(poly) - 1
+        for i, (vi, ti, ni) in enumerate(poly):
+            pvi.append(-vi - 1 if i == last else vi)   # last index of a polygon is stored as ~index
+            if has_uv:
+                uvidx.append(ti)
+            if has_nrm:
+                nflat.extend(norms[ni])
+    uvflat = [c for t in uvs for c in t] if has_uv else []
+
+    base = re.sub(r"[^A-Za-z0-9_\-]", "_", str(name))[:60] or "mesh"
+    kd, tex = _mtl_basics(mtl_text)
+    ID_MODEL, ID_GEO, ID_MAT, ID_TEX = 2000001, 2000002, 2000003, 2000004
+
+    out = bytearray(b"Kaydara FBX Binary  \x00\x1a\x00" + struct.pack("<I", _FBX_VERSION))
+    top = []
+
+    # header
+    hdr = _FbxNode("FBXHeaderExtension")
+    hdr.add("FBXHeaderVersion", ("I", 1003))
+    hdr.add("FBXVersion", ("I", _FBX_VERSION))
+    ts = hdr.add("CreationTimeStamp")
+    now = time.gmtime()
+    ts.add("Version", ("I", 1000))
+    for key, val in (("Year", now.tm_year), ("Month", now.tm_mon), ("Day", now.tm_mday),
+                     ("Hour", now.tm_hour), ("Minute", now.tm_min), ("Second", now.tm_sec),
+                     ("Millisecond", 0)):
+        ts.add(key, ("I", val))
+    hdr.add("Creator", ("S", "3DRBXMT"))
+    top.append(hdr)
+    top.append(_FbxNode("FileId", [("R", b"\x28\xb3\x2a\xeb\xb6\x24\xcc\xc2\xbf\xc8\xb0\x2a\xa9\x2b\xfc\xf1")]))
+    top.append(_FbxNode("CreationTime", [("S", "1970-01-01 10:00:00:000")]))
+    top.append(_FbxNode("Creator", [("S", "3DRBXMT")]))
+
+    # global settings: Y-up, right-handed, 1 unit = 1 (Roblox studs are kept as-is)
+    gs = _FbxNode("GlobalSettings")
+    gs.add("Version", ("I", 1000))
+    gp = gs.add("Properties70")
+    for pn, pv in (("UpAxis", 1), ("UpAxisSign", 1), ("FrontAxis", 2), ("FrontAxisSign", 1),
+                   ("CoordAxis", 0), ("CoordAxisSign", 1), ("OriginalUpAxis", -1), ("OriginalUpAxisSign", 1)):
+        _fbx_p70(gp, pn, "int", "Integer", "", ("I", pv))
+    _fbx_p70(gp, "UnitScaleFactor", "double", "Number", "", ("D", 1.0))
+    _fbx_p70(gp, "OriginalUnitScaleFactor", "double", "Number", "", ("D", 1.0))
+    top.append(gs)
+
+    docs = _FbxNode("Documents")
+    docs.add("Count", ("I", 1))
+    doc = docs.add("Document", ("L", 1000000), ("S", ""), ("S", "Scene"))
+    doc.add("RootNode", ("L", 0))
+    top.append(docs)
+
+    defs = _FbxNode("Definitions")
+    defs.add("Version", ("I", 100))
+    kinds = [("GlobalSettings", 1), ("Model", 1), ("Geometry", 1), ("Material", 1)]
+    if tex:
+        kinds.append(("Texture", 1))
+    defs.add("Count", ("I", sum(c for _, c in kinds)))
+    for kname, kcount in kinds:
+        defs.add("ObjectType", ("S", kname)).add("Count", ("I", kcount))
+    top.append(defs)
+
+    objs = _FbxNode("Objects")
+    geo = objs.add("Geometry", ("L", ID_GEO), _fbx_name(base, "Geometry"), ("S", "Mesh"))
+    geo.add("GeometryVersion", ("I", 124))
+    geo.add("Vertices", ("d", vflat))
+    geo.add("PolygonVertexIndex", ("i", pvi))
+    layer = _FbxNode("Layer", [("I", 0)])
+    layer.add("Version", ("I", 100))
+    if has_nrm:
+        le = geo.add("LayerElementNormal", ("I", 0))
+        le.add("Version", ("I", 101))
+        le.add("Name", ("S", ""))
+        le.add("MappingInformationType", ("S", "ByPolygonVertex"))
+        le.add("ReferenceInformationType", ("S", "Direct"))
+        le.add("Normals", ("d", nflat))
+        e = layer.add("LayerElement")
+        e.add("Type", ("S", "LayerElementNormal"))
+        e.add("TypedIndex", ("I", 0))
+    if has_uv:
+        le = geo.add("LayerElementUV", ("I", 0))
+        le.add("Version", ("I", 101))
+        le.add("Name", ("S", "UVMap"))
+        le.add("MappingInformationType", ("S", "ByPolygonVertex"))
+        le.add("ReferenceInformationType", ("S", "IndexToDirect"))
+        le.add("UV", ("d", uvflat))
+        le.add("UVIndex", ("i", uvidx))
+        e = layer.add("LayerElement")
+        e.add("Type", ("S", "LayerElementUV"))
+        e.add("TypedIndex", ("I", 0))
+    le = geo.add("LayerElementMaterial", ("I", 0))
+    le.add("Version", ("I", 101))
+    le.add("Name", ("S", ""))
+    le.add("MappingInformationType", ("S", "AllSame"))
+    le.add("ReferenceInformationType", ("S", "IndexToDirect"))
+    le.add("Materials", ("i", [0]))
+    e = layer.add("LayerElement")
+    e.add("Type", ("S", "LayerElementMaterial"))
+    e.add("TypedIndex", ("I", 0))
+    geo.children.append(layer)
+
+    model = objs.add("Model", ("L", ID_MODEL), _fbx_name(base, "Model"), ("S", "Mesh"))
+    model.add("Version", ("I", 232))
+    mp = model.add("Properties70")
+    _fbx_p70(mp, "Lcl Translation", "Lcl Translation", "", "A", ("D", 0.0), ("D", 0.0), ("D", 0.0))
+    _fbx_p70(mp, "Lcl Rotation", "Lcl Rotation", "", "A", ("D", 0.0), ("D", 0.0), ("D", 0.0))
+    _fbx_p70(mp, "Lcl Scaling", "Lcl Scaling", "", "A", ("D", 1.0), ("D", 1.0), ("D", 1.0))
+    model.add("Shading", ("C", True))
+    model.add("Culling", ("S", "CullingOff"))
+
+    mat = objs.add("Material", ("L", ID_MAT), _fbx_name(base + "_mat", "Material"), ("S", ""))
+    mat.add("Version", ("I", 102))
+    mat.add("ShadingModel", ("S", "phong"))
+    mat.add("MultiLayer", ("I", 0))
+    matp = mat.add("Properties70")
+    _fbx_p70(matp, "DiffuseColor", "Color", "", "A", ("D", kd[0]), ("D", kd[1]), ("D", kd[2]))
+    _fbx_p70(matp, "DiffuseFactor", "Number", "", "A", ("D", 1.0))
+
+    if tex:
+        t = objs.add("Texture", ("L", ID_TEX), _fbx_name(os.path.splitext(tex)[0], "Texture"), ("S", ""))
+        t.add("Type", ("S", "TextureVideoClip"))
+        t.add("Version", ("I", 202))
+        t.add("TextureName", _fbx_name(os.path.splitext(tex)[0], "Texture"))
+        t.add("FileName", ("S", tex))
+        t.add("RelativeFilename", ("S", tex))
+        t.add("ModelUVTranslation", ("D", 0.0), ("D", 0.0))
+        t.add("ModelUVScaling", ("D", 1.0), ("D", 1.0))
+        t.add("Texture_Alpha_Source", ("S", "None"))
+        t.add("Cropping", ("I", 0), ("I", 0), ("I", 0), ("I", 0))
+    top.append(objs)
+
+    conn = _FbxNode("Connections")
+    conn.add("C", ("S", "OO"), ("L", ID_MODEL), ("L", 0))
+    conn.add("C", ("S", "OO"), ("L", ID_GEO), ("L", ID_MODEL))
+    conn.add("C", ("S", "OO"), ("L", ID_MAT), ("L", ID_MODEL))
+    if tex:
+        conn.add("C", ("S", "OP"), ("L", ID_TEX), ("L", ID_MAT), ("S", "DiffuseColor"))
+    top.append(conn)
+    takes = _FbxNode("Takes")
+    takes.add("Current", ("S", ""))
+    top.append(takes)
+
+    for node in top:
+        _fbx_write_node(out, node)
+
+    # footer (fixed layout, mirrors what FBX SDK / Blender write)
+    out += _FBX_NULL_RECORD
+    out += b"\xfa\xbc\xab\x09\xd0\xc8\xd4\x66\xb1\x76\xfb\x83\x1c\xf7\x26\x7e"
+    out += b"\x00" * 4
+    pad = ((len(out) + 15) & ~15) - len(out)
+    out += b"\x00" * (pad if pad else 16)
+    out += struct.pack("<I", _FBX_VERSION)
+    out += b"\x00" * 120
+    out += b"\xf8\x5a\x8c\x6a\xde\xf5\xd9\x7e\xec\xe9\x0c\xe3\x75\x8f\x29\x0b"
+    return bytes(out)
+
+
+def _fbx_convert_package_files(files):
+    """Catalog FBX: swap each (stem.obj + stem.mtl) pair in a package for stem.fbx.
+    Textures and any other files are kept. A pair that fails to convert is left as
+    OBJ+MTL so the user still gets something. -> (new_files, converted_count, errors)"""
+    by_name = dict(files)
+    drop, fbx_files, errors = set(), [], []
+    for fname, content in files:
+        if not fname.lower().endswith(".obj"):
+            continue
+        stem = fname[:-4]
+        mtl = by_name.get(stem + ".mtl", "")
+        try:
+            obj_s = content if isinstance(content, str) else content.decode("utf-8", "replace")
+            mtl_s = mtl if isinstance(mtl, str) else mtl.decode("utf-8", "replace")
+            fbx_files.append((stem + ".fbx", obj_to_fbx_bytes(obj_s, mtl_s, stem)))
+            drop.add(fname)
+            drop.add(stem + ".mtl")
+        except Exception as e:
+            errors.append((stem, str(e)))
+    kept = [(n, c) for n, c in files if n not in drop]
+    return fbx_files + kept, len(fbx_files), errors
+
+
 @app.get("/api/v2/item")
 def item_v2():
-    """Item/Bundle download - cloudscraper + format OBJ/GLTF (Faizdzn method).
+    """Item/Bundle download - cloudscraper + format OBJ/GLTF/FBX (Faizdzn method).
+    format=fbx is Catalog-only: it converts the OBJ+MTL package to FBX on the server.
     If the ID isn't a plain Asset, falls back to resolving it as a Bundle and
     packs every component asset into the same ZIP — components are fetched
     concurrently to stay well inside the serverless timeout window.
@@ -3291,6 +3613,13 @@ def item_v2():
 
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in item_name).strip() or str(file_id)
 
+        fbx_errors = []
+        if fmt == "fbx" and not is_image:
+            files, fbx_ok, fbx_errors = _fbx_convert_package_files(files)
+            if fbx_ok == 0:
+                detail = "; ".join(f"{n}: {e}" for n, e in fbx_errors) or "tidak ada mesh"
+                return jsonify({"error": f"Gagal membuat FBX — {detail}"}), 502
+
         if is_image:
             readme = (
                 f"Item  : {item_name}\n"
@@ -3304,10 +3633,20 @@ def item_v2():
                 readme += "\nBUNDLE — berisi beberapa komponen:\n" + "\n".join(
                     f"- {n}: {'OK' if ok2 else 'GAGAL - ' + str(e2)}" for n, ok2, e2 in bundle_results
                 ) + "\n"
-            readme += (
-                f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
-                f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
-            )
+            if fmt == "fbx":
+                readme += (
+                    "\nFBX (mesh statis + texture, tanpa skeleton/animasi):\n"
+                    "BLENDER:\n  File > Import > FBX (.fbx)\n"
+                    "UNITY / UNREAL:\n  Drag file .fbx ke project — biarkan file .png di folder yang sama\n"
+                )
+                if fbx_errors:
+                    readme += "\nGAGAL dikonversi ke FBX (dikembalikan sebagai OBJ+MTL):\n" + "\n".join(
+                        f"- {n}: {e}" for n, e in fbx_errors) + "\n"
+            else:
+                readme += (
+                    f"\nNOMAD SCULPT:\n  Files > Import > pilih file .obj\n"
+                    f"PRISMA 3D:\n  + > Import > OBJ > pilih file .obj"
+                )
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
@@ -3315,7 +3654,7 @@ def item_v2():
             zf.writestr("README.txt", readme)
 
         buf.seek(0)
-        fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'obj'}.zip"
+        fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'fbx' if fmt=='fbx' else 'obj'}.zip"
         return Response(buf.read(), mimetype="application/zip",
             headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
