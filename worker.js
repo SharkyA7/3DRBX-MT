@@ -6,10 +6,12 @@
 // static asset serving -- this Worker does not change how the site itself is
 // served, only how these specific byte-heavy GET requests are handled.
 //
-// Why these three: Roblox asset IDs are immutable in practice -- the mesh or
+// Why these: Roblox asset IDs are immutable in practice -- the mesh or
 // texture bytes for a given ID never change once uploaded, so caching them
 // aggressively at the edge is safe, unlike e.g. catalog_info (item names,
-// prices) or the OBJ/GLTF zip endpoints (built dynamically per request).
+// prices). The Catalog ZIP/animation downloads (ZIP_PATHS below) are built per
+// request but are a pure function of (id, format, name), so they are cached for
+// a day under a canonical key: a repeat download never wakes Vercel or Roblox.
 
 const CACHEABLE_PATHS = new Set([
   "/api/v2/model/mesh",
@@ -27,6 +29,49 @@ const SHORT_TTL_PATHS = new Map([
   ["/api/catalog/browse", 300],      // marketplace search pages
   ["/api/catalog/items-meta", 600],  // Roblox's name + thumbnail for a list of item IDs
 ]);
+
+// Catalog downloads (ZIP / BVH / GLB). path -> the ONLY query params that reach
+// the backend and the cache key. Anything else is dropped, so junk params can't
+// be used to dodge the cache. Deliberately NOT here: avatar downloads (an avatar
+// changes), /api/v2/model/download (models get new versions) and item-batch (POST).
+const ZIP_TTL_SECONDS = 60 * 60 * 24; // 24h
+const ZIP_PATHS = new Map([
+  ["/api/v2/item", ["id", "format", "name"]],
+  ["/api/animation/download-full", ["asset_id", "format"]],
+  ["/api/animation/download-bundle", ["bundle_id", "format"]],
+]);
+const ZIP_ID_PARAMS = new Set(["id", "asset_id", "bundle_id"]);
+const ZIP_FORMATS = new Set(["gltf", "obj", "fbx", "bvh"]);
+
+// Canonical URL for a ZIP request, or null if a param looks wrong (then the
+// request goes live to the backend, which answers 400, and nothing is cached).
+function canonicalZipUrl(url, params) {
+  const out = new URL(url.origin + url.pathname);
+  for (const key of params) {
+    let v = url.searchParams.get(key);
+    if (v === null) continue;
+    v = v.trim();
+    if (key === "name") v = v.slice(0, 200);
+    if (v === "") continue;
+    if (ZIP_ID_PARAMS.has(key) && !/^\d{1,16}$/.test(v)) return null;
+    if (key === "format") {
+      v = v.toLowerCase();
+      if (!ZIP_FORMATS.has(v)) return null;
+    }
+    out.searchParams.set(key, v);
+  }
+  return out;
+}
+
+// CORS: the site lives on another origin, and the animation download reads
+// Content-Disposition for its filename, which the browser hides unless exposed.
+function zipResponse(res, edge) {
+  const r = new Response(res.body, res);
+  r.headers.set("Access-Control-Allow-Origin", "*");
+  r.headers.set("Access-Control-Expose-Headers", "Content-Disposition, X-Edge-Cache");
+  r.headers.set("X-Edge-Cache", edge);
+  return r;
+}
 
 // Only these query params reach the backend/cache key for browse. Anything else
 // is dropped, so junk params can't be used to dodge the cache and hammer the
@@ -98,9 +143,54 @@ function backendHeaders(request) {
   return headers;
 }
 
+async function handleZip(request, ctx, url, params) {
+  const canonical = canonicalZipUrl(url, params);
+
+  // Never cached: bad params, authenticated requests, ?debug=1 diagnostics.
+  if (!canonical || request.headers.has("Authorization") || url.searchParams.get("debug") === "1") {
+    const live = await fetch(BACKEND_ORIGIN + url.pathname + url.search, {
+      headers: backendHeaders(request),
+      cf: { cacheTtl: 0, cacheEverything: false },
+    });
+    const res = zipResponse(live, "bypass");
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  }
+
+  const cache = caches.default;
+  const cacheKey = new Request(canonical.toString(), { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) return zipResponse(cached, "hit");
+
+  const upstream = await fetch(BACKEND_ORIGIN + canonical.pathname + canonical.search, {
+    headers: backendHeaders(request),
+    cf: { cacheTtl: 0, cacheEverything: false }, // we manage caching ourselves
+  });
+
+  if (!upstream.ok) {
+    const err = zipResponse(upstream, "miss-error");
+    err.headers.set("Cache-Control", "no-store");
+    return err;
+  }
+
+  // The backend marks incomplete results (a bundle component failed, an FBX
+  // fell back to OBJ) no-store: pass those through without pinning them.
+  if (/no-store/i.test(upstream.headers.get("Cache-Control") || "")) {
+    return zipResponse(upstream, "miss-nocache");
+  }
+
+  const res = zipResponse(upstream, "miss");
+  res.headers.set("Cache-Control", `public, max-age=${ZIP_TTL_SECONDS}`);
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    const zipParams = request.method === "GET" ? ZIP_PATHS.get(url.pathname) : undefined;
+    if (zipParams) return handleZip(request, ctx, url, zipParams);
 
     const isImmutable =
       request.method === "GET" && CACHEABLE_PATHS.has(url.pathname);
