@@ -3655,8 +3655,13 @@ def item_v2():
 
         buf.seek(0)
         fname = f"{safe_name}_image.zip" if is_image else f"{safe_name}_{'gltf' if fmt=='gltf' else 'fbx' if fmt=='fbx' else 'obj'}.zip"
-        return Response(buf.read(), mimetype="application/zip",
+        resp = Response(buf.read(), mimetype="application/zip",
             headers={"Content-Disposition":content_disposition(f"{fname}")})
+        # An incomplete ZIP (a bundle component failed, or an FBX conversion fell back
+        # to OBJ) must not be pinned in the Worker/CDN cache -- the next try may be whole.
+        if (is_bundle and any(not r[1] for r in bundle_results)) or fbx_errors:
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
 
 MAX_BATCH_ITEMS = 25
@@ -3924,39 +3929,8 @@ def proxy_avatar_3d():
     except Exception as e:
         return safe_error(e)
 
-@app.get("/api/proxy/fetch")
-def proxy_fetch():
-    """General proxy - browser minta server untuk fetch URL apapun dari Roblox CDN"""
-    url = request.args.get("url","")
-    if not url: return jsonify({"error":"url required"}),400
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return jsonify({"error":"invalid url"}),400
-    if parsed.scheme not in ("http","https"):
-        return jsonify({"error":"invalid url scheme"}),403
-    host = (parsed.hostname or "").lower()
-    is_allowed_host = (
-        host == "roblox.com" or host.endswith(".roblox.com") or
-        host == "rbxcdn.com" or host.endswith(".rbxcdn.com")
-    )
-    if not is_allowed_host:
-        return jsonify({"error":"only roblox domains allowed"}),403
-    try:
-        h = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://www.roblox.com/",
-        }
-        if COOKIE: h["Cookie"] = f".ROBLOSECURITY={COOKIE}"
-        fmt = request.args.get("fmt","json")
-        with httpx.Client(timeout=20, follow_redirects=True) as c:
-            r = c.get(url, headers=h)
-            if fmt == "bytes":
-                import base64
-                return jsonify({"b64": base64.b64encode(r.content).decode()})
-            return jsonify(r.json())
-    except Exception as e:
-        return safe_error(e)
+# /api/proxy/fetch was removed: it relayed any *.roblox.com URL with the server's
+# .ROBLOSECURITY cookie attached (an authenticated open proxy) and nothing used it.
 
 
 @app.get("/api/audio/info")
@@ -6411,8 +6385,11 @@ def animation_download_bundle():
             zf.writestr("README.txt", readme)
         buf.seek(0)
         safe_bundle_name = safe_filename(bundle["name"])
-        return Response(buf.read(), mimetype="application/zip",
+        resp = Response(buf.read(), mimetype="application/zip",
             headers={"Content-Disposition": content_disposition(f"{safe_bundle_name}_{fmt}.zip")})
+        if any(not r[1] for r in results):   # partial bundle: keep it out of edge/CDN caches
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
     except RBXMParseError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
