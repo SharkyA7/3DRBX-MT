@@ -2495,7 +2495,7 @@ async function downloadCatalog(format){
     // Selalu minta versi dengan texture (gltf di backend = obj+mtl+texture bundle) sbg sumber konversi
     // &name= dikirim supaya penamaan file di dalam ZIP dijamin sama persis dengan yang tampil di preview
     const srcFmt = (format === 'fbx') ? 'fbx' : 'gltf';
-    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=${srcFmt}&name=${encodeURIComponent(name)}`);
+    const res=await fetch(`${EDGE_BASE}/api/v2/item?id=${currentAssetId}&format=${srcFmt}&name=${encodeURIComponent(name)}`);
     if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
 
@@ -2530,8 +2530,8 @@ async function downloadCatalogAnimation(format){
     // Bundle -> multiple components, backend resolves & zips them all server-side.
     // Single Animation/Emote asset -> one BVH text file or one GLB binary directly.
     const url = currentIsBundle
-      ? `${BASE}/api/animation/download-bundle?bundle_id=${currentAssetId}&format=${format}`
-      : `${BASE}/api/animation/download-full?asset_id=${currentAssetId}&format=${format}`;
+      ? `${EDGE_BASE}/api/animation/download-bundle?bundle_id=${currentAssetId}&format=${format}`
+      : `${EDGE_BASE}/api/animation/download-full?asset_id=${currentAssetId}&format=${format}`;
     const res = await fetch(url);
     if(!res.ok){ const e = await res.json(); throw new Error(e.error||'Gagal mengunduh animasi'); }
     const blob = await res.blob();
