@@ -54,6 +54,7 @@ main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
 /* LOADING SCREEN */
 .loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:99999;display:flex;align-items:center;justify-content:center;transition:opacity .4s ease,visibility .4s ease;}
 .loading-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+.loading-overlay.force-show{display:flex!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;}
 .loading-box{display:flex;flex-direction:column;align-items:center;gap:16px;max-width:320px;padding:24px;}
 .loading-spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -68,6 +69,10 @@ main{max-width:880px;margin:0 auto;padding:28px 16px 80px}
 .loading-step::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--border2);flex-shrink:0;transition:background .2s;}
 .loading-step.active::before{background:var(--accent);box-shadow:0 0 6px var(--accent);}
 .loading-step.done::before{background:var(--green);}
+
+/* Prevent scroll & hide content while loading */
+body.loading{overflow:hidden;}
+body.loading>*:not(.loading-overlay):not(.maint-pw-overlay):not(.nudge-overlay):not(.modal-overlay){display:none!important;}
 
 .tabs{display:flex;justify-content:center;gap:4px;margin-bottom:24px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:6px;overflow-x:auto;overflow-y:visible;scrollbar-width:none;}
 @media (min-width:768px){
@@ -5919,6 +5924,11 @@ document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
   const bar = document.getElementById('loading-bar');
   const subtitle = document.getElementById('loading-subtitle');
   const stepsContainer = document.getElementById('loading-steps');
+  const body = document.body;
+
+  // Anti-bypass: force body loading state immediately
+  body.classList.add('loading');
+  overlay.classList.add('force-show');
 
   const steps = [
     { id: 'fonts', label: 'Loading fonts...', weight: 15 },
@@ -5979,6 +5989,8 @@ document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
           // All done - hide loading screen
           setTimeout(() => {
             overlay.classList.add('hidden');
+            overlay.classList.remove('force-show');
+            body.classList.remove('loading');
             setTimeout(() => overlay.style.display = 'none', 400);
           }, 300);
         }
@@ -5986,6 +5998,33 @@ document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
     }
     animate();
   }
+
+  // Anti-bypass: restore loading overlay if removed via DevTools/extensions
+  const observer = new MutationObserver(() => {
+    if (body.classList.contains('loading')) {
+      if (!document.body.contains(overlay)) {
+        document.body.prepend(overlay);
+      }
+      overlay.classList.add('force-show');
+      overlay.classList.remove('hidden');
+      overlay.style.display = 'flex';
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Also re-apply on any DOM change attempt
+  document.addEventListener('DOMNodeRemoved', (e) => {
+    if (e.target === overlay && body.classList.contains('loading')) {
+      setTimeout(() => {
+        if (body.classList.contains('loading')) {
+          document.body.prepend(overlay);
+          overlay.classList.add('force-show');
+          overlay.classList.remove('hidden');
+          overlay.style.display = 'flex';
+        }
+      }, 0);
+    }
+  }, true);
 
   // Start loading animation
   if (overlay && bar && subtitle) {
