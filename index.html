@@ -1405,6 +1405,11 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
             <div class="dl-desc">Dikonversi ke GLTF 2.0 dengan embedded buffer.</div>
             <button class="btn btn-amber" onclick="downloadCatalog('gltf')">⬇ GLTF ZIP</button>
           </div>
+          <div class="dl-card ready" id="cat-dl-fbx-card">
+            <div class="dl-title"><span style="color:#8ef">FBX</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
+            <div class="dl-desc"><span data-t-id="Mesh statis + texture dalam format FBX (Blender, Unity, Unreal). Tanpa skeleton/animasi." data-t-en="Static mesh + texture as FBX (Blender, Unity, Unreal). No skeleton/animation.">Mesh statis + texture dalam format FBX (Blender, Unity, Unreal). Tanpa skeleton/animasi.</span></div>
+            <button class="btn btn-cyan" onclick="downloadCatalog('fbx')">⬇ FBX ZIP</button>
+          </div>
           <div class="dl-card ready" id="cat-dl-cages-card" style="display:none">
             <div class="dl-title"><span style="color:#c9f">CAGES</span><span class="badge b-ok"><span data-t-id="SIAP" data-t-en="READY">SIAP</span></span></div>
             <div class="dl-desc"><span data-t-id="Item Layered Clothing ini punya cage mesh (inner/outer) — dipakai untuk fitting di Blender saat bikin/sesuaikan pakaian." data-t-en="This Layered Clothing item has cage meshes (inner/outer) — used for fitting in Blender when making/adjusting clothing.">Item Layered Clothing ini punya cage mesh (inner/outer) — dipakai untuk fitting di Blender saat bikin/sesuaikan pakaian.</span></div>
@@ -2474,6 +2479,7 @@ function fillCatalogInfo(d){
   document.getElementById('cat-dl-anim-card').style.display = isAnim ? '' : 'none';
   document.getElementById('cat-dl-obj-card').style.display = (isAnim || isBg) ? 'none' : '';
   document.getElementById('cat-dl-gltf-card').style.display = (isAnim || isBg) ? 'none' : '';
+  document.getElementById('cat-dl-fbx-card').style.display = (isAnim || isBg) ? 'none' : '';
   document.getElementById('cat-dl-image-card').style.display = (!isAnim && isBg) ? 'block' : 'none';
   // Cages only apply to real-mesh Layered Clothing items -- hidden here on every
   // fresh item load, then checkCatalogCages(id) (called right after fillCatalogInfo,
@@ -2488,7 +2494,8 @@ async function downloadCatalog(format){
     const name=document.getElementById('cat-name').textContent||currentAssetId;
     // Selalu minta versi dengan texture (gltf di backend = obj+mtl+texture bundle) sbg sumber konversi
     // &name= dikirim supaya penamaan file di dalam ZIP dijamin sama persis dengan yang tampil di preview
-    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=gltf&name=${encodeURIComponent(name)}`);
+    const srcFmt = (format === 'fbx') ? 'fbx' : 'gltf';
+    const res=await fetch(`${BASE}/api/v2/item?id=${currentAssetId}&format=${srcFmt}&name=${encodeURIComponent(name)}`);
     if(!res.ok){ const e=await res.json(); throw e; }
     const blob=await res.blob();
 
