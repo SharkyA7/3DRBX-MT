@@ -3132,63 +3132,296 @@ def _is_background_item(item):
         if "avatarbackground" in str(v).lower().replace(" ", ""): return True
     return False
 
+# ── R15 → R6 MESH CONVERSION ───────────────────────────────────────────
+
+# R15 part names → R6 part mapping
+_R15_TO_R6_PARTS = {
+    "Head": ["Head"],
+    "Torso": ["UpperTorso", "LowerTorso"],
+    "LeftArm": ["LeftUpperArm", "LeftLowerArm", "LeftHand"],
+    "RightArm": ["RightUpperArm", "RightLowerArm", "RightHand"],
+    "LeftLeg": ["LeftUpperLeg", "LeftLowerLeg", "LeftFoot"],
+    "RightLeg": ["RightUpperLeg", "RightLowerLeg", "RightFoot"],
+}
+
+# All R15 part names for detection
+_R15_PART_NAMES = {
+    "Head", "UpperTorso", "LowerTorso",
+    "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "RightLowerLeg", "RightFoot",
+}
+
+# All R6 part names for detection
+_R6_PART_NAMES = {"Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+
+
+def _parse_obj_parts(obj_text: str) -> dict:
+    """
+    Parse OBJ text and return dict of part_name -> {vertices, uvs, normals, faces, material}
+    Assumes OBJ uses 'o PartName' for each body part.
+    """
+    parts = {}
+    current_part = None
+    vertices = []
+    uvs = []
+    normals = []
+    faces = []
+    current_material = None
+
+    def save_part():
+        nonlocal current_part, vertices, uvs, normals, faces, current_material
+        if current_part and vertices:
+            parts[current_part] = {
+                "vertices": vertices[:],
+                "uvs": uvs[:],
+                "normals": normals[:],
+                "faces": faces[:],
+                "material": current_material,
+            }
+        vertices = []
+        uvs = []
+        normals = []
+        faces = []
+        current_material = None
+
+    for line in obj_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("o "):
+            save_part()
+            current_part = line[2:].strip()
+        elif line.startswith("v "):
+            _, x, y, z = line.split()[:4]
+            vertices.append((float(x), float(y), float(z)))
+        elif line.startswith("vt "):
+            _, u, v = line.split()[:3]
+            uvs.append((float(u), float(v)))
+        elif line.startswith("vn "):
+            _, x, y, z = line.split()[:4]
+            normals.append((float(x), float(y), float(z)))
+        elif line.startswith("f "):
+            # Parse face indices (support v, v/vt, v/vt/vn, v//vn)
+            face_verts = []
+            for token in line[2:].split():
+                v_idx = token.split("/")[0]
+                face_verts.append(int(v_idx) - 1)  # OBJ is 1-indexed
+            # Triangulate quads if needed
+            if len(face_verts) == 4:
+                faces.append((face_verts[0], face_verts[1], face_verts[2]))
+                faces.append((face_verts[0], face_verts[2], face_verts[3]))
+            elif len(face_verts) >= 3:
+                faces.append(tuple(face_verts[:3]))
+        elif line.startswith("usemtl "):
+            current_material = line[7:].strip()
+
+    save_part()
+    return parts
+
+
+def _merge_parts(source_parts: list, part_data: dict, vertex_offset: int = 0):
+    """
+    Merge multiple source parts into one combined mesh.
+    Returns (merged_vertices, merged_uvs, merged_normals, merged_faces, new_vertex_offset)
+    """
+    merged_verts = []
+    merged_uvs = []
+    merged_normals = []
+    merged_faces = []
+    vert_offset = vertex_offset
+
+    for part_name in source_parts:
+        if part_name not in part_data:
+            continue
+        pd = part_data[part_name]
+        n_verts = len(pd["vertices"])
+        if n_verts == 0:
+            continue
+
+        merged_verts.extend(pd["vertices"])
+        merged_uvs.extend(pd["uvs"])
+        merged_normals.extend(pd["normals"])
+
+        # Remap face indices
+        for face in pd["faces"]:
+            new_face = tuple(v + vert_offset for v in face)
+            merged_faces.append(new_face)
+
+        vert_offset += n_verts
+
+    return merged_verts, merged_uvs, merged_normals, merged_faces, vert_offset
+
+
+def _build_r6_obj(part_data: dict, materials: list) -> tuple[str, str]:
+    """Build OBJ and MTL for R6 from merged part data."""
+    obj_lines = ["# R15 to R6 converted avatar", "mtllib avatar.mtl", ""]
+    mtl_lines = ["# Materials", ""]
+
+    # Write materials
+    seen_mats = set()
+    for mat in materials:
+        if mat and mat not in seen_mats:
+            seen_mats.add(mat)
+            mtl_lines.extend([
+                f"newmtl {mat}",
+                "Kd 0.8 0.8 0.8",
+                "Ka 0.2 0.2 0.2",
+                "Ks 0.0 0.0 0.0",
+                "Ns 10",
+                "d 1",
+                "",
+            ])
+
+    vert_offset = 1  # OBJ is 1-indexed
+    for r6_part in ["Head", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"]:
+        r15_parts = _R15_TO_R6_PARTS[r6_part]
+        # Check if any source parts exist
+        if not any(p in part_data for p in r15_parts):
+            continue
+
+        verts, uvs, normals, faces, vert_offset = _merge_parts(
+            r15_parts, part_data, vert_offset - 1
+        )
+
+        if not verts:
+            continue
+
+        # Determine material (use first available)
+        mat = None
+        for p in r15_parts:
+            if p in part_data and part_data[p]["material"]:
+                mat = part_data[p]["material"]
+                break
+
+        obj_lines.append(f"o {r6_part}")
+        if mat:
+            obj_lines.append(f"usemtl {mat}")
+
+        for vx, vy, vz in verts:
+            obj_lines.append(f"v {vx:.6f} {vy:.6f} {vz:.6f}")
+
+        if uvs:
+            obj_lines.append("")
+            for u, v in uvs:
+                obj_lines.append(f"vt {u:.6f} {v:.6f}")
+
+        if normals:
+            obj_lines.append("")
+            for nx, ny, nz in normals:
+                obj_lines.append(f"vn {nx:.6f} {ny:.6f} {nz:.6f}")
+
+        if faces:
+            obj_lines.append("")
+            for f in faces:
+                # OBJ format: v/vt/vn (all 1-indexed)
+                face_strs = []
+                for vi in f:
+                    vi1 = vi + 1
+                    vt_idx = vi1 if uvs else ""
+                    vn_idx = vi1 if normals else ""
+                    if vt_idx and vn_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}/{vn_idx}")
+                    elif vt_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}")
+                    elif vn_idx:
+                        face_strs.append(f"{vi1}//{vn_idx}")
+                    else:
+                        face_strs.append(str(vi1))
+                obj_lines.append("f " + " ".join(face_strs))
+
+        obj_lines.append("")
+
+    return "\n".join(obj_lines), "\n".join(mtl_lines)
+
+
+def convert_r15_to_r6(obj_text: str, mtl_text: str) -> tuple[str, str]:
+    """
+    Convert R15 OBJ mesh to R6 by merging body parts.
+    Returns (r6_obj, r6_mtl)
+    """
+    # Parse parts from OBJ
+    part_data = _parse_obj_parts(obj_text)
+
+    # Check if this looks like an R15 model
+    r15_parts_found = set(part_data.keys()) & _R15_PART_NAMES
+    if not r15_parts_found:
+        # Not an R15 model, return as-is
+        return obj_text, mtl_text
+
+    # Extract materials from MTL
+    materials = []
+    for line in mtl_text.splitlines():
+        line = line.strip()
+        if line.startswith("newmtl "):
+            materials.append(line[7:].strip())
+
+    # Build R6 OBJ/MTL
+    return _build_r6_obj(part_data, materials)
+
+
 @app.get("/api/v2/avatar")
 def avatar_v2():
-    """Avatar download - real mesh + UV texture"""
-    user   = request.args.get("user","")
-    fmt    = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
-    if not user: return jsonify({"error":"user required"}),400
+    """Avatar download - real mesh + UV texture, with optional R15→R6 conversion"""
+    user = request.args.get("user", "")
+    fmt = request.args.get("format", "gltf").lower()
+    convert_to_r6 = request.args.get("convert_to_r6", "false").lower() == "true"
+    if not user:
+        return jsonify({"error": "user required"}), 400
     try:
-        uid  = resolve(user)
+        uid = resolve(user)
         info = rget(f"https://users.roblox.com/v1/users/{uid}")
-        av   = rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
+        av = rget(f"https://avatar.roblox.com/v1/users/{uid}/avatar")
         name = info.get("name", str(uid))
-        rig  = av.get("playerAvatarType","R6")
-        s    = get_scraper()
+        rig = av.get("playerAvatarType", "R6")
+        s = get_scraper()
 
         manifest_url = get_3d_manifest(uid)
 
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             if manifest_url:
-                # Fetch manifest JSON
                 m = s.get(manifest_url, timeout=15).json()
-
-                # Convert hash -> CDN URL
                 obj_url, mtl_url, tex_hashes, tex_urls = get_obj_urls(m)
                 tex_names = [f"{name}_Tex{i+1}.png" for i in range(len(tex_hashes))]
 
-                # Download OBJ
                 obj_data = s.get(obj_url, timeout=30).text
-
-                # Download MTL + fix texture paths
-                mtl_raw   = s.get(mtl_url, timeout=15).text
+                mtl_raw = s.get(mtl_url, timeout=15).text
                 mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
+
+                # Convert R15 to R6 if requested and avatar is R15
+                if convert_to_r6 and rig == "R15":
+                    obj_data, mtl_fixed = convert_r15_to_r6(obj_data, mtl_fixed)
+                    rig = "R6"  # Update rig type in output
+                    method = "real_mesh_r15_to_r6"
+                else:
+                    method = "real_mesh"
 
                 zf.writestr(f"{name}.obj", obj_data)
                 zf.writestr(f"{name}.mtl", mtl_fixed)
 
-                # GLTF mode: include textures. OBJ mode: geometry only
                 if fmt == "gltf":
                     for i, tex_url in enumerate(tex_urls):
                         try:
                             tb = s.get(tex_url, timeout=20)
                             if tb.status_code == 200:
                                 zf.writestr(tex_names[i], tb.content)
-                        except: pass
+                        except:
+                            pass
 
-                method = "real_mesh"
             else:
-                # Fallback procedural
                 obj_t, mtl_t = procedural(av, name)
                 mtl_t += f"\nmap_Kd {name}_skin.png"
                 zf.writestr(f"{name}.obj", obj_t)
                 zf.writestr(f"{name}.mtl", mtl_t)
                 try:
-                    th  = rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
+                    th = rget(f"https://thumbnails.roblox.com/v1/users/avatar?userIds={uid}&size=420x420&format=Png")
                     thu = (th.get("data") or [{}])[0].get("imageUrl")
-                    if thu: zf.writestr(f"{name}_skin.png", rget_bytes(thu))
-                except: pass
+                    if thu:
+                        zf.writestr(f"{name}_skin.png", rget_bytes(thu))
+                except:
+                    pass
                 method = f"procedural_{rig}"
 
             zf.writestr("README.txt",
@@ -3200,8 +3433,9 @@ def avatar_v2():
 
         buf.seek(0)
         return Response(buf.read(), mimetype="application/zip",
-            headers={"Content-Disposition":content_disposition(f"{name}_avatar.zip")})
-    except Exception as e: return handle_roblox_error(e, "avatar_download")
+            headers={"Content-Disposition": content_disposition(f"{name}_avatar.zip")})
+    except Exception as e:
+        return handle_roblox_error(e, "avatar_download")
 
 BATCH_WORKERS = 6  # concurrent Roblox fetches per request — enough to cut wall time
                     # meaningfully within Vercel's function timeout, low enough not to
