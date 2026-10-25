@@ -1291,6 +1291,19 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
             <span data-t-id="Menggabungkan part R15 (15 part) menjadi R6 (6 part): Head, Torso, L/R Arm, L/R Leg. Cocok untuk game engine yang hanya support R6." data-t-en="Merges R15 parts (15 parts) into R6 (6 parts): Head, Torso, L/R Arm, L/R Leg. Useful for game engines that only support R6.">Menggabungkan part R15 (15 part) menjadi R6 (6 part): Head, Torso, L/R Arm, L/R Leg. Cocok untuk game engine yang hanya support R6.</span>
           </div>
         </div>
+        <!-- R6 → R15 conversion option (shown only for R6 avatars with real mesh) -->
+        <div id="av-convert-r15-wrap" style="display:none;margin-top:10px;padding:10px;background:rgba(0,255,179,.06);border:1px solid rgba(0,255,179,.2);border-radius:6px">
+          <label class="tex-set-toggle" style="margin:0">
+            <b><span data-t-id="Konversi ke R15" data-t-en="Convert to R15">Konversi ke R15</span></b>
+            <span class="tex-switch">
+              <input type="checkbox" id="av-convert-r15">
+              <span class="tex-switch-slider"></span>
+            </span>
+          </label>
+          <div style="margin-top:6px;font-size:9px;color:var(--muted);line-height:1.6">
+            <span data-t-id="Memecah part R6 (6 part) menjadi R15 (15 part): Head, Upper/Lower Torso, Upper/Lower Arm, Hand, Upper/Lower Leg, Foot. Cocok untuk game engine yang butuh rig R15." data-t-en="Splits R6 parts (6 parts) into R15 (15 parts): Head, Upper/Lower Torso, Upper/Lower Arm, Hand, Upper/Lower Leg, Foot. Useful for game engines that require R15 rig.">Memecah part R6 (6 part) menjadi R15 (15 part): Head, Upper/Lower Torso, Upper/Lower Arm, Hand, Upper/Lower Leg, Foot. Cocok untuk game engine yang butuh rig R15.</span>
+          </div>
+        </div>
         <div class="api-note" id="av-note" style="display:none"></div>
         <!-- Body type (R6 / R15) block model. Always visible: it also converts an
              R15 avatar to R6 (and back), not only a fallback when 3D is missing. -->
@@ -2401,11 +2414,18 @@ async function fetchAvatar(){
       document.getElementById('btn-av-gltf').disabled=false;
 
       // Show R15→R6 conversion option for R15 avatars with real mesh
-      const convertWrap = document.getElementById('av-convert-r6-wrap');
+      // Show R6→R15 conversion option for R6 avatars with real mesh
+      const convertR6Wrap = document.getElementById('av-convert-r6-wrap');
+      const convertR15Wrap = document.getElementById('av-convert-r15-wrap');
       if (data.rigType === 'R15') {
-        convertWrap.style.display = 'block';
+        convertR6Wrap.style.display = 'block';
+        convertR15Wrap.style.display = 'none';
+      } else if (data.rigType === 'R6') {
+        convertR6Wrap.style.display = 'none';
+        convertR15Wrap.style.display = 'block';
       } else {
-        convertWrap.style.display = 'none';
+        convertR6Wrap.style.display = 'none';
+        convertR15Wrap.style.display = 'none';
       }
 
       st('av-status',`✓ Avatar ${data.username} (ID ${data.userId}) berhasil dimuat.`,'ok');
@@ -2446,12 +2466,14 @@ async function downloadAvatar(format){
   const user=document.getElementById('av-input').value.trim();
   const name=currentUser.username;
   const convertToR6 = document.getElementById('av-convert-r6')?.checked || false;
+  const convertToR15 = document.getElementById('av-convert-r15')?.checked || false;
   st('av-status',`⏳ Download... (30-60 detik)`,'loading');
   const btn=document.getElementById(`btn-av-${format}`);
   if(btn) btn.disabled=true;
   try{
     const params = new URLSearchParams({ user: user, format: format });
     if (convertToR6) params.set('convert_to_r6', 'true');
+    if (convertToR15) params.set('convert_to_r15', 'true');
     const res=await fetch(`${BASE}/api/v2/avatar?${params.toString()}`);
     if(!res.ok){
       const t=await res.text();
@@ -4037,6 +4059,7 @@ const ROUTES=[
   ['GET','GET /api/avatar/info?user=','Info profil + avatar (warna, skala, aset)'],
   ['GET','GET /api/avatar/3d-urls?user=','URL .obj & .mtl dari Roblox CDN'],
   ['GET','GET /api/avatar/download?user=&format=','ZIP berisi OBJ/GLTF avatar'],
+['GET','GET /api/v2/avatar?user=&format=&convert_to_r6=&convert_to_r15=','ZIP avatar real mesh (convert_to_r6=true untuk R15→R6, convert_to_r15=true untuk R6→R15)'],
   ['GET','GET /api/avatar/wearing?user=','Daftar Asset ID yang dipakai avatar'],
   ['GET','GET /api/avatar/procedural-download?user=&rig=','ZIP model blok R6/R15 (rig=auto|r6|r15)'],
   ['GET','GET /api/catalog/info?asset_id=','Detail item katalog + thumbnail'],
@@ -4072,6 +4095,7 @@ async function downloadReal(){
   const user = document.getElementById('av-input').value.trim();
   const name = currentUser.username;
   const convertToR6 = document.getElementById('av-convert-r6')?.checked || false;
+  const convertToR15 = document.getElementById('av-convert-r15')?.checked || false;
   const btn  = document.getElementById('btn-real');
   const st   = document.getElementById('real-status');
   btn.disabled = true;
@@ -4083,6 +4107,7 @@ async function downloadReal(){
     st.textContent = '⏳ Download mesh + texture dari Roblox... (30-60 detik)';
     const params = new URLSearchParams({ user: user });
     if (convertToR6) params.set('convert_to_r6', 'true');
+    if (convertToR15) params.set('convert_to_r15', 'true');
     const res = await fetch(`${BASE}/api/v2/avatar?${params.toString()}`);
     if(!res.ok){
       const e = await res.json();

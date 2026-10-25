@@ -3361,12 +3361,249 @@ def convert_r15_to_r6(obj_text: str, mtl_text: str) -> tuple[str, str]:
     return _build_r6_obj(part_data, materials)
 
 
+# ── R6 → R15 MESH CONVERSION ──────────────────────────────────────────────
+
+# R6 part names → R15 part mapping (inverse of _R15_TO_R6_PARTS)
+_R6_TO_R15_PARTS = {
+    "Head": ["Head"],
+    "Torso": ["UpperTorso", "LowerTorso"],
+    "LeftArm": ["LeftUpperArm", "LeftLowerArm", "LeftHand"],
+    "RightArm": ["RightUpperArm", "RightLowerArm", "RightHand"],
+    "LeftLeg": ["LeftUpperLeg", "LeftLowerLeg", "LeftFoot"],
+    "RightLeg": ["RightUpperLeg", "RightLowerLeg", "RightFoot"],
+}
+
+
+def _split_part_vertices(verts: list, uvs: list, normals: list, faces: list, num_segments: int) -> list:
+    """
+    Split a part's vertices/faces into `num_segments` horizontal slices based on Y coordinate.
+    Returns list of (verts, uvs, normals, faces) for each segment.
+    """
+    if not verts:
+        return [([], [], [], []) for _ in range(num_segments)]
+
+    # Find Y bounds
+    ys = [v[1] for v in verts]
+    y_min, y_max = min(ys), max(ys)
+    y_range = y_max - y_min
+
+    if y_range == 0:
+        return [([], [], [], []) for _ in range(num_segments)]
+
+    # Assign each vertex to a segment based on Y position
+    vert_segments = [[] for _ in range(num_segments)]
+    uv_segments = [[] for _ in range(num_segments)]
+    normal_segments = [[] for _ in range(num_segments)]
+
+    for i, (vx, vy, vz) in enumerate(verts):
+        # Normalize Y to [0, 1] and assign to segment
+        t = (vy - y_min) / y_range
+        seg = min(int(t * num_segments), num_segments - 1)
+        vert_segments[seg].append((vx, vy, vz))
+        if i < len(uvs):
+            uv_segments[seg].append(uvs[i])
+        if i < len(normals):
+            normal_segments[seg].append(normals[i])
+
+    # Now handle faces - assign each face to the segment of its first vertex
+    # (This is a simplification; ideally we'd split faces that cross segment boundaries)
+    face_segments = [[] for _ in range(num_segments)]
+    for face in faces:
+        if face:
+            v0_idx = face[0]
+            # Find which segment this vertex ended up in
+            # We need to track original vertex index -> segment mapping
+            pass
+
+    # Better approach: build vertex index mapping first
+    # Rebuild with proper index tracking
+    return _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range)
+
+
+def _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range):
+    """Proper splitting with index remapping."""
+    # Map original vertex index -> (segment, new_index_in_segment)
+    vert_to_seg = {}
+    seg_verts = [[] for _ in range(num_segments)]
+    seg_uvs = [[] for _ in range(num_segments)]
+    seg_normals = [[] for _ in range(num_segments)]
+    seg_vert_counts = [0] * num_segments
+
+    for i, (vx, vy, vz) in enumerate(verts):
+        t = (vy - y_min) / y_range if y_range > 0 else 0
+        seg = min(int(t * num_segments), num_segments - 1)
+        new_idx = seg_vert_counts[seg]
+        vert_to_seg[i] = (seg, new_idx)
+        seg_verts[seg].append((vx, vy, vz))
+        if i < len(uvs):
+            seg_uvs[seg].append(uvs[i])
+        if i < len(normals):
+            seg_normals[seg].append(normals[i])
+        seg_vert_counts[seg] += 1
+
+    # Distribute faces to segments based on their vertices' segments
+    # A face goes to the segment where the majority of its vertices lie
+    seg_faces = [[] for _ in range(num_segments)]
+    for face in faces:
+        if len(face) < 3:
+            continue
+        # Count vertices per segment for this face
+        seg_counts = {}
+        for vi in face:
+            if vi in vert_to_seg:
+                seg = vert_to_seg[vi][0]
+                seg_counts[seg] = seg_counts.get(seg, 0) + 1
+        if seg_counts:
+            # Assign to segment with most vertices
+            target_seg = max(seg_counts, key=seg_counts.get)
+            # Remap vertex indices
+            new_face = tuple(vert_to_seg[vi][1] for vi in face if vi in vert_to_seg)
+            if len(new_face) >= 3:
+                seg_faces[target_seg].append(new_face)
+
+    result = []
+    for i in range(num_segments):
+        result.append((seg_verts[i], seg_uvs[i], seg_normals[i], seg_faces[i]))
+    return result
+
+
+def _split_part(verts, uvs, normals, faces, num_segments):
+    """Split a part into horizontal segments based on Y coordinate."""
+    if not verts:
+        return [([], [], [], []) for _ in range(num_segments)]
+
+    ys = [v[1] for v in verts]
+    y_min, y_max = min(ys), max(ys)
+    y_range = y_max - y_min
+
+    return _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range)
+
+
+def _build_r15_obj(part_data: dict, materials: list) -> tuple[str, str]:
+    """Build OBJ and MTL for R15 from split part data."""
+    obj_lines = ["# R6 to R15 converted avatar", "mtllib avatar.mtl", ""]
+    mtl_lines = ["# Materials", ""]
+
+    # Write materials
+    seen_mats = set()
+    for mat in materials:
+        if mat and mat not in seen_mats:
+            seen_mats.add(mat)
+            mtl_lines.extend([
+                f"newmtl {mat}",
+                "Kd 0.8 0.8 0.8",
+                "Ka 0.2 0.2 0.2",
+                "Ks 0.0 0.0 0.0",
+                "Ns 10",
+                "d 1",
+                "",
+            ])
+
+    vert_offset = 1  # OBJ is 1-indexed
+    r15_part_order = [
+        "Head", "UpperTorso", "LowerTorso",
+        "LeftUpperArm", "LeftLowerArm", "LeftHand",
+        "RightUpperArm", "RightLowerArm", "RightHand",
+        "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+        "RightUpperLeg", "RightLowerLeg", "RightFoot",
+    ]
+
+    for r15_part in r15_part_order:
+        # Find which R6 part this R15 part belongs to
+        r6_part = None
+        seg_idx = 0
+        for r6, r15_list in _R6_TO_R15_PARTS.items():
+            if r15_part in r15_list:
+                r6_part = r6
+                seg_idx = r15_list.index(r15_part)
+                break
+
+        if not r6_part or r6_part not in part_data:
+            continue
+
+        pd = part_data[r6_part]
+        num_segments = len(_R6_TO_R15_PARTS[r6_part])
+        segments = _split_part(pd["vertices"], pd["uvs"], pd["normals"], pd["faces"], num_segments)
+        seg_verts, seg_uvs, seg_normals, seg_faces = segments[seg_idx]
+
+        if not seg_verts:
+            continue
+
+        # Use the R6 part's material
+        mat = pd["material"]
+
+        obj_lines.append(f"o {r15_part}")
+        if mat:
+            obj_lines.append(f"usemtl {mat}")
+
+        for vx, vy, vz in seg_verts:
+            obj_lines.append(f"v {vx:.6f} {vy:.6f} {vz:.6f}")
+
+        if seg_uvs:
+            obj_lines.append("")
+            for u, v in seg_uvs:
+                obj_lines.append(f"vt {u:.6f} {v:.6f}")
+
+        if seg_normals:
+            obj_lines.append("")
+            for nx, ny, nz in seg_normals:
+                obj_lines.append(f"vn {nx:.6f} {ny:.6f} {nz:.6f}")
+
+        if seg_faces:
+            obj_lines.append("")
+            for f in seg_faces:
+                face_strs = []
+                for vi in f:
+                    vi1 = vi + 1
+                    vt_idx = vi1 if seg_uvs else ""
+                    vn_idx = vi1 if seg_normals else ""
+                    if vt_idx and vn_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}/{vn_idx}")
+                    elif vt_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}")
+                    elif vn_idx:
+                        face_strs.append(f"{vi1}//{vn_idx}")
+                    else:
+                        face_strs.append(str(vi1))
+                obj_lines.append("f " + " ".join(face_strs))
+
+        obj_lines.append("")
+
+    return "\n".join(obj_lines), "\n".join(mtl_lines)
+
+
+def convert_r6_to_r15(obj_text: str, mtl_text: str) -> tuple[str, str]:
+    """
+    Convert R6 OBJ mesh to R15 by splitting body parts.
+    Returns (r15_obj, r15_mtl)
+    """
+    # Parse parts from OBJ
+    part_data = _parse_obj_parts(obj_text)
+
+    # Check if this looks like an R6 model
+    r6_parts_found = set(part_data.keys()) & _R6_PART_NAMES
+    if not r6_parts_found:
+        # Not an R6 model, return as-is
+        return obj_text, mtl_text
+
+    # Extract materials from MTL
+    materials = []
+    for line in mtl_text.splitlines():
+        line = line.strip()
+        if line.startswith("newmtl "):
+            materials.append(line[7:].strip())
+
+    # Build R15 OBJ/MTL
+    return _build_r15_obj(part_data, materials)
+
+
 @app.get("/api/v2/avatar")
 def avatar_v2():
-    """Avatar download - real mesh + UV texture, with optional R15→R6 conversion"""
+    """Avatar download - real mesh + UV texture, with optional R15⇄R6 conversion"""
     user = request.args.get("user", "")
     fmt = request.args.get("format", "gltf").lower()
     convert_to_r6 = request.args.get("convert_to_r6", "false").lower() == "true"
+    convert_to_r15 = request.args.get("convert_to_r15", "false").lower() == "true"
     if not user:
         return jsonify({"error": "user required"}), 400
     try:
@@ -3395,6 +3632,11 @@ def avatar_v2():
                     obj_data, mtl_fixed = convert_r15_to_r6(obj_data, mtl_fixed)
                     rig = "R6"  # Update rig type in output
                     method = "real_mesh_r15_to_r6"
+                # Convert R6 to R15 if requested and avatar is R6
+                elif convert_to_r15 and rig == "R6":
+                    obj_data, mtl_fixed = convert_r6_to_r15(obj_data, mtl_fixed)
+                    rig = "R15"  # Update rig type in output
+                    method = "real_mesh_r6_to_r15"
                 else:
                     method = "real_mesh"
 
