@@ -89,7 +89,7 @@
     },
     {
       "src": "/",
-      "dest": "index.html",
+      "dest": "backend/main.py",
       "headers": {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "SAMEORIGIN",
