@@ -3373,55 +3373,53 @@ _R6_TO_R15_PARTS = {
     "RightLeg": ["RightUpperLeg", "RightLowerLeg", "RightFoot"],
 }
 
+# R15 joint split ratios within each R6 part (normalized 0=bottom, 1=top)
+# Based on actual Roblox R15 rig proportions from procedural()
+_R6_TO_R15_SPLIT_RATIOS = {
+    # R6 Torso (y=2H to 4H) -> R15 LowerTorso (y=2.5H-3.4H) + UpperTorso (y=3.4H-4.8H)
+    # Map R6 torso range to R15 torso range: split at R15 y=3.4H -> R6 y ≈ 2.78H
+    # Normalized in R6 torso: (2.78-2)/(4-2) = 0.39 from bottom
+    "Torso": [0.39],  # 1 split point -> 2 segments
 
-def _split_part_vertices(verts: list, uvs: list, normals: list, faces: list, num_segments: int) -> list:
+    # R6 Arms (y=2H to 4H) -> R15 Hand (y=2H-2.5H) + LowerArm (y=2.5H-3.6H) + UpperArm (y=3.6H-4.8H)
+    # Map R6 arm (2H-4H) to R15 arm (2H-4.8H)
+    # Wrist at R15 y=2.5H -> R6 y = 2 + 0.5/2.8*2 = 2.36H -> normalized 0.18
+    # Elbow at R15 y=3.6H -> R6 y = 2 + 1.6/2.8*2 = 3.14H -> normalized 0.57
+    "LeftArm": [0.18, 0.57],
+    "RightArm": [0.18, 0.57],
+
+    # R6 Legs (y=0 to 2H) -> R15 Foot (y=0-0.3H) + LowerLeg (y=0.3H-1.2H) + UpperLeg (y=1.2H-2.5H)
+    # Map R6 leg (0-2H) to R15 leg (0-2.5H)
+    # Ankle/Foot at R15 y=0.3H -> R6 y = 0.3/2.5*2 = 0.24H -> normalized 0.12
+    # Knee at R15 y=1.2H -> R15 y = 1.2/2.5*2 = 0.96H -> normalized 0.48
+    "LeftLeg": [0.12, 0.48],
+    "RightLeg": [0.12, 0.48],
+
+    # Head stays as-is (1 segment)
+    "Head": [],
+}
+
+
+def _split_part_at_ratios(verts, uvs, normals, faces, split_ratios):
     """
-    Split a part's vertices/faces into `num_segments` horizontal slices based on Y coordinate.
+    Split a part at specific Y ratios (normalized 0-1).
     Returns list of (verts, uvs, normals, faces) for each segment.
     """
-    if not verts:
-        return [([], [], [], []) for _ in range(num_segments)]
+    if not verts or not split_ratios:
+        # No split needed, return as single segment
+        return [(verts, uvs, normals, faces)]
 
-    # Find Y bounds
     ys = [v[1] for v in verts]
     y_min, y_max = min(ys), max(ys)
     y_range = y_max - y_min
 
     if y_range == 0:
-        return [([], [], [], []) for _ in range(num_segments)]
+        return [(verts, uvs, normals, faces)]
 
-    # Assign each vertex to a segment based on Y position
-    vert_segments = [[] for _ in range(num_segments)]
-    uv_segments = [[] for _ in range(num_segments)]
-    normal_segments = [[] for _ in range(num_segments)]
+    # Add boundaries
+    boundaries = [0.0] + sorted(split_ratios) + [1.0]
+    num_segments = len(boundaries) - 1
 
-    for i, (vx, vy, vz) in enumerate(verts):
-        # Normalize Y to [0, 1] and assign to segment
-        t = (vy - y_min) / y_range
-        seg = min(int(t * num_segments), num_segments - 1)
-        vert_segments[seg].append((vx, vy, vz))
-        if i < len(uvs):
-            uv_segments[seg].append(uvs[i])
-        if i < len(normals):
-            normal_segments[seg].append(normals[i])
-
-    # Now handle faces - assign each face to the segment of its first vertex
-    # (This is a simplification; ideally we'd split faces that cross segment boundaries)
-    face_segments = [[] for _ in range(num_segments)]
-    for face in faces:
-        if face:
-            v0_idx = face[0]
-            # Find which segment this vertex ended up in
-            # We need to track original vertex index -> segment mapping
-            pass
-
-    # Better approach: build vertex index mapping first
-    # Rebuild with proper index tracking
-    return _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range)
-
-
-def _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range):
-    """Proper splitting with index remapping."""
     # Map original vertex index -> (segment, new_index_in_segment)
     vert_to_seg = {}
     seg_verts = [[] for _ in range(num_segments)]
@@ -3430,8 +3428,13 @@ def _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y
     seg_vert_counts = [0] * num_segments
 
     for i, (vx, vy, vz) in enumerate(verts):
-        t = (vy - y_min) / y_range if y_range > 0 else 0
-        seg = min(int(t * num_segments), num_segments - 1)
+        t = (vy - y_min) / y_range
+        # Find which segment this vertex belongs to
+        seg = 0
+        for j in range(num_segments):
+            if boundaries[j] <= t < boundaries[j + 1] or (j == num_segments - 1 and t >= boundaries[j]):
+                seg = j
+                break
         new_idx = seg_vert_counts[seg]
         vert_to_seg[i] = (seg, new_idx)
         seg_verts[seg].append((vx, vy, vz))
@@ -3441,22 +3444,18 @@ def _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y
             seg_normals[seg].append(normals[i])
         seg_vert_counts[seg] += 1
 
-    # Distribute faces to segments based on their vertices' segments
-    # A face goes to the segment where the majority of its vertices lie
+    # Distribute faces to segments based on majority vertex segment
     seg_faces = [[] for _ in range(num_segments)]
     for face in faces:
         if len(face) < 3:
             continue
-        # Count vertices per segment for this face
         seg_counts = {}
         for vi in face:
             if vi in vert_to_seg:
                 seg = vert_to_seg[vi][0]
                 seg_counts[seg] = seg_counts.get(seg, 0) + 1
         if seg_counts:
-            # Assign to segment with most vertices
             target_seg = max(seg_counts, key=seg_counts.get)
-            # Remap vertex indices
             new_face = tuple(vert_to_seg[vi][1] for vi in face if vi in vert_to_seg)
             if len(new_face) >= 3:
                 seg_faces[target_seg].append(new_face)
@@ -3468,7 +3467,7 @@ def _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y
 
 
 def _split_part(verts, uvs, normals, faces, num_segments):
-    """Split a part into horizontal segments based on Y coordinate."""
+    """Legacy equal-split fallback (kept for compatibility)."""
     if not verts:
         return [([], [], [], []) for _ in range(num_segments)]
 
@@ -3476,7 +3475,12 @@ def _split_part(verts, uvs, normals, faces, num_segments):
     y_min, y_max = min(ys), max(ys)
     y_range = y_max - y_min
 
-    return _split_part_proper(verts, uvs, normals, faces, num_segments, y_min, y_max, y_range)
+    if y_range == 0:
+        return [([], [], [], []) for _ in range(num_segments)]
+
+    # Equal splits
+    split_ratios = [i / num_segments for i in range(1, num_segments)]
+    return _split_part_at_ratios(verts, uvs, normals, faces, split_ratios)
 
 
 def _build_r15_obj(part_data: dict, materials: list) -> tuple[str, str]:
@@ -3522,8 +3526,8 @@ def _build_r15_obj(part_data: dict, materials: list) -> tuple[str, str]:
             continue
 
         pd = part_data[r6_part]
-        num_segments = len(_R6_TO_R15_PARTS[r6_part])
-        segments = _split_part(pd["vertices"], pd["uvs"], pd["normals"], pd["faces"], num_segments)
+        split_ratios = _R6_TO_R15_SPLIT_RATIOS.get(r6_part, [])
+        segments = _split_part_at_ratios(pd["vertices"], pd["uvs"], pd["normals"], pd["faces"], split_ratios)
         seg_verts, seg_uvs, seg_normals, seg_faces = segments[seg_idx]
 
         if not seg_verts:
