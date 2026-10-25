@@ -3576,28 +3576,259 @@ def _build_r15_obj(part_data: dict, materials: list) -> tuple[str, str]:
     return "\n".join(obj_lines), "\n".join(mtl_lines)
 
 
-def convert_r6_to_r15(obj_text: str, mtl_text: str) -> tuple[str, str]:
-    """
-    Convert R6 OBJ mesh to R15 by splitting body parts.
-    Returns (r15_obj, r15_mtl)
-    """
-    # Parse parts from OBJ
-    part_data = _parse_obj_parts(obj_text)
+# ── R6 → R15 MESH CONVERSION (using real R15 reference meshes) ───────────────
 
-    # Check if this looks like an R6 model
+# Load R15 reference meshes at module init
+_R15_REFERENCE_MESHES = {}
+try:
+    import pickle
+    import os
+
+    # Custom unpickler to remap __main__.RobloxMesh -> main.RobloxMesh
+    class _RobloxMeshUnpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            if module == "__main__" and name == "RobloxMesh":
+                return RobloxMesh
+            return super().find_class(module, name)
+
+    pkl_path = os.path.join(os.path.dirname(__file__), "..", "r15_reference_meshes.pkl")
+    with open(pkl_path, "rb") as f:
+        _R15_REFERENCE_MESHES = _RobloxMeshUnpickler(f).load()
+except Exception:
+    pass  # Will fall back to splitting if reference meshes not available
+
+
+def _scale_and_position_mesh(mesh: RobloxMesh, target_size: tuple, position: tuple) -> RobloxMesh:
+    """Scale mesh to target_size (width, height, depth) and translate by position.
+    Normalizes mesh from its local bounds to a unit cube first, then scales to target."""
+    tx, ty, tz = target_size
+    px, py, pz = position
+
+    # Compute mesh bounds
+    if not mesh.vertices:
+        return mesh
+    xs = [v[0] for v in mesh.vertices]
+    ys = [v[1] for v in mesh.vertices]
+    zs = [v[2] for v in mesh.vertices]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    min_z, max_z = min(zs), max(zs)
+
+    # Current size
+    cur_x = max_x - min_x
+    cur_y = max_y - min_y
+    cur_z = max_z - min_z
+
+    # Avoid division by zero
+    if cur_x == 0: cur_x = 1
+    if cur_y == 0: cur_y = 1
+    if cur_z == 0: cur_z = 1
+
+    # Scale factors to normalize to unit cube, then to target size
+    scale_x = tx / cur_x
+    scale_y = ty / cur_y
+    scale_z = tz / cur_z
+
+    # Center of mesh
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+    center_z = (min_z + max_z) / 2
+
+    # Transform: translate to origin, scale, translate to target position
+    new_verts = []
+    for vx, vy, vz in mesh.vertices:
+        # Translate to origin (center at 0,0,0)
+        vx -= center_x
+        vy -= center_y
+        vz -= center_z
+        # Scale to target size
+        vx *= scale_x
+        vy *= scale_y
+        vz *= scale_z
+        # Translate to target position
+        vx += px
+        vy += py
+        vz += pz
+        new_verts.append((vx, vy, vz))
+
+    # Normals: for non-uniform scaling, should use inverse transpose
+    # For simplicity, keep original normals (they're unit length)
+    # TODO: properly transform normals for non-uniform scaling
+    return RobloxMesh(
+        vertices=new_verts,
+        normals=mesh.normals[:],
+        uvs=mesh.uvs[:],
+        faces=mesh.faces[:],
+        version=mesh.version,
+        name=mesh.name
+    )
+
+
+def _build_r15_from_reference(av: dict, name: str, base_material: str = "body") -> tuple[str, str]:
+    """
+    Build R15 avatar from real reference meshes scaled to avatar body scales.
+    Similar to procedural() but uses actual R15 mesh geometry.
+    """
+    sc = av.get("scales", {})
+    bco = av.get("bodyColors", {})
+    W = sc.get("width", 1)
+    H = sc.get("height", 1)
+    HD = sc.get("head", 1)
+    D = sc.get("depth", 1)
+
+    # R15 part definitions with reference mesh names, positions, and scales
+    # Based on procedural() R15 layout but using reference mesh bounding boxes
+    parts = [
+        # (ref_mesh_name, color_id, cx, cy, cz, sx, sy, sz)
+        # Torso parts
+        ("UpperTorso", bco.get("torsoColorId", 23), 0, 4.1*H, 0, 2*W, 1.4*H, D),
+        ("LowerTorso", bco.get("torsoColorId", 23), 0, 2.95*H, 0, 1.8*W, 0.9*H, 0.9*D),
+        # Left arm
+        ("LeftUpperArm", bco.get("leftArmColorId", 1004), -1.45*W, 4.2*H, 0, 0.9*W, 1.2*H, 0.9*D),
+        ("LeftLowerArm", bco.get("leftArmColorId", 1004), -1.45*W, 3.05*H, 0, 0.85*W, 1.1*H, 0.85*D),
+        ("LeftHand", bco.get("leftArmColorId", 1004), -1.45*W, 2.15*H, 0, 0.8*W, 0.3*H, 0.8*D),
+        # Right arm
+        ("RightUpperArm", bco.get("rightArmColorId", 1004), 1.45*W, 4.2*H, 0, 0.9*W, 1.2*H, 0.9*D),
+        ("RightLowerArm", bco.get("rightArmColorId", 1004), 1.45*W, 3.05*H, 0, 0.85*W, 1.1*H, 0.85*D),
+        ("RightHand", bco.get("rightArmColorId", 1004), 1.45*W, 2.15*H, 0, 0.8*W, 0.3*H, 0.8*D),
+        # Left leg
+        ("LeftUpperLeg", bco.get("leftLegColorId", 194), -0.55*W, 1.85*H, 0, 0.9*W, 1.3*H, 0.9*D),
+        ("LeftLowerLeg", bco.get("leftLegColorId", 194), -0.55*W, 0.6*H, 0, 0.85*W, 1.2*H, 0.85*D),
+        ("LeftFoot", bco.get("leftLegColorId", 194), -0.55*W, 0.15*H, 0, 0.85*W, 0.3*H, 0.85*D),
+        # Right leg
+        ("RightUpperLeg", bco.get("rightLegColorId", 194), 0.55*W, 1.85*H, 0, 0.9*W, 1.3*H, 0.9*D),
+        ("RightLowerLeg", bco.get("rightLegColorId", 194), 0.55*W, 0.6*H, 0, 0.85*W, 1.2*H, 0.85*D),
+        ("RightFoot", bco.get("rightLegColorId", 194), 0.55*W, 0.15*H, 0, 0.85*W, 0.3*H, 0.85*D),
+    ]
+
+    # Head uses the original R6 head mesh (or procedural box if no ref)
+    head_color = bco.get("headColorId", 1004)
+    head_size = 1.2 * HD
+    parts.append(("Head", head_color, 0, 4.8*H + 0.6*HD, 0, head_size, head_size, 1.1*head_size))
+
+    obj_lines = [f"# R6 to R15 converted avatar (real R15 meshes)", "mtllib avatar.mtl", ""]
+    mtl_lines = ["# Materials", ""]
+
+    # Write materials
+    seen_mats = set()
+    for mat in [base_material]:
+        if mat and mat not in seen_mats:
+            seen_mats.add(mat)
+            mtl_lines.extend([
+                f"newmtl {mat}",
+                "Kd 0.8 0.8 0.8", "Ka 0.2 0.2 0.2", "Ks 0.0 0.0 0.0",
+                "Ns 10", "d 1", ""
+            ])
+
+    # Also add materials for each body color
+    for _, cid, _, _, _, _, _, _ in parts:
+        mat = f"m{cid}"
+        if mat not in seen_mats:
+            seen_mats.add(mat)
+            r, g, b = bc(cid)
+            mtl_lines.extend([
+                f"newmtl {mat}",
+                f"Kd {r:.4f} {g:.4f} {b:.4f}",
+                "Ka 0.2 0.2 0.2", "Ks 0.0 0.0 0.0", "Ns 10", "d 1", ""
+            ])
+
+    vert_offset = 1
+    for ref_name, cid, cx, cy, cz, sx, sy, sz in parts:
+        ref_mesh = _R15_REFERENCE_MESHES.get(ref_name)
+        if ref_mesh is None:
+            # Fallback: create procedural box
+            obj_lines.append(f"o {ref_name}")
+            mat = f"m{cid}"
+            obj_lines.append(f"usemtl {mat}")
+            hx, hy, hz = sx/2, sy/2, sz/2
+            v = [
+                (cx-hx, cy-hy, cz-hz), (cx+hx, cy-hy, cz-hz), (cx+hx, cy+hy, cz-hz), (cx-hx, cy+hy, cz-hz),
+                (cx-hx, cy-hy, cz+hz), (cx+hx, cy-hy, cz+hz), (cx+hx, cy+hy, cz+hz), (cx-hx, cy+hy, cz+hz)
+            ]
+            for vx, vy, vz in v:
+                obj_lines.append(f"v {vx:.6f} {vy:.6f} {vz:.6f}")
+            obj_lines.append("")
+            f = [(1,2,3,4),(5,8,7,6),(1,5,6,2),(2,6,7,3),(3,7,8,4),(4,8,5,1)]
+            for face in f:
+                obj_lines.append("f " + " ".join(str(vert_offset+i-1) for i in face))
+            vert_offset += 8
+            obj_lines.append("")
+            continue
+
+        # Scale reference mesh to target size
+        # Reference meshes are roughly 2x2x2 (from -1 to 1), so scale by half-dimensions
+        scaled = _scale_and_position_mesh(ref_mesh, (sx, sy, sz), (cx, cy, cz))
+
+        mat = f"m{cid}"
+        obj_lines.append(f"o {ref_name}")
+        obj_lines.append(f"usemtl {mat}")
+
+        for vx, vy, vz in scaled.vertices:
+            obj_lines.append(f"v {vx:.6f} {vy:.6f} {vz:.6f}")
+
+        if scaled.uvs:
+            obj_lines.append("")
+            for u, v in scaled.uvs:
+                obj_lines.append(f"vt {u:.6f} {v:.6f}")
+
+        if scaled.normals:
+            obj_lines.append("")
+            for nx, ny, nz in scaled.normals:
+                obj_lines.append(f"vn {nx:.6f} {ny:.6f} {nz:.6f}")
+
+        if scaled.faces:
+            obj_lines.append("")
+            for face in scaled.faces:
+                face_strs = []
+                for vi in face:
+                    vi1 = vi + vert_offset
+                    vt_idx = vi1 if scaled.uvs else ""
+                    vn_idx = vi1 if scaled.normals else ""
+                    if vt_idx and vn_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}/{vn_idx}")
+                    elif vt_idx:
+                        face_strs.append(f"{vi1}/{vt_idx}")
+                    elif vn_idx:
+                        face_strs.append(f"{vi1}//{vn_idx}")
+                    else:
+                        face_strs.append(str(vi1))
+                obj_lines.append("f " + " ".join(face_strs))
+
+        vert_offset += len(scaled.vertices)
+        obj_lines.append("")
+
+    return "\n".join(obj_lines), "\n".join(mtl_lines)
+
+
+def convert_r6_to_r15(obj_text: str, mtl_text: str, av: dict = None, name: str = "avatar") -> tuple[str, str]:
+    """
+    Convert R6 avatar to R15 using real R15 reference meshes scaled to body proportions.
+    If av is provided, uses body scales/colors from it. Otherwise falls back to splitting.
+    """
+    # If we have avatar data and reference meshes, build proper R15 model
+    if av and _R15_REFERENCE_MESHES:
+        try:
+            # Extract base material from MTL
+            base_material = "body"
+            for line in mtl_text.splitlines():
+                if line.strip().startswith("newmtl "):
+                    base_material = line.strip()[7:]
+                    break
+            return _build_r15_from_reference(av, name, base_material)
+        except Exception:
+            pass  # Fall back to splitting
+
+    # Fallback: parse and split (original method)
+    part_data = _parse_obj_parts(obj_text)
     r6_parts_found = set(part_data.keys()) & _R6_PART_NAMES
     if not r6_parts_found:
-        # Not an R6 model, return as-is
         return obj_text, mtl_text
 
-    # Extract materials from MTL
     materials = []
     for line in mtl_text.splitlines():
-        line = line.strip()
-        if line.startswith("newmtl "):
-            materials.append(line[7:].strip())
+        if line.strip().startswith("newmtl "):
+            materials.append(line.strip()[7:])
 
-    # Build R15 OBJ/MTL
     return _build_r15_obj(part_data, materials)
 
 
