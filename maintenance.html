@@ -75,8 +75,10 @@ body::before{
   text-shadow:0 0 20px rgba(255,255,255,0.1);
 }
 .illustration{
-  width:clamp(180px,35vw,260px);
+  width:clamp(220px,72vw,400px);
   height:auto;
+  max-height:36vh;
+  object-fit:contain;
   margin:0 auto 32px;
   filter:drop-shadow(0 0 24px var(--accent-glow));
   animation:float 4s ease-in-out infinite;
@@ -160,7 +162,7 @@ body::before{
   <div class="status-code">503</div>
   <h1 class="status-title">Not Available</h1>
 
-  <img class="illustration" src="/icons/DOWN.svg" alt="" width="220" height="308" draggable="false" style="pointer-events:none;user-select:none;-webkit-user-drag:none;-webkit-user-select:none;">
+  <img class="illustration" src="/icons/DOWN.svg" alt="" width="570" height="490" draggable="false" style="pointer-events:none;user-select:none;-webkit-user-drag:none;-webkit-user-select:none;">
 
   <p class="description">
     The tools you using right now is being MAINTENANCE or DOWN due to server side error.<br>
