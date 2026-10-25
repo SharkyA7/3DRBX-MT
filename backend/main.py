@@ -2733,14 +2733,11 @@ def catalog_download_full():
             headers={"Content-Disposition":content_disposition(f"{fname}")})
     except Exception as e: return safe_error(e)
 
-# Set True saat maintenance
-MAINTENANCE = os.getenv("MAINTENANCE","false").lower() == "true"
-
 @app.get("/")
 def frontend():
     base = os.path.join(os.path.dirname(__file__),"..","frontend")
-    if MAINTENANCE:
-        mp = os.path.join(os.path.dirname(__file__),"maintenance.html")
+    if get_maintenance_state():
+        mp = os.path.join(os.path.dirname(__file__),"..","maintenance.html")
         if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
     p = os.path.join(base,"index.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
@@ -2757,7 +2754,7 @@ def flipbook_page():
 @app.get("/maintenance")
 def maintenance_preview():
     """Preview maintenance page langsung"""
-    p=os.path.join(os.path.dirname(__file__),"maintenance.html")
+    p=os.path.join(os.path.dirname(__file__),"..","maintenance.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
     return "Maintenance page not found",404
 
