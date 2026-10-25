@@ -2735,9 +2735,9 @@ def catalog_download_full():
 
 @app.get("/")
 def frontend():
-    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    base = os.path.join(os.path.dirname(__file__),"..")
     if get_maintenance_state():
-        mp = os.path.join(os.path.dirname(__file__),"..","maintenance.html")
+        mp = os.path.join(base,"maintenance.html")
         if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
     p = os.path.join(base,"index.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
@@ -2746,7 +2746,7 @@ def frontend():
 @app.get("/Flipbook")
 @app.get("/flipbook")
 def flipbook_page():
-    base = os.path.join(os.path.dirname(__file__),"..","frontend")
+    base = os.path.join(os.path.dirname(__file__),"..")
     p = os.path.join(base,"flipbook.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
     return "<h1>Flipbook page not found</h1>",404
