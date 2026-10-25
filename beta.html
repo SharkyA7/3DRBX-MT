@@ -107,7 +107,47 @@ window.__GLTFExporter = GLTFExporter;
     </p>
   </div>
 
-  <div class="panel active" id="panel-prisma">
+  <div class="panel active" id="panel-rig-conversion">
+    <div class="card">
+      <div class="label">🔄 <span data-t-id="R6 ↔ R15 RIG CONVERSION" data-t-en="R6 ↔ R15 RIG CONVERSION">R6 ↔ R15 RIG CONVERSION</span></div>
+      <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
+        <strong>⚠ EXPERIMENTAL:</strong> Converts Roblox avatar rigs using real reference meshes. R6→R15 uses actual R15 mesh geometry scaled to body proportions. Head mesh is procedural (known limitation). Results may not be perfect.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="text" id="beta-rig-user" placeholder="Roblox username" style="flex:1;min-width:180px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--font-mono);font-size:12px;color:var(--white)">
+        <button class="btn" onclick="betaFetchAvatarInfo()">🔍 FETCH AVATAR</button>
+      </div>
+      <div id="beta-rig-info" style="display:none;margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--border2);font-size:9px;color:var(--muted);line-height:1.6"></div>
+      <div id="beta-rig-convert-options" style="display:none;margin-bottom:12px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label class="tex-set-toggle" style="margin:0">
+            <b><span data-t-id="Convert R15 → R6" data-t-en="Convert R15 → R6">Convert R15 → R6</span></b>
+            <span class="tex-switch">
+              <input type="checkbox" id="beta-convert-r6">
+              <span class="tex-switch-slider"></span>
+            </span>
+          </label>
+          <label class="tex-set-toggle" style="margin:0">
+            <b><span data-t-id="Convert R6 → R15 (Beta)" data-t-en="Convert R6 → R15 (Beta)">Convert R6 → R15 (Beta)</span></b>
+            <span class="tex-switch">
+              <input type="checkbox" id="beta-convert-r15">
+              <span class="tex-switch-slider"></span>
+            </span>
+          </label>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:var(--muted);line-height:1.6">
+          <span data-t-id="R15→R6 merges 15 parts into 6. R6→R15 uses real R15 reference meshes scaled to body proportions. Head uses procedural fallback." data-t-en="R15→R6 merges 15 parts into 6. R6→R15 uses real R15 reference meshes scaled to body proportions. Head uses procedural fallback.">R15→R6 merges 15 parts into 6. R6→R15 uses real R15 reference meshes scaled to body proportions. Head uses procedural fallback.</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="betaDownloadRigConversion('obj')" style="width:100%">⬇ DOWNLOAD OBJ</button>
+        <button class="btn btn-green" onclick="betaDownloadRigConversion('gltf')" style="width:100%">⬇ DOWNLOAD GLB</button>
+      </div>
+      <div id="beta-rig-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-prisma">
     <div class="card">
       <div class="label">🔷 <span data-t-id="CONVERT PRISMA → OBJ" data-t-en="CONVERT PRISMA → OBJ">CONVERT PRISMA → OBJ</span></div>
       <p style="font-size:9px;color:var(--gray);margin-bottom:12px;line-height:1.8">
@@ -428,6 +468,118 @@ async function buildPrismaGLB(){
 
   }catch(e){
     st.textContent = "✗ Error: " + e.message;
+  }
+}
+
+// ─── RIG CONVERSION (BETA) ──────────────────────────────────────────────
+let betaAvatarData = null;
+let betaRigType = null;
+
+async function betaFetchAvatarInfo(){
+  const user = document.getElementById('beta-rig-user').value.trim();
+  const st = document.getElementById('beta-rig-status');
+  const infoDiv = document.getElementById('beta-rig-info');
+  const optsDiv = document.getElementById('beta-rig-convert-options');
+
+  if(!user){
+    st.textContent = '✗ Enter a username';
+    return;
+  }
+
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Fetching avatar info...</div></div>';
+  infoDiv.style.display = 'none';
+  optsDiv.style.display = 'none';
+
+  try{
+    const res = await fetch(`/api/avatar/info?user=${encodeURIComponent(user)}`);
+    if(!res.ok){
+      const t = await res.text();
+      let e = {error:t};
+      try{e=JSON.parse(t);}catch(_){}
+      throw new Error(e.error || res.statusText);
+    }
+    betaAvatarData = await res.json();
+    betaRigType = betaAvatarData.playerAvatarType || 'R6';
+
+    infoDiv.style.display = 'block';
+    infoDiv.innerHTML = `
+      <b>Username:</b> ${betaAvatarData.name} (${betaAvatarData.id})<br>
+      <b>Rig:</b> ${betaRigType}<br>
+      <b>Scales:</b> W:${betaAvatarData.scales?.width||1} H:${betaAvatarData.scales?.height||1} D:${betaAvatarData.scales?.depth||1} Head:${betaAvatarData.scales?.head||1}<br>
+      <b>Body Colors:</b> Head:${betaAvatarData.bodyColors?.headColorId||'?'} Torso:${betaAvatarData.bodyColors?.torsoColorId||'?'} LArm:${betaAvatarData.bodyColors?.leftArmColorId||'?'} RArm:${betaAvatarData.bodyColors?.rightArmColorId||'?'} LLeg:${betaAvatarData.bodyColors?.leftLegColorId||'?'} RLeg:${betaAvatarData.bodyColors?.rightLegColorId||'?'}
+    `;
+
+    // Show relevant conversion option based on rig type
+    const r6Box = document.getElementById('beta-convert-r6').parentElement.parentElement;
+    const r15Box = document.getElementById('beta-convert-r15').parentElement.parentElement;
+
+    if(betaRigType === 'R15'){
+      r6Box.style.display = 'flex';
+      r15Box.style.display = 'none';
+    }else{
+      r6Box.style.display = 'none';
+      r15Box.style.display = 'flex';
+    }
+
+    optsDiv.style.display = 'block';
+    st.textContent = `✓ Avatar fetched (${betaRigType})`;
+
+  }catch(e){
+    st.textContent = '✗ ' + e.message;
+  }
+}
+
+async function betaDownloadRigConversion(format){
+  if(!betaAvatarData){
+    alert('Please fetch avatar info first');
+    return;
+  }
+
+  const user = document.getElementById('beta-rig-user').value.trim();
+  const convertToR6 = document.getElementById('beta-convert-r6').checked;
+  const convertToR15 = document.getElementById('beta-convert-r15').checked;
+  const st = document.getElementById('beta-rig-status');
+
+  // Validate conversion matches rig type
+  if(convertToR6 && betaRigType !== 'R15'){
+    alert('R15→R6 conversion only works on R15 avatars');
+    return;
+  }
+  if(convertToR15 && betaRigType !== 'R6'){
+    alert('R6→R15 conversion only works on R6 avatars');
+    return;
+  }
+  if(!convertToR6 && !convertToR15){
+    alert('Select a conversion option');
+    return;
+  }
+
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Downloading converted avatar... (30-60 sec)</div></div>';
+
+  try{
+    const params = new URLSearchParams({ user: user, format: format });
+    if(convertToR6) params.set('convert_to_r6', 'true');
+    if(convertToR15) params.set('convert_to_r15', 'true');
+
+    const res = await fetch(`/api/v2/avatar?${params.toString()}`);
+    if(!res.ok){
+      const t = await res.text();
+      let e = {error:t};
+      try{e=JSON.parse(t);}catch(_){}
+      throw new Error(e.error || res.statusText);
+    }
+
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'),{
+      href: URL.createObjectURL(blob),
+      download: `${betaAvatarData.name}_${betaRigType}${convertToR6?'_to_R6':''}${convertToR15?'_to_R15':''}.${format==='gltf'?'glb':'zip'}`
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    st.textContent = `✓ Downloaded ${format.toUpperCase()} successfully!`;
+  }catch(e){
+    st.textContent = '✗ ' + e.message;
   }
 }
 </script>
