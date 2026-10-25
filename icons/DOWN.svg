@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" width="200" height="280">
+  <!-- Roblox-style character (R15-ish proportions) -->
+  <defs>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#0f0f1a"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00d4ff"/>
+      <stop offset="100%" style="stop-color:#0099cc"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Shadow under character -->
+  <ellipse cx="100" cy="270" rx="45" ry="8" fill="#00000080" opacity="0.3"/>
+
+  <!-- Legs (R15 style - separate parts) -->
+  <!-- Left Upper Leg -->
+  <rect x="55" y="175" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Left Lower Leg -->
+  <rect x="55" y="210" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Left Foot -->
+  <rect x="50" y="245" width="32" height="18" rx="6" fill="#0a0a15" stroke="#00d4ff" stroke-width="1.5"/>
+
+  <!-- Right Upper Leg -->
+  <rect x="123" y="175" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Right Lower Leg -->
+  <rect x="123" y="210" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Right Foot -->
+  <rect x="118" y="245" width="32" height="18" rx="6" fill="#0a0a15" stroke="#00d4ff" stroke-width="1.5"/>
+
+  <!-- Lower Torso -->
+  <rect x="68" y="140" width="64" height="38" rx="12" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="2" filter="url(#glow)"/>
+
+  <!-- Upper Torso -->
+  <rect x="58" y="90" width="84" height="55" rx="14" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="2" filter="url(#glow)"/>
+
+  <!-- Left Arm (Upper) -->
+  <rect x="30" y="95" width="22" height="40" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Left Arm (Lower) -->
+  <rect x="30" y="135" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Left Hand -->
+  <rect x="26" y="170" width="30" height="18" rx="6" fill="#0a0a15" stroke="#00d4ff" stroke-width="1.5"/>
+
+  <!-- Right Arm (Upper) -->
+  <rect x="148" y="95" width="22" height="40" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Right Arm (Lower) -->
+  <rect x="148" y="135" width="22" height="35" rx="8" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="1.5" filter="url(#glow)"/>
+  <!-- Right Hand -->
+  <rect x="144" y="170" width="30" height="18" rx="6" fill="#0a0a15" stroke="#00d4ff" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <rect x="68" y="35" width="64" height="55" rx="18" fill="url(#bodyGradient)" stroke="#00d4ff" stroke-width="2" filter="url(#glow)"/>
+
+  <!-- Face - Sad/Concerned expression -->
+  <!-- Left Eye -->
+  <path d="M82 58 Q90 52 98 58 Q90 64 82 58" fill="none" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Right Eye -->
+  <path d="M102 58 Q110 52 118 58 Q110 64 102 58" fill="none" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Mouth (sad) -->
+  <path d="M88 80 Q100 90 112 80" fill="none" stroke="#ff4466" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Broken/Warning indicator on chest -->
+  <g transform="translate(100, 115)">
+    <circle r="16" fill="#ff4466" opacity="0.2" filter="url(#glow)"/>
+    <path d="M0 -10 L0 6" stroke="#ff4466" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+    <circle r="2" cy="10" fill="#ff4466" filter="url(#glow)"/>
+  </g>
+
+  <!-- Floating particles around character -->
+  <circle cx="30" cy="60" r="2" fill="#00d4ff" opacity="0.6" filter="url(#glow)">
+    <animate attributeName="cy" values="60;40;60" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="170" cy="70" r="1.5" fill="#00d4ff" opacity="0.5" filter="url(#glow)">
+    <animate attributeName="cy" values="70;50;70" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="20" cy="150" r="1.5" fill="#ff4466" opacity="0.5" filter="url(#glow)">
+    <animate attributeName="cx" values="20;15;20" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="180" cy="160" r="1" fill="#00d4ff" opacity="0.4" filter="url(#glow)">
+    <animate attributeName="cy" values="160;140;160" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0;0.4" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+</svg>
