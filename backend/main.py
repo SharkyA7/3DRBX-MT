@@ -2736,12 +2736,32 @@ def catalog_download_full():
 @app.get("/")
 def frontend():
     base = os.path.join(os.path.dirname(__file__),"..")
-    if get_maintenance_state():
+    maintenance = get_maintenance_state()
+    if maintenance:
         mp = os.path.join(base,"maintenance.html")
         if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
     p = os.path.join(base,"index.html")
     if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
     return "<h1>Roblox Downloader</h1>"
+
+@app.get("/debug/maintenance")
+def debug_maintenance():
+    base = os.path.join(os.path.dirname(__file__),"..")
+    maintenance = get_maintenance_state()
+    mp = os.path.join(base,"maintenance.html")
+    ip = os.path.join(base,"index.html")
+    return jsonify({
+        "maintenance_state": maintenance,
+        "supabase_url_set": bool(os.environ.get("SUPABASE_URL")),
+        "supabase_key_set": bool(os.environ.get("SUPABASE_KEY")),
+        "maintenance_html_exists": os.path.exists(mp),
+        "maintenance_html_path": mp,
+        "index_html_exists": os.path.exists(ip),
+        "index_html_path": ip,
+        "cwd": os.getcwd(),
+        "file_dir": os.path.dirname(__file__),
+        "base_dir": base
+    })
 
 @app.get("/Flipbook")
 @app.get("/flipbook")
