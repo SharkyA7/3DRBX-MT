@@ -190,6 +190,7 @@ select option{background:var(--s2)}
 .packed-thumb img{width:100%;height:100%;object-fit:cover}
 .packed-name{font-size:10px;color:var(--white);line-height:1.3;max-height:2.6em;overflow:hidden;word-break:break-word}
 .packed-id{font-size:9px;color:var(--muted);margin-top:2px}
+.packed-price{font-size:9px;color:#4af;font-weight:700;margin-top:4px}
 .packed-remove{position:absolute;top:-6px;right:-6px;width:18px;height:18px;line-height:16px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:12px;cursor:pointer;padding:0}
 .packed-remove:hover{filter:brightness(1.2)}
 /* ── Catalog browse (marketplace preview) ── */
@@ -1416,7 +1417,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </div>
 
       <div class="card" id="pk-preview-card" style="display:none">
-        <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span> (<span id="pk-count">0</span>)</div>
+        <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span> (<span id="pk-count">0</span>) — <span id="pk-total-price" style="color:#4af;font-weight:700">0 Robux</span></div>
         <div class="packed-grid" id="pk-grid"></div>
       </div>
 
@@ -3617,7 +3618,7 @@ async function addPackedItemById(id){
     packedItems.push({
       id, name: data.name||String(id), thumbnailUrl: data.thumbnailUrl,
       isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0,
-      isBackground: !!data.isBackground
+      isBackground: !!data.isBackground, price: data.price
     });
     return { ok:true, name: data.name||String(id), isBundle: !!data.isBundle, bundleItemCount: data.bundleItemCount||0, isBackground: !!data.isBackground };
   }catch(e){
@@ -3765,6 +3766,10 @@ function renderPackedGrid(){
   const dlCard = document.getElementById('pk-download-card');
   document.getElementById('pk-count').textContent = packedItems.length;
 
+  const totalPrice = packedItems.reduce((sum, it) => sum + (typeof it.price === 'number' ? it.price : 0), 0);
+  const priceEl = document.getElementById('pk-total-price');
+  if(priceEl) priceEl.textContent = totalPrice.toLocaleString() + ' Robux';
+
   if(packedItems.length===0){
     previewCard.style.display='none';
     dlCard.style.display='none';
@@ -3782,6 +3787,7 @@ function renderPackedGrid(){
       ${it.isBackground?`<div style="font-size:8px;color:#8f8;font-weight:700;letter-spacing:.04em;margin-bottom:2px">🖼️ IMAGE</div>`:''}
       <div class="packed-name">${it.name}</div>
       <div class="packed-id">#${it.id}</div>
+      ${typeof it.price === 'number' ? `<div class="packed-price">${it.price.toLocaleString()} Robux</div>` : ''}
     </div>
   `).join('');
 }
