@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>503 — Maintenance | 3DRBXMT</title>
+<meta name="description" content="3D Roblox Migration Tools is currently under maintenance. We'll be back soon!">
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000000;--fg:#ffffff;--muted:#8899a0;
+  --accent:#00d4ff;--accent-glow:rgba(0,212,255,0.4);
+  --red:#ff4466;--red-glow:rgba(255,68,102,0.4);
+  --font-px:'Press Start 2P',monospace;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-ui:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%;overflow:hidden}
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--font-ui);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:20px;
+  position:relative;
+}
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 20%, rgba(0,212,255,0.03) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 80%, rgba(255,68,102,0.02) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+.maintenance-container{
+  position:relative;
+  z-index:1;
+  max-width:520px;
+  width:100%;
+  animation:fadeIn 0.8s ease-out;
+}
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.status-code{
+  font-family:var(--font-px);
+  font-size:clamp(28px,6vw,48px);
+  color:var(--red);
+  text-shadow:0 0 30px var(--red-glow), 0 0 60px var(--red-glow);
+  letter-spacing:6px;
+  line-height:1.1;
+  margin-bottom:8px;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100%{text-shadow:0 0 30px var(--red-glow), 0 0 60px var(--red-glow)}
+  50%{text-shadow:0 0 15px var(--red-glow), 0 0 30px var(--red-glow)}
+}
+.status-title{
+  font-family:var(--font-px);
+  font-size:clamp(14px,3vw,22px);
+  color:var(--fg);
+  letter-spacing:4px;
+  line-height:1.4;
+  margin-bottom:28px;
+  text-shadow:0 0 20px rgba(255,255,255,0.1);
+}
+.illustration{
+  width:clamp(220px,72vw,400px);
+  height:auto;
+  max-height:36vh;
+  object-fit:contain;
+  margin:0 auto 32px;
+  filter:drop-shadow(0 0 24px var(--accent-glow));
+  animation:float 4s ease-in-out infinite;
+}
+@keyframes float{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-8px)}
+}
+.description{
+  font-family:var(--font-ui);
+  font-size:clamp(13px,2.2vw,16px);
+  font-weight:500;
+  color:var(--muted);
+  line-height:1.7;
+  letter-spacing:0.02em;
+  margin-bottom:32px;
+}
+.progress-bar{
+  width:100%;
+  max-width:360px;
+  height:4px;
+  background:rgba(255,255,255,0.06);
+  border-radius:999px;
+  overflow:hidden;
+  margin:0 auto 24px;
+  border:1px solid rgba(255,255,255,0.04);
+}
+.progress-fill{
+  width:0%;
+  height:100%;
+  background:linear-gradient(90deg,var(--accent),var(--red));
+  border-radius:999px;
+  animation:progress 3s ease-in-out infinite;
+}
+@keyframes progress{
+  0%{width:0%;transform:translateX(-100%)}
+  50%{width:70%;transform:translateX(0)}
+  100%{width:100%;transform:translateX(40%)}
+}
+.retry-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:14px 28px;
+  font-family:var(--font-ui);
+  font-size:13px;
+  font-weight:600;
+  color:#000;
+  background:linear-gradient(135deg,var(--accent),#0099cc);
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  transition:all 0.2s ease;
+  box-shadow:0 4px 20px var(--accent-glow);
+  text-decoration:none;
+}
+.retry-btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 30px var(--accent-glow);
+  background:linear-gradient(135deg,#00eeff,var(--accent));
+}
+.retry-btn:active{transform:translateY(0)}
+.retry-btn svg{width:18px;height:18px}
+.footer-note{
+  margin-top:28px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:rgba(255,255,255,0.25);
+  letter-spacing:0.05em;
+}
+@media (prefers-reduced-motion: reduce){
+  .status-code,.illustration,.progress-fill{animation:none}
+  .status-code{text-shadow:0 0 30px var(--red-glow)}
+  .illustration{transform:none}
+  .progress-fill{width:100%}
+}
+</style>
+</head>
+<body>
+<div class="maintenance-container">
+  <div class="status-code">503</div>
+  <h1 class="status-title">Not Available</h1>
+
+  <img class="illustration" src="/icons/DOWN.svg" alt="" width="570" height="490" draggable="false" style="pointer-events:none;user-select:none;-webkit-user-drag:none;-webkit-user-select:none;">
+
+  <p class="description">
+    The tools you using right now is being MAINTENANCE or DOWN due to server side error.<br>
+    But don't worry, 3D Roblox Migration Tools will be back soon.
+  </p>
+
+  <div class="progress-bar" role="progressbar" aria-label="Maintenance progress" aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-fill"></div>
+  </div>
+
+  <a href="/" class="retry-btn" onclick="return tryReload()">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    Try Again
+  </a>
+
+  <p class="footer-note">3DRBXMT &copy; 2026 — Open Source Migration Tools</p>
+</div>
+
+<script>
+function tryReload(){
+  const btn=document.querySelector('.retry-btn');
+  const original=btn.innerHTML;
+  btn.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="1"/></svg> Checking...';
+  btn.style.pointerEvents='none';
+  fetch('/',{method:'HEAD',cache:'no-cache'})
+    .then(r=>{if(r.ok||r.status!==503){window.location.reload()}})
+    .catch(()=>{})
+    .finally(()=>{
+      setTimeout(()=>{
+        btn.innerHTML=original;
+        btn.style.pointerEvents='auto';
+      },2000);
+    });
+  return false;
+}
+const style=document.createElement('style');
+style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(style);
+</script>
+</body>
+</html>
