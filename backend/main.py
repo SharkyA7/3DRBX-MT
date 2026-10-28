@@ -1,8 +1,11 @@
-from flask import Flask, jsonify, request, Response, redirect
+from flask import Flask, jsonify, request, Response, redirect, session, g
+from functools import wraps
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlencode
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+import base64
 
 def safe_filename(name):
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name))[:50]
@@ -350,6 +353,71 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
+
+# ── ROBLOX OAUTH 2.0 CONFIG ─────────────────────────────────────────────
+ROBLOX_CLIENT_ID = os.environ.get("ROBLOX_CLIENT_ID", "5013986189408387471")
+ROBLOX_CLIENT_SECRET = os.environ.get("ROBLOX_CLIENT_SECRET", "")
+ROBLOX_REDIRECT_URI = os.environ.get("ROBLOX_REDIRECT_URI", "https://3drbx-mt.vercel.app/auth/roblox/callback")
+ROBLOX_AUTH_URL = "https://apis.roblox.com/oauth/v1/authorize"
+ROBLOX_TOKEN_URL = "https://apis.roblox.com/oauth/v1/token"
+ROBLOX_USER_URL = "https://apis.roblox.com/oauth/v1/userinfo"
+ROBLOX_SCOPES = "openid profile email avatar:read asset:read"
+
+# In-memory session store (replace with Redis/KV in production)
+USER_SESSIONS = {}  # session_id -> {user_id, username, avatar, scopes, api_keys}
+API_KEYS = {}  # key_id -> {key_hash, user_id, scopes, created, rate_limit}
+
+def generate_api_key(scopes):
+    """Generate a new API key with given scopes."""
+    key_id = secrets.token_hex(8)
+    raw_key = f"3drbx_{'_'.join(scopes)}_{secrets.token_hex(16)}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    API_KEYS[key_id] = {
+        "key_hash": key_hash,
+        "scopes": scopes,
+        "created": time.time(),
+        "rate_limit": {"count": 0, "window_start": time.time()}
+    }
+    return key_id, raw_key
+
+def verify_api_key(raw_key):
+    """Verify an API key and return its scopes if valid."""
+    for key_id, data in API_KEYS.items():
+        if hashlib.sha256(raw_key.encode()).hexdigest() == data["key_hash"]:
+            # Check rate limit (100 req/min default)
+            now = time.time()
+            if now - data["rate_limit"]["window_start"] > 60:
+                data["rate_limit"] = {"count": 0, "window_start": now}
+            if data["rate_limit"]["count"] >= 100:
+                return None, "Rate limit exceeded"
+            data["rate_limit"]["count"] += 1
+            return data["scopes"], None
+    return None, "Invalid API key"
+
+def require_scope(required_scopes):
+    """Decorator to require specific API scopes."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            # Check Authorization header for API key
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                raw_key = auth_header[7:]
+                scopes, error = verify_api_key(raw_key)
+                if error:
+                    return jsonify({"error": error}), 401
+                # Check if required scope is in key scopes
+                if not any(s in scopes for s in required_scopes):
+                    return jsonify({"error": f"Scope required: {required_scopes}"}), 403
+                g.api_scopes = scopes
+                return f(*args, **kwargs)
+            # Fallback to session auth (for browser)
+            if "user_id" not in session:
+                return jsonify({"error": "Authentication required"}), 401
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
 
 # CORS - izinkan semua request dari browser
 @app.after_request
@@ -1507,6 +1575,183 @@ def procedural(av,name,rig=None):
 @app.get("/health")
 def health():
     return jsonify({"status":"ok","cookie_set":bool(COOKIE),"maintenance":MAINTENANCE})
+
+
+# ── ROBLOX OAUTH 2.0 ROUTES ────────────────────────────────────────────
+
+@app.get("/auth/roblox")
+def auth_roblox():
+    """Redirect to Roblox OAuth consent screen."""
+    params = {
+        "client_id": ROBLOX_CLIENT_ID,
+        "redirect_uri": ROBLOX_REDIRECT_URI,
+        "response_type": "code",
+        "scope": ROBLOX_SCOPES,
+        "state": secrets.token_urlsafe(16)
+    }
+    auth_url = f"{ROBLOX_AUTH_URL}?{urlencode(params)}"
+    return redirect(auth_url)
+
+
+@app.get("/auth/roblox/callback")
+def auth_roblox_callback():
+    """Handle Roblox OAuth callback, exchange code for token, create session."""
+    code = request.args.get("code")
+    state = request.args.get("state")
+    error = request.args.get("error")
+
+    if error:
+        return jsonify({"error": f"OAuth error: {error}"}), 400
+
+    if not code:
+        return jsonify({"error": "Missing authorization code"}), 400
+
+    try:
+        # Exchange code for access token
+        token_data = {
+            "client_id": ROBLOX_CLIENT_ID,
+            "client_secret": ROBLOX_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": ROBLOX_REDIRECT_URI
+        }
+        token_resp = requests.post(ROBLOX_TOKEN_URL, data=token_data, timeout=15)
+        token_resp.raise_for_status()
+        token_json = token_resp.json()
+
+        access_token = token_json.get("access_token")
+        refresh_token = token_json.get("refresh_token")
+
+        # Get user info
+        user_resp = requests.get(
+            ROBLOX_USER_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15
+        )
+        user_resp.raise_for_status()
+        user_json = user_resp.json()
+
+        # Create session
+        session_id = secrets.token_urlsafe(32)
+        user_data = {
+            "user_id": user_json.get("sub") or user_json.get("id"),
+            "username": user_json.get("preferred_username") or user_json.get("username"),
+            "display_name": user_json.get("name"),
+            "avatar_url": user_json.get("picture"),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "scopes": ROBLOX_SCOPES.split(),
+            "created": time.time()
+        }
+        USER_SESSIONS[session_id] = user_data
+        session["user_id"] = user_data["user_id"]
+        session["session_id"] = session_id
+
+        # Redirect to frontend with success
+        return redirect("/?auth=success")
+
+    except requests.RequestException as e:
+        return jsonify({"error": f"OAuth failed: {str(e)}"}), 500
+
+
+@app.get("/auth/me")
+def auth_me():
+    """Get current user info from session or API key."""
+    # Check API key first
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        raw_key = auth_header[7:]
+        scopes, error = verify_api_key(raw_key)
+        if not error:
+            return jsonify({"authenticated": True, "via": "api_key", "scopes": scopes})
+
+    # Check session
+    if "session_id" in session and session["session_id"] in USER_SESSIONS:
+        user = USER_SESSIONS[session["session_id"]]
+        return jsonify({
+            "authenticated": True,
+            "via": "session",
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "display_name": user.get("display_name"),
+            "avatar_url": user.get("avatar_url")
+        })
+
+    return jsonify({"authenticated": False})
+
+
+@app.post("/auth/logout")
+def auth_logout():
+    """Logout and clear session."""
+    session_id = session.get("session_id")
+    if session_id and session_id in USER_SESSIONS:
+        del USER_SESSIONS[session_id]
+    session.clear()
+    return jsonify({"success": True})
+
+
+# ── API KEY MANAGEMENT ────────────────────────────────────────────────
+
+VALID_SCOPES = ["catalog", "avatar", "audio", "model", "image", "admin"]
+
+@app.post("/api/admin/keys")
+def create_api_key():
+    """Create a new API key with specified scopes."""
+    if "user_id" not in session:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json(silent=True) or {}
+    scopes = data.get("scopes", [])
+    if not scopes:
+        return jsonify({"error": "Scopes required"}), 400
+
+    # Validate scopes
+    invalid = [s for s in scopes if s not in VALID_SCOPES]
+    if invalid:
+        return jsonify({"error": f"Invalid scopes: {invalid}"}), 400
+
+    user_id = session["user_id"]
+    key_id, raw_key = generate_api_key(scopes)
+    API_KEYS[key_id]["user_id"] = user_id
+
+    return jsonify({
+        "key_id": key_id,
+        "key": raw_key,
+        "scopes": scopes,
+        "created": API_KEYS[key_id]["created"]
+    })
+
+
+@app.get("/api/admin/keys")
+def list_api_keys():
+    """List all API keys for current user."""
+    if "user_id" not in session:
+        return jsonify({"error": "Authentication required"}), 401
+
+    user_id = session["user_id"]
+    user_keys = []
+    for key_id, data in API_KEYS.items():
+        if data.get("user_id") == user_id:
+            user_keys.append({
+                "key_id": key_id,
+                "scopes": data["scopes"],
+                "created": data["created"],
+                "rate_limit": data["rate_limit"]
+            })
+    return jsonify({"keys": user_keys})
+
+
+@app.delete("/api/admin/keys/<key_id>")
+def revoke_api_key(key_id):
+    """Revoke an API key."""
+    if "user_id" not in session:
+        return jsonify({"error": "Authentication required"}), 401
+
+    user_id = session["user_id"]
+    if key_id in API_KEYS and API_KEYS[key_id].get("user_id") == user_id:
+        del API_KEYS[key_id]
+        return jsonify({"success": True})
+    return jsonify({"error": "Key not found"}), 404
 
 
 @app.get("/api/audio/ping")
