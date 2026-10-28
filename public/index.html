@@ -1718,7 +1718,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn" id="model-btn" onclick="fetchModelInfo()" style="flex:1">▶ <span data-t-id="FETCH &amp; ANALYZE" data-t-en="FETCH &amp; ANALYZE">FETCH &amp; ANALYZE</span></button><div class="fetch-progress-wrap"><div class="fetch-progress-label"><span>Menuju rekomendasi login</span><span class="count" id="fp-count-model">0/5</span></div><div class="fetch-progress-track"><div class="fetch-progress-fill" id="fp-fill-model"></div></div></div>
-        <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" style="flex:1;background:#5865f2">⬇ <span data-t-id="DOWNLOAD RBXM" data-t-en="DOWNLOAD RBXM">DOWNLOAD RBXM</span></button>
+        <button class="btn" id="model-dl-rbxm-btn" onclick="downloadRBXM()" disabled title="Sementara dinonaktifkan / Temporarily disabled" style="flex:1;background:#5865f2;opacity:.45;cursor:not-allowed">⬇ <span data-t-id="DOWNLOAD RBXM" data-t-en="DOWNLOAD RBXM">DOWNLOAD RBXM</span></button>
       </div>
       <p style="font-size:9px;color:var(--gray);margin-top:4px">
         <span data-t-id="RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)" data-t-en="RBXM = original Roblox file, open in Roblox Studio. Convert to GLB: FETCH first then BUILD GLB (≤500 parts, Union/CSG supported)">RBXM = file asli Roblox, buka di Roblox Studio. Convert ke GLB: FETCH dulu lalu BUILD GLB (≤500 parts, Union/CSG didukung)</span>
