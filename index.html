@@ -1175,6 +1175,32 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
   </div>
 </div>
 
+<div class="modal-overlay" id="apikeys-modal" style="display:none">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-badge">🔑 API KEYS</div>
+        <div class="modal-title">MY API KEYS</div>
+      </div>
+      <button onclick="closeApiKeysModal()" style="background:transparent;border:none;color:var(--gray);font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc" style="font-size:11px;color:var(--gray);margin-bottom:16px">Create and manage API keys for programmatic access. Keys are scoped and rate-limited.</p>
+
+      <div id="apikeys-list" style="display:flex;flex-direction:column;gap:12px;max-height:300px;overflow-y:auto"></div>
+
+      <div style="margin-top:20px;padding:16px;background:rgba(80,232,244,.05);border:1px solid rgba(80,232,244,.15);border-radius:10px">
+        <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);margin-bottom:12px">CREATE NEW KEY</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px" id="scope-checkboxes"></div>
+        <button class="modal-btn modal-btn-primary" onclick="createApiKey()" style="width:100%">⚡ <span data-t-id="CREATE KEY" data-t-en="CREATE KEY">CREATE KEY</span></button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-secondary" onclick="closeApiKeysModal()" data-t-id="TUTUP" data-t-en="CLOSE">CLOSE</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div id="oauth-bar" style="display:none;justify-content:flex-end;max-width:860px;margin:0 auto;padding:8px 16px 0;gap:10px;align-items:center">
     <span id="oauth-username" style="font-size:10px;color:var(--accent)"></span>
@@ -1215,6 +1241,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
         <div class="dropdown-item" onclick="switchTab('materials');document.getElementById('dropdown-menu').style.display='none'"><img class="nav-icon" src="/icons/MATERIALS.svg" alt=""> <span data-t-id="STUDIO MATERIALS" data-t-en="STUDIO MATERIALS">STUDIO MATERIALS</span></div>
         <div class="dropdown-item" onclick="switchTab('vengine');document.getElementById('dropdown-menu').style.display='none'">🔗 <span data-t-id="V-ENGINE" data-t-en="V-ENGINE">V-ENGINE</span></div>
         <div class="dropdown-item" onclick="switchTab('api');document.getElementById('dropdown-menu').style.display='none'">📡 <span data-t-id="DOKUMENTASI API" data-t-en="API DOCS">API DOCS</span></div>
+        <div class="dropdown-item" onclick="openApiKeysModal();document.getElementById('dropdown-menu').style.display='none'">🔑 <span data-t-id="MY API KEYS" data-t-en="MY API KEYS">MY API KEYS</span></div>
       </div>
     </div>
   </div>
@@ -4369,6 +4396,110 @@ function openDiscordModal(){
 function closeDiscordModal(){
   document.getElementById('discord-modal').style.display = 'none';
 }
+
+function openApiKeysModal(){
+  document.getElementById('apikeys-modal').style.display = 'flex';
+  loadApiKeys();
+  renderScopeCheckboxes();
+}
+function closeApiKeysModal(){
+  document.getElementById('apikeys-modal').style.display = 'none';
+}
+
+async function loadApiKeys(){
+  const list = document.getElementById('apikeys-list');
+  list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Loading...</div>';
+  try{
+    const res = await fetch(`${BASE}/api/admin/keys`, { headers: oauthAuthHeaders(), credentials: 'include' });
+    if(res.status === 401){
+      list.innerHTML = '<div style="text-align:center;color:var(--red);padding:20px">Please login first</div>';
+      return;
+    }
+    const data = await res.json();
+    renderApiKeys(data.keys || []);
+  }catch(e){
+    list.innerHTML = '<div style="text-align:center;color:var(--red);padding:20px">Error loading keys</div>';
+  }
+}
+
+function renderApiKeys(keys){
+  const list = document.getElementById('apikeys-list');
+  if(keys.length === 0){
+    list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">No API keys yet. Create one below.</div>';
+    return;
+  }
+  list.innerHTML = keys.map(k => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px">
+      <div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:4px">${k.key_id}</div>
+        <div style="font-size:11px;color:var(--muted)">${k.scopes.join(', ')}</div>
+        <div style="font-size:10px;color:var(--gray)">Created: ${new Date(k.created*1000).toLocaleString()}</div>
+      </div>
+      <button class="modal-btn modal-btn-secondary" onclick="revokeApiKey('${k.key_id}')" style="font-size:7px;padding:6px 12px">Revoke</button>
+    </div>
+  `).join('');
+}
+
+function renderScopeCheckboxes(){
+  const container = document.getElementById('scope-checkboxes');
+  const scopes = ["catalog", "avatar", "audio", "model", "image", "admin"];
+  container.innerHTML = scopes.map(s => `
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--white)">
+      <input type="checkbox" value="${s}" style="accent-color:var(--accent)"> ${s}
+    </label>
+  `).join('');
+}
+
+async function createApiKey(){
+  const checkboxes = document.querySelectorAll('#scope-checkboxes input:checked');
+  const scopes = Array.from(checkboxes).map(cb => cb.value);
+  if(scopes.length === 0){
+    alert('Select at least one scope');
+    return;
+  }
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  try{
+    const res = await fetch(`${BASE}/api/admin/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...oauthAuthHeaders() },
+      credentials: 'include',
+      body: JSON.stringify({ scopes })
+    });
+    const data = await res.json();
+    if(res.ok){
+      alert('API Key created! Save it now:\n\n' + data.key);
+      loadApiKeys();
+    }else{
+      alert('Error: ' + (data.error || 'Unknown error'));
+    }
+  }catch(e){
+    alert('Error: ' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = '⚡ <span data-t-id="CREATE KEY" data-t-en="CREATE KEY">CREATE KEY</span>';
+  }
+}
+
+async function revokeApiKey(keyId){
+  if(!confirm('Revoke this API key?')) return;
+  try{
+    const res = await fetch(`${BASE}/api/admin/keys/${keyId}`, {
+      method: 'DELETE',
+      headers: oauthAuthHeaders(),
+      credentials: 'include'
+    });
+    if(res.ok){
+      loadApiKeys();
+    }else{
+      alert('Error revoking key');
+    }
+  }catch(e){
+    alert('Error: ' + e.message);
+  }
+}
+
 window.onerror = function(msg,src,line,col,err){
   alert('JS ERROR: '+msg+' line:'+line);
 };
