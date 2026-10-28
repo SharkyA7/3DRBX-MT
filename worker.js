@@ -26,15 +26,15 @@ const CACHEABLE_PATHS = new Set([
 // asset bytes above, the catalog changes -- new items, new sort order -- so this
 // is cached for minutes, not days. path -> TTL in seconds.
 const SHORT_TTL_PATHS = new Map([
-  ["/api/catalog/browse", 300],      // marketplace search pages
-  ["/api/catalog/items-meta", 600],  // Roblox's name + thumbnail for a list of item IDs
+  ["/api/catalog/browse", 60 * 30],      // marketplace search pages (30 min)
+  ["/api/catalog/items-meta", 60 * 30],  // Roblox's name + thumbnail for a list of item IDs (30 min)
 ]);
 
 // Catalog downloads (ZIP / BVH / GLB). path -> the ONLY query params that reach
 // the backend and the cache key. Anything else is dropped, so junk params can't
 // be used to dodge the cache. Deliberately NOT here: avatar downloads (an avatar
 // changes), /api/v2/model/download (models get new versions) and item-batch (POST).
-const ZIP_TTL_SECONDS = 60 * 60 * 24; // 24h
+const ZIP_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 const ZIP_PATHS = new Map([
   ["/api/v2/item", ["id", "format", "name"]],
   ["/api/animation/download-full", ["asset_id", "format"]],
@@ -83,11 +83,10 @@ const BROWSE_PARAMS = ["q", "category", "sub", "sort", "cursor"];
 // cache backed by.
 const BACKEND_ORIGIN = "https://getrbx3d.qzz.io";
 
-// 7 days: long enough to eliminate the overwhelming majority of re-fetches for
-// popular assets, short enough that anything wrongly cached (a transient
-// Roblox-side error slipping through, say) ages out on its own without needing
-// a manual purge.
-const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
+// 30 days: Roblox asset IDs are immutable — mesh/texture bytes never change once
+// uploaded. 30 days eliminates re-fetches for popular assets; any wrongly cached
+// error ages out without manual purge.
+const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days (immutable assets)
 
 // items-meta: the same set of IDs always gets the same cache entry, whatever
 // order they were asked in. The page matches results by "type:id", not by
