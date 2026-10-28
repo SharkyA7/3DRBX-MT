@@ -1078,7 +1078,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       Kalau kamu udah nyaman dengan limit yang ada sekarang, klik <strong>Lanjutkan</strong> aja. Happy creating! 🎨
     </div>
     <div class="nudge-actions">
-      <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/login'">🔑 Login dengan Roblox</button>
+      <button class="nudge-btn-login" onclick="localStorage.setItem('rbx3d_nudge_dismissed','1');location.href='/auth/roblox'">🔑 Login dengan Roblox</button>
       <button class="nudge-btn-continue" onclick="closeNudge()">Lanjutkan Tanpa Login</button>
     </div>
   </div>
@@ -1090,7 +1090,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
     <div class="nudge-title" id="oauth-popup-title"></div>
     <div class="nudge-body" id="oauth-popup-body"></div>
     <div class="nudge-actions">
-      <button class="nudge-btn-login" id="oauth-popup-retry" style="display:none" onclick="location.href='/auth/login'">🔑 <span data-t-id="COBA LOGIN LAGI" data-t-en="TRY LOGIN AGAIN">COBA LOGIN LAGI</span></button>
+      <button class="nudge-btn-login" id="oauth-popup-retry" style="display:none" onclick="location.href='/auth/roblox'">🔑 <span data-t-id="COBA LOGIN LAGI" data-t-en="TRY LOGIN AGAIN">COBA LOGIN LAGI</span></button>
       <button class="nudge-btn-continue" id="oauth-popup-close" onclick="closeOauthPopup()"><span data-t-id="Tutup" data-t-en="Close">Tutup</span></button>
     </div>
   </div>
@@ -1151,7 +1151,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
     <div class="modal-scan"></div>
     <div class="modal-footer">
       <button class="modal-btn modal-btn-primary" onclick="closeModal()" data-i18n="btn_understand">✓ MENGERTI, LANJUTKAN</button>
-      <button class="modal-btn modal-btn-login" onclick="closeModal();window.location.href='/auth/login'" data-i18n="btn_login">🔑 LOGIN DENGAN ROBLOX (OPSIONAL)</button>
+      <button class="modal-btn modal-btn-login" onclick="closeModal();window.location.href='/auth/roblox'" data-i18n="btn_login">🔑 LOGIN DENGAN ROBLOX (OPSIONAL)</button>
       <button class="modal-btn modal-btn-secondary" onclick="window.open('https://github.com/SharkyA7/Roblox-downloader-backend','_blank')" data-i18n="btn_github">↗ LIHAT SOURCE CODE</button>
     </div>
   </div>
@@ -1187,7 +1187,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <button class="topbar-lang-btn active" id="topbar-lang-id" onclick="setGlobalLang('id')">ID</button>
       <button class="topbar-lang-btn" id="topbar-lang-en" onclick="setGlobalLang('en')">EN</button>
     </div>
-    <a href="/auth/login" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(80,232,244,.08);border:1px solid rgba(80,232,244,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(80,232,244,.15)'" onmouseout="this.style.background='rgba(80,232,244,.08)'">🔑 Login with Roblox</a>
+    <a href="/auth/roblox" id="btn-login-header" style="display:inline-flex;align-items:center;gap:6px;background:rgba(80,232,244,.08);border:1px solid rgba(80,232,244,.25);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.background='rgba(80,232,244,.15)'" onmouseout="this.style.background='rgba(80,232,244,.08)'">🔑 Login with Roblox</a>
     <a href="https://github.com/SharkyA7/Roblox-downloader-backend" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--gray2);color:var(--gray);font-family:'Share Tech Mono',monospace;font-size:10px;padding:7px 16px;border-radius:20px;text-decoration:none;transition:all .2s" onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--gray)'">↗ GitHub</a>
   </div>
   <div class="scan" style="margin-top:16px"></div>
@@ -1499,7 +1499,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <div style="font-size:11px;color:var(--gray);line-height:1.7;margin-bottom:12px">
         <span data-t-id="Kamu bisa menyusun katalog dan memuat kode publik tanpa login. Login hanya dibutuhkan untuk MENYIMPAN katalog dan membuat kode. Daftar itemmu tidak hilang saat login." data-t-en="You can build a catalog and load public codes without logging in. Login is only needed to SAVE a catalog and get a code. Your item list is kept while you log in.">Kamu bisa menyusun katalog dan memuat kode publik tanpa login. Login hanya dibutuhkan untuk MENYIMPAN katalog dan membuat kode. Daftar itemmu tidak hilang saat login.</span>
       </div>
-      <button class="btn" type="button" onclick="location.href='/auth/login'">🔑 <span data-t-id="LOGIN DENGAN ROBLOX" data-t-en="LOG IN WITH ROBLOX">LOGIN DENGAN ROBLOX</span></button>
+      <button class="btn" type="button" onclick="location.href='/auth/roblox'">🔑 <span data-t-id="LOGIN DENGAN ROBLOX" data-t-en="LOG IN WITH ROBLOX">LOGIN DENGAN ROBLOX</span></button>
     </div>
 
     <!-- Builder -->
