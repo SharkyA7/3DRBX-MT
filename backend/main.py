@@ -1636,6 +1636,28 @@ def auth_logout():
     return jsonify({"success": True})
 
 
+def get_current_user_id():
+    """Get user_id from session or Bearer token (OAuth). Returns (user_id, error)."""
+    # Check session first
+    if "session_id" in session and session["session_id"] in USER_SESSIONS:
+        return USER_SESSIONS[session["session_id"]]["user_id"], None
+
+    # Check Bearer token (Roblox OAuth access token)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            resp = requests.get(ROBLOX_USER_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                user_id = data.get("sub") or data.get("id")
+                if user_id:
+                    return str(user_id), None
+        except Exception:
+            pass
+    return None, "Authentication required"
+
+
 # ── API KEY MANAGEMENT ────────────────────────────────────────────────
 
 VALID_SCOPES = ["catalog", "avatar", "audio", "model", "image", "admin"]
@@ -1643,8 +1665,9 @@ VALID_SCOPES = ["catalog", "avatar", "audio", "model", "image", "admin"]
 @app.post("/api/admin/keys")
 def create_api_key():
     """Create a new API key with specified scopes."""
-    if "user_id" not in session:
-        return jsonify({"error": "Authentication required"}), 401
+    user_id, error = get_current_user_id()
+    if error:
+        return jsonify({"error": error}), 401
 
     data = request.get_json(silent=True) or {}
     scopes = data.get("scopes", [])
@@ -1656,7 +1679,6 @@ def create_api_key():
     if invalid:
         return jsonify({"error": f"Invalid scopes: {invalid}"}), 400
 
-    user_id = session["user_id"]
     key_id, raw_key = generate_api_key(scopes)
     API_KEYS[key_id]["user_id"] = user_id
 
@@ -1671,10 +1693,10 @@ def create_api_key():
 @app.get("/api/admin/keys")
 def list_api_keys():
     """List all API keys for current user."""
-    if "user_id" not in session:
-        return jsonify({"error": "Authentication required"}), 401
+    user_id, error = get_current_user_id()
+    if error:
+        return jsonify({"error": error}), 401
 
-    user_id = session["user_id"]
     user_keys = []
     for key_id, data in API_KEYS.items():
         if data.get("user_id") == user_id:
@@ -1690,10 +1712,10 @@ def list_api_keys():
 @app.delete("/api/admin/keys/<key_id>")
 def revoke_api_key(key_id):
     """Revoke an API key."""
-    if "user_id" not in session:
-        return jsonify({"error": "Authentication required"}), 401
+    user_id, error = get_current_user_id()
+    if error:
+        return jsonify({"error": error}), 401
 
-    user_id = session["user_id"]
     if key_id in API_KEYS and API_KEYS[key_id].get("user_id") == user_id:
         del API_KEYS[key_id]
         return jsonify({"success": True})
