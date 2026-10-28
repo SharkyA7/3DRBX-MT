@@ -5388,7 +5388,18 @@ def model_texture():
 
 @app.get("/api/v2/model/download")
 def model_download():
-    """Download raw .rbxm file langsung dari Roblox - no limit, no conversion."""
+    """Download raw .rbxm file langsung dari Roblox - no limit, no conversion.
+
+    DISABLED BY DEFAULT. This relays the unmodified bytes of any Roblox asset ID
+    (whatever that asset really is) as application/octet-stream from our domain.
+    Third-party models can carry scripts that antivirus/Safe Browsing flags, which
+    can get the domain marked as hosting harmful downloads. Set the env var
+    MODEL_RBXM_DOWNLOAD=1 to turn it back on (and re-enable the button in index.html)."""
+    if os.environ.get("MODEL_RBXM_DOWNLOAD") != "1":
+        resp = jsonify({"error": "Download RBXM sementara dinonaktifkan. / RBXM download is temporarily disabled."})
+        resp.status_code = 410
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     aid = request.args.get("id", "")
     if not aid:
         return jsonify({"error": "id required"}), 400
