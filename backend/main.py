@@ -2739,9 +2739,12 @@ def frontend():
     maintenance = get_maintenance_state()
     if maintenance:
         mp = os.path.join(base,"maintenance.html")
-        if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html"}
+        # 503 is never cached, and Retry-After tells crawlers (Googlebot) this is temporary.
+        if os.path.exists(mp): return open(mp).read(),503,{"Content-Type":"text/html","Cache-Control":"no-store","Retry-After":"300"}
     p = os.path.join(base,"index.html")
-    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html"}
+    # s-maxage=30: Vercel's CDN reuses the page for 30s, so most visits never run the
+    # function or the Supabase maintenance lookup. A maintenance toggle shows within ~30s.
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html","Cache-Control":"public, s-maxage=30"}
     return "<h1>Roblox Downloader</h1>"
 
 @app.get("/debug/maintenance")
@@ -3032,13 +3035,25 @@ def _fetch_asset_mesh(file_id, s, known_name=None):
     mtl_fixed = fix_mtl_textures(mtl_raw, tex_hashes, tex_names)
     return item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls
 
+class _PackageFiles(list):
+    """The files list from _fetch_asset_package, plus an .incomplete flag that is set when a
+    texture download failed for a TRANSIENT reason (timeout/network error, HTTP 429/408/5xx).
+    Permanent answers (404/403 ...) are not flagged: the asset really has no such texture.
+    Callers that cache the result use the flag to avoid pinning a texture-less ZIP."""
+    incomplete = False
+
+
+def _is_transient_status(code):
+    return code == 429 or code == 408 or code >= 500
+
+
 def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
     """Like _fetch_asset_mesh, but also downloads texture bytes and returns everything
     as plain in-memory data — (item_name, safe_name, files:[(filename, content), ...]).
     Does NO zipfile I/O, so it's safe to call concurrently from a worker thread; the
     caller writes the returned files into the ZIP afterwards on the main thread."""
     item_name, safe_name, obj_data, mtl_fixed, tex_names, tex_urls = _fetch_asset_mesh(file_id, s, known_name=known_name)
-    files = [(f"{safe_name}.obj", obj_data), (f"{safe_name}.mtl", mtl_fixed)]
+    files = _PackageFiles([(f"{safe_name}.obj", obj_data), (f"{safe_name}.mtl", mtl_fixed)])
     mtl_index = 1  # position of the .mtl entry in `files` -- rewritten below if a real ColorMap is found
     if include_textures:
         for i, tex_url in enumerate(tex_urls):
@@ -3046,7 +3061,10 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
                 tb = s.get(tex_url, timeout=20)
                 if tb.status_code == 200:
                     files.append((tex_names[i], tb.content))
-            except: pass
+                elif _is_transient_status(tb.status_code):
+                    files.incomplete = True
+            except Exception:
+                files.incomplete = True
 
         # ALSO fetch the classic clothing textures directly off the raw asset XML —
         # these are separate, both-real images from the 3D-thumbnail-manifest texture
@@ -3058,7 +3076,10 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
         _CLOTHING_TEX_LABELS = {"colormap": "ColorMap", "decal": "Decal", "template": "RobloxTemplate"}
         wired_main_texture = False  # True once ColorMap (or, failing that, Template) has been wired into the .mtl
         try:
-            raw = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=30).content
+            raw_resp = s.get(f"https://assetdelivery.roblox.com/v1/asset/?id={file_id}", timeout=30)
+            if _is_transient_status(raw_resp.status_code):
+                files.incomplete = True
+            raw = raw_resp.content
             for tex in _resolve_all_clothing_textures(raw):
                 label = _CLOTHING_TEX_LABELS.get(tex["kind"], tex["kind"])
                 tex_filename = f"{safe_name}_{label}.png"
@@ -3082,9 +3103,12 @@ def _fetch_asset_package(file_id, s, known_name=None, include_textures=True):
                         # UVs (they are baked for the 3D-thumbnail texture, _TexN.png),
                         # so using it renders black / misaligned. It stays in the ZIP
                         # as an extra reference file only.
-                except: pass
+                        elif _is_transient_status(tb.status_code):
+                            files.incomplete = True
+                except Exception:
+                    files.incomplete = True
         except Exception:
-            pass
+            files.incomplete = True
     return item_name, safe_name, files
 
 def _write_package_to_zip(zf, folder, files):
@@ -4277,6 +4301,7 @@ def item_v2():
         is_bundle = False
         is_image = False
         bundle_results = []
+        pkg_incomplete = False   # a texture failed transiently -> don't let any cache keep this ZIP
 
         # Same content-based animation check as catalog_download_full(): catches a
         # raw Animation Asset ID directly (not part of a Bundle), which the
@@ -4305,6 +4330,7 @@ def item_v2():
             # via map_Kd regardless of format, so skipping the fetch here just left OBJ
             # downloads pointing at a texture file that was never in the ZIP.
             item_name, safe_name, files = _fetch_asset_package(file_id, s, known_name=known_name, include_textures=True)
+            pkg_incomplete = bool(getattr(files, "incomplete", False))
         except Exception as e:
             err = str(e)
             bundle = _resolve_bundle(file_id, s)
@@ -4333,6 +4359,8 @@ def item_v2():
                         try:
                             cname, csafe, cfiles = fut.result()
                             files.extend(cfiles)
+                            if getattr(cfiles, "incomplete", False):
+                                pkg_incomplete = True
                             bundle_results.append((cname, True, None))
                         except Exception as ce:
                             bundle_results.append((f"Asset {cid}", False, str(ce)))
@@ -4387,7 +4415,7 @@ def item_v2():
             headers={"Content-Disposition":content_disposition(f"{fname}")})
         # An incomplete ZIP (a bundle component failed, or an FBX conversion fell back
         # to OBJ) must not be pinned in the Worker/CDN cache -- the next try may be whole.
-        if (is_bundle and any(not r[1] for r in bundle_results)) or fbx_errors:
+        if (is_bundle and any(not r[1] for r in bundle_results)) or fbx_errors or pkg_incomplete:
             resp.headers["Cache-Control"] = "no-store"
         return resp
     except Exception as e: return handle_roblox_error(e, "catalog_item_download")
