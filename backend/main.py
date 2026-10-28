@@ -356,8 +356,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
 
 # ── ROBLOX OAUTH 2.0 CONFIG ─────────────────────────────────────────────
-ROBLOX_CLIENT_ID = os.environ.get("ROBLOX_CLIENT_ID", "5013986189408387471")
-ROBLOX_CLIENT_SECRET = os.environ.get("ROBLOX_CLIENT_SECRET", "")
+ROBLOX_CLIENT_ID = os.environ.get("ROBLOX_OAUTH_CLIENT_ID", "5013986189408387471")
+ROBLOX_CLIENT_SECRET = os.environ.get("ROBLOX_OAUTH_CLIENT_SECRET", "")
 ROBLOX_REDIRECT_URI = os.environ.get("ROBLOX_REDIRECT_URI", "https://3drbx-mt.vercel.app/auth/roblox/callback")
 ROBLOX_AUTH_URL = "https://apis.roblox.com/oauth/v1/authorize"
 ROBLOX_TOKEN_URL = "https://apis.roblox.com/oauth/v1/token"
