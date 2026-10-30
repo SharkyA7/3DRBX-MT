@@ -229,12 +229,19 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
         <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
       </div>
       <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
           <span style="font-size:11px;color:var(--muted)">Overlay:</span>
           <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" style="padding:6px 10px;font-size:11px">None</button>
           <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" style="padding:6px 10px;font-size:11px">Problems</button>
           <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" style="padding:6px 10px;font-size:11px">Texel Density</button>
           <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" style="padding:6px 10px;font-size:11px">Overlap</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">BG:</span>
+          <button class="btn-outline active" id="uv-2d-bg-black" data-bg="black" style="padding:6px 10px;font-size:11px" title="Black background">⬛ Black</button>
+          <button class="btn-outline" id="uv-2d-bg-white" data-bg="white" style="padding:6px 10px;font-size:11px" title="White background">⬜ White</button>
+          <button class="btn-outline" id="uv-2d-bg-transparent" data-bg="transparent" style="padding:6px 10px;font-size:11px" title="Transparent background">☐ Transparent</button>
+          <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" style="padding:6px 10px;font-size:11px" title="Transparent with dark grid">☑ Trans+Dark</button>
         </div>
       </div>
       <div class="warn-box">
@@ -281,6 +288,7 @@ let analysisResults = null;
 let analysisAbort = false;
 let current3DMode = 'checker'; // 'checker' | 'real' | 'wire' | 'problems' | 'texel' | 'overlap'
 let current2DOverlay = 'none'; // 'none' | 'problems' | 'texel' | 'overlap'
+let current2DBg = 'black'; // 'black' | 'white' | 'transparent' | 'transdark'
 let problemFilters = { flipped: true, zeroArea: true, outside: true };
 let texelNormalizeGlobal = true;
 let texelTextureSize = 1024;
@@ -464,6 +472,7 @@ async function handleFile(file){
   uv2DBaseCanvas = null;
   current3DMode = 'checker';
   current2DOverlay = 'none';
+  current2DBg = 'black';
   problemFilters = { flipped: true, zeroArea: true, outside: true };
 
   if(currentRoot){ scene.remove(currentRoot); currentRoot = null; }
@@ -485,6 +494,12 @@ async function handleFile(file){
   document.getElementById('checker-options-panel').style.display = 'block';
   document.getElementById('problems-panel').style.display = 'none';
   document.getElementById('texel-panel').style.display = 'none';
+  document.getElementById('overlap-panel').style.display = 'none';
+  document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.add('active'));
+  document.querySelectorAll('[data-bg]').forEach(btn => btn.classList.toggle('active', btn.dataset.bg === 'black'));
+  document.getElementById('problems-legend').style.display = 'none';
+  document.getElementById('texel-legend').style.display = 'none';
+  document.getElementById('overlap-legend').style.display = 'none';
   document.getElementById('overlap-panel').style.display = 'none';
   document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.add('active'));
   document.getElementById('problems-legend').style.display = 'none';
@@ -1532,6 +1547,15 @@ document.querySelectorAll('[data-overlay]').forEach(btn => {
   });
 });
 
+// 2D Background controls
+document.querySelectorAll('[data-bg]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    current2DBg = btn.dataset.bg;
+    document.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('active', b.dataset.bg === current2DBg));
+    draw2DOverlay();
+  });
+});
+
 function draw2DOverlay() {
   if (!uv2DBaseCanvas || !analysisResults) {
     // Just show base
@@ -1615,8 +1639,47 @@ function draw2DOverlay() {
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
   const canvas = document.getElementById('uv-2d-canvas');
-  if(!canvas.width) return;
-  canvas.toBlob(blob => {
+  if(!canvas.width || !uv2DBaseCanvas) return;
+
+  // Create export canvas with selected background
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = canvas.width;
+  exportCanvas.height = canvas.height;
+  const ctx = exportCanvas.getContext('2d');
+
+  // Apply background
+  if (current2DBg === 'black') {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.drawImage(canvas, 0, 0);
+  } else if (current2DBg === 'white') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ctx.drawImage(canvas, 0, 0);
+  } else if (current2DBg === 'transparent') {
+    // Transparent - just draw the canvas (which has transparent background for the UV layout)
+    ctx.drawImage(canvas, 0, 0);
+  } else if (current2DBg === 'transdark') {
+    // Transparent with dark grid - recreate with dark background + grid
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    // Draw grid
+    const size = exportCanvas.width;
+    ctx.strokeStyle = 'rgba(255,255,255,.08)';
+    ctx.lineWidth = 1;
+    for(let i = 0; i <= 16; i++){
+      const p = (i / 16) * size;
+      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, size - 2, size - 2);
+    // Draw the UV layout on top
+    ctx.drawImage(canvas, 0, 0);
+  }
+
+  exportCanvas.toBlob(blob => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
