@@ -428,6 +428,22 @@ function initScene(){
     st(msg, 'err');
     return;
   }
+
+  // WebGL context loss recovery
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.error('[UV Checker] WebGL context lost');
+    st('✗ WebGL context lost — GPU memory exhausted or driver crash. Try a smaller file or reload.', 'err');
+  }, false);
+
+  canvas.addEventListener('webglcontextrestored', () => {
+    console.log('[UV Checker] WebGL context restored — reinitializing');
+    st('⚠ WebGL restored — please reload the file', 'loading');
+    initScene(); // re-init renderer
+  }, false);
+
+  // Renderer error handling
+  renderer.getContext().getExtension('WEBGL_lose_context'); // ensure extension exists
   const size = wrap.clientWidth;
   renderer.setSize(size, size);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -558,6 +574,11 @@ async function handleFile(file){
 
     const blobUrlMap = {};
     for(const [fname, fblob] of Object.entries(imageFiles)){
+      // Warn about large textures (>2048px typical limit)
+      if (fblob.size > 10 * 1024 * 1024) { // >10MB file
+        console.warn('[UV Checker] Large texture:', fname, (fblob.size/1024/1024).toFixed(1) + 'MB');
+        st(`⚠ Large texture: ${fname} (${(fblob.size/1024/1024).toFixed(1)}MB) — may cause GPU memory issues`, 'loading');
+      }
       const url = URL.createObjectURL(fblob);
       blobUrlMap[fname] = url;
       activeBlobUrls.push(url);
@@ -618,7 +639,8 @@ async function handleFile(file){
     if(uvlessCount === meshCount && meshCount > 0) msg += ' — This model has no UV coordinates.';
     st(msg, uvlessCount > 0 ? 'err' : 'ok');
   }catch(e){
-    st('✗ ' + e.message, 'err');
+    console.error('[UV Checker] File load error:', e);
+    st('✗ ' + e.message + (e.stack ? '\n' + e.stack.split('\n').slice(0,3).join('\n') : ''), 'err');
   }
 }
 
