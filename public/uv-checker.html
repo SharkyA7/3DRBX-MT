@@ -752,8 +752,17 @@ async function runAnalysisIfNeeded(triggerMode) {
   try {
     st('⏳ Analyzing UVs…', 'loading');
 
+    // Progress indicator
+    let analysisProgress = 0;
+    const progressInterval = setInterval(() => {
+      if (analysisResults || analysisAbort) { clearInterval(progressInterval); return; }
+      analysisProgress++;
+      st(`⏳ Analyzing UVs… ${analysisProgress}s`, 'loading');
+    }, 1000);
+
     // Run analysis in chunks to stay responsive
     analysisResults = await analyzeAllMeshesChunked(currentRoot);
+    clearInterval(progressInterval);
 
     if (analysisAbort) return;
 
