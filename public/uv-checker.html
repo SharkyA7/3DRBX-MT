@@ -535,15 +535,21 @@ async function handleFile(file){
     if(lower.endsWith('.zip')){
       st('⏳ Unpacking ZIP…', 'loading');
       const zip = await JSZip.loadAsync(file);
+      const zipContents = [];
       for(const filename of Object.keys(zip.files)){
         const entry = zip.files[filename];
         if(entry.dir) continue;
+        zipContents.push(filename);
         const l = filename.toLowerCase();
         if(l.endsWith('.obj')) objText = await entry.async('text');
         else if(l.endsWith('.mtl')) mtlText = await entry.async('text');
         else if(/\.(png|jpe?g)$/.test(l)) imageFiles[filename.split('/').pop()] = await entry.async('blob');
       }
       if(!objText) throw new Error('This ZIP has no .obj file in it.');
+      // Debug: show what was found in zip
+      console.log('[UV Checker] ZIP contents:', zipContents);
+      console.log('[UV Checker] Found images:', Object.keys(imageFiles));
+      console.log('[UV Checker] Has MTL:', !!mtlText);
     }else if(lower.endsWith('.obj')){
       objText = await file.text();
     }else{
@@ -561,7 +567,7 @@ async function handleFile(file){
     let root;
 
     if(mtlText){
-      st('⏳ Loading material + texture…', 'loading');
+      st(`⏳ Loading material + texture… (MTL + ${Object.keys(imageFiles).length} image${Object.keys(imageFiles).length===1?'':'s'})`, 'loading');
       const manager = new THREE.LoadingManager();
       manager.setURLModifier(url => blobUrlMap[url.split('/').pop()] || url);
 
@@ -609,6 +615,7 @@ async function handleFile(file){
 
     let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded.`;
     if(uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
+    if(uvlessCount === meshCount && meshCount > 0) msg += ' — This model has no UV coordinates.';
     st(msg, uvlessCount > 0 ? 'err' : 'ok');
   }catch(e){
     st('✗ ' + e.message, 'err');
