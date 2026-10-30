@@ -421,9 +421,9 @@ function initScene(){
   try{
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, failIfMajorPerformanceCaveat: false });
   }catch(err){
-    const braveMsg = 'This tool runs 100% locally — zero trackers, no server calls. If using Brave, click the shield icon (top-right) → "Shields down" for this site, then reload.';
+    const braveMsg = 'This tool runs 100% locally — zero trackers, no server calls. If using Brave, try clicking the shield icon (top-right) → "Shields down" for this site, then reload.';
     const msg = isBrave()
-      ? 'WebGL blocked — Brave Shields is likely preventing it. ' + braveMsg
+      ? 'WebGL failed to initialize. ' + braveMsg + ' If Shields is already off, check: hardware acceleration (on), GPU drivers, or try a different browser.'
       : 'WebGL initialization failed. ' + braveMsg + ' Also check: browser privacy extensions, hardware acceleration (on), or try a different browser.';
     st(msg, 'err');
     return;
