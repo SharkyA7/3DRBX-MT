@@ -394,6 +394,13 @@ function createCheckerCanvas(opts = {}) {
   return canvas;
 }
 
+// Brave detection: Shields can block WebGL; we run 100% locally, no trackers
+function isBrave() {
+  return navigator.brave && typeof navigator.brave.isBrave === 'function' ||
+         /brave/i.test(navigator.userAgent) ||
+         (window.navigator.brave !== undefined);
+}
+
 function initScene(){
   const canvas = document.getElementById('uv-canvas');
   const wrap = canvas.parentElement;
@@ -406,7 +413,10 @@ function initScene(){
   try{
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, failIfMajorPerformanceCaveat: false });
   }catch(err){
-    st('WebGL is not supported in this browser/device.', 'err');
+    const msg = isBrave()
+      ? 'WebGL blocked — Brave Shields may be preventing it. This tool runs 100% locally with zero trackers, no server calls. Click the Brave shield icon (top-right) → "Shields down" for this site, then reload.'
+      : 'WebGL is not supported in this browser/device.';
+    st(msg, 'err');
     return;
   }
   const size = wrap.clientWidth;
