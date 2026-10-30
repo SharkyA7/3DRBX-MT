@@ -98,11 +98,121 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       <div class="viewer-hint">drag to orbit · scroll to zoom</div>
     </div>
     <div class="toggle-row">
-      <button class="btn active" id="uv-mode-checker">🏁 UV CHECKER</button>
-      <button class="btn-outline" id="uv-mode-real" style="display:none">🖼 REAL TEXTURE</button>
-      <button class="btn-outline" id="uv-mode-wire">◇ WIREFRAME</button>
-      <button class="btn-outline" id="uv-mode-2d">🗺 LOAD 2D UV MAP</button>
+      <button class="btn active" id="uv-mode-checker" data-mode="checker">🏁 CHECKER</button>
+      <button class="btn-outline" id="uv-mode-real" data-mode="real" style="display:none">🖼 REAL TEXTURE</button>
+      <button class="btn-outline" id="uv-mode-wire" data-mode="wire">◇ WIREFRAME</button>
+      <button class="btn-outline" id="uv-mode-problems" data-mode="problems">⚠ PROBLEMS</button>
+      <button class="btn-outline" id="uv-mode-texel" data-mode="texel">🌡 TEXEL DENSITY</button>
+      <button class="btn-outline" id="uv-mode-overlap" data-mode="overlap">🔴 OVERLAP</button>
+      <button class="btn-outline" id="uv-mode-2d">🗺 2D UV MAP</button>
     </div>
+
+    <!-- Checker Options Panel -->
+    <div id="checker-options-panel" class="legend" style="margin-top:12px;display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <label style="font-size:11px;color:var(--muted)">Grid:</label>
+        <select id="checker-cells" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="8">8</option>
+          <option value="16" selected>16</option>
+          <option value="32">32</option>
+          <option value="64">64</option>
+        </select>
+        <label style="font-size:11px;color:var(--muted)">Pattern:</label>
+        <select id="checker-pattern" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="rainbow" selected>Rainbow</option>
+          <option value="numbered">Numbered</option>
+          <option value="bw">Black-White</option>
+        </select>
+        <label style="font-size:11px;color:var(--muted)">Tex Size:</label>
+        <select id="checker-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="1024" selected>1024</option>
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="checker-glyph" style="width:14px;height:14px;accent-color:var(--accent)"> Glyph
+        </label>
+        <input type="text" id="checker-glyph-char" value="F" maxlength="1" style="width:36px;padding:6px 8px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;text-align:center" placeholder="F">
+      </div>
+      <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
+        ⚠ <b>Visual warning:</b> high grid density (32/64) with rainbow pattern creates dense line patterns that may shimmer. If sensitive, use lower density or black-white pattern.
+      </div>
+    </div>
+
+    <!-- Problems Panel -->
+    <div id="problems-panel" class="legend" style="margin-top:12px;display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--muted)">Show:</span>
+        <button class="btn-outline active" id="prob-filter-flipped" data-filter="flipped" style="padding:6px 10px;font-size:11px">Flipped</button>
+        <button class="btn-outline active" id="prob-filter-zero" data-filter="zeroArea" style="padding:6px 10px;font-size:11px">Zero-Area</button>
+        <button class="btn-outline active" id="prob-filter-outside" data-filter="outside" style="padding:6px 10px;font-size:11px">Outside 0-1</button>
+      </div>
+      <div id="problems-summary" style="font-size:11px;color:var(--muted)"></div>
+      <div id="problems-legend" style="margin-top:8px;display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px">
+          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Flipped</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#FFD166;margin-right:4px;vertical-align:middle"></span>Zero-area</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Outside 0-1</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle;border:1px dashed #fff"></span>No UV</span>
+        </div>
+        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
+          ⚠ <b>Visual warning:</b> problem overlay shows dense triangle patterns that may appear to shimmer. View in short intervals if sensitive.
+        </div>
+      </div>
+    </div>
+
+    <!-- Texel Density Panel -->
+    <div id="texel-panel" class="legend" style="margin-top:12px;display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <label style="font-size:11px;color:var(--muted)">Normalize:</label>
+        <select id="texel-normalize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="global" selected>Global (all meshes)</option>
+          <option value="per-mesh">Per Mesh</option>
+        </select>
+        <label style="font-size:11px;color:var(--muted)">Texture Size:</label>
+        <select id="texel-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="512">512</option>
+          <option value="1024" selected>1024</option>
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
+        </select>
+      </div>
+      <div id="texel-summary" style="font-size:11px;color:var(--muted)"></div>
+      <div id="texel-legend" style="margin-top:8px;display:none">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;align-items:center">
+          <span style="display:inline-block;width:16px;height:12px;background:#0066FF;margin-right:4px;vertical-align:middle"></span><0.5×
+          <span style="display:inline-block;width:16px;height:12px;background:#00FFFF;margin-right:4px;vertical-align:middle"></span>0.5–0.8×
+          <span style="display:inline-block;width:16px;height:12px;background:#00FF66;margin-right:4px;vertical-align:middle"></span>0.8–1.25×
+          <span style="display:inline-block;width:16px;height:12px;background:#FF8800;margin-right:4px;vertical-align:middle"></span>1.25–2×
+          <span style="display:inline-block;width:16px;height:12px;background:#FF0000;margin-right:4px;vertical-align:middle"></span>>2×
+        </div>
+        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
+          ⚠ <b>Visual warning:</b> density heatmap uses color gradients that may trigger sensitivity. View zoomed in on one area at a time.
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlap Panel -->
+    <div id="overlap-panel" class="legend" style="margin-top:12px;display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <label style="font-size:11px;color:var(--muted)">Resolution:</label>
+        <select id="overlap-resolution" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+          <option value="1024" selected>1024²</option>
+          <option value="2048">2048²</option>
+        </select>
+      </div>
+      <div id="overlap-summary" style="font-size:11px;color:var(--muted)"></div>
+      <div id="overlap-legend" style="margin-top:8px;display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;align-items:center">
+          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Overlap (red)</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Clean</span>
+        </div>
+        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
+          <b>Note:</b> Stacked/mirrored islands overlap on purpose — this is expected. Results are approximate at the chosen raster resolution. Only tile (0,0) is analyzed.
+        </div>
+      </div>
+    </div>
+
     <div class="legend">
       Each square is one UV tile. <b>Even, unstretched squares</b> = clean UVs. <b>Squares that stretch, squish, or blur</b> mark distorted UVs on that part of the mesh. The colored corner labels help spot mirrored or rotated UV shells. Meshes with <b>no UV data at all</b> render solid <span style="color:var(--red)">red</span>.
     </div>
@@ -117,6 +227,15 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       </div>
       <div class="toggle-row">
         <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
+      </div>
+      <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">Overlay:</span>
+          <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" style="padding:6px 10px;font-size:11px">None</button>
+          <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" style="padding:6px 10px;font-size:11px">Problems</button>
+          <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" style="padding:6px 10px;font-size:11px">Texel Density</button>
+          <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" style="padding:6px 10px;font-size:11px">Overlap</button>
+        </div>
       </div>
       <div class="warn-box">
         ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
@@ -150,39 +269,78 @@ let checkerTexture = null;
 let wireframeOn = false;
 let activeBlobUrls = [];
 
+// Feature state
+let checkerOptions = {
+  cells: 16,
+  pattern: 'rainbow', // 'rainbow' | 'numbered' | 'bw'
+  texSize: 1024,
+  showGlyph: false,
+  glyphChar: 'F'
+};
+let analysisResults = null;
+let analysisAbort = false;
+let current3DMode = 'checker'; // 'checker' | 'real' | 'wire' | 'problems' | 'texel' | 'overlap'
+let current2DOverlay = 'none'; // 'none' | 'problems' | 'texel' | 'overlap'
+let problemFilters = { flipped: true, zeroArea: true, outside: true };
+let texelNormalizeGlobal = true;
+let texelTextureSize = 1024;
+let overlapResolution = 1024;
+
 function st(msg, kind){
   const box = document.getElementById('uv-status');
   box.className = 'status-box ' + kind;
   box.querySelector('span').textContent = msg;
 }
 
-// Procedural UV checker: a rainbow-hued grid (not just black/white) so both
-// STRETCHING (uneven squares) and ORIENTATION (mirroring/rotation, which a
-// plain 2-color checker can't reveal but a colored one does) are visible at a
-// glance. Corner labels pin down which way is (0,0)/(1,1) in UV space.
-function createCheckerCanvas(size = 1024, cells = 16){
+// Procedural UV checker: supports multiple patterns, densities, sizes, optional glyph
+function createCheckerCanvas(opts = {}) {
+  const size = opts.texSize || 1024;
+  const cells = opts.cells || 16;
+  const pattern = opts.pattern || 'rainbow';
+  const showGlyph = opts.showGlyph || false;
+  const glyphChar = opts.glyphChar || 'F';
+
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   const cell = size / cells;
 
-  for(let y = 0; y < cells; y++){
-    for(let x = 0; x < cells; x++){
-      const hue = ((x + y) * (360 / cells)) % 360;
-      const dark = (x + y) % 2 === 0;
-      ctx.fillStyle = `hsl(${hue} 60% ${dark ? 32 : 68}%)`;
-      ctx.fillRect(x * cell, y * cell, cell, cell);
+  // Pre-compute pattern colors
+  const cellColors = [];
+  for (let y = 0; y < cells; y++) {
+    for (let x = 0; x < cells; x++) {
+      let fillStyle;
+      if (pattern === 'rainbow') {
+        const hue = ((x + y) * (360 / cells)) % 360;
+        const dark = (x + y) % 2 === 0;
+        fillStyle = `hsl(${hue} 60% ${dark ? 32 : 68}%)`;
+      } else if (pattern === 'bw') {
+        const dark = (x + y) % 2 === 0;
+        fillStyle = dark ? '#1a1a1a' : '#e0e0e0';
+      } else { // 'numbered'
+        const dark = (x + y) % 2 === 0;
+        fillStyle = dark ? '#2a2a2a' : '#d0d0d0';
+      }
+      cellColors.push({ x, y, fillStyle });
     }
   }
 
-  ctx.strokeStyle = 'rgba(0,0,0,.35)';
+  // Draw cells
+  for (const c of cellColors) {
+    ctx.fillStyle = c.fillStyle;
+    ctx.fillRect(c.x * cell, c.y * cell, cell, cell);
+  }
+
+  // Grid lines
+  ctx.strokeStyle = pattern === 'bw' ? 'rgba(0,0,0,.5)' : 'rgba(0,0,0,.35)';
   ctx.lineWidth = Math.max(1, size / 512);
-  for(let i = 0; i <= cells; i++){
+  for (let i = 0; i <= cells; i++) {
     ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(size, i * cell); ctx.stroke();
   }
 
-  ctx.fillStyle = '#fff';
+  // Corner labels
+  ctx.fillStyle = pattern === 'bw' ? '#fff' : '#fff';
   ctx.font = `bold ${Math.round(size * 0.032)}px monospace`;
   ctx.textBaseline = 'top'; ctx.textAlign = 'left';
   ctx.fillText('(0,0)', 10, 10);
@@ -192,6 +350,38 @@ function createCheckerCanvas(size = 1024, cells = 16){
   ctx.fillText('(1,1)', size - 10, size - 10);
   ctx.textAlign = 'left';
   ctx.fillText('(0,1)', 10, size - 10);
+
+  // Optional asymmetric glyph in each cell (helps spot mirroring)
+  if (showGlyph && glyphChar) {
+    ctx.fillStyle = pattern === 'bw' ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)';
+    ctx.font = `bold ${Math.round(cell * 0.6)}px monospace`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    for (let y = 0; y < cells; y++) {
+      for (let x = 0; x < cells; x++) {
+        // Alternate orientation per cell to make mirroring obvious
+        const flip = (x + y) % 2 === 0;
+        ctx.save();
+        ctx.translate((x + 0.5) * cell, (y + 0.5) * cell);
+        if (flip) ctx.scale(-1, 1);
+        ctx.fillText(glyphChar, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Numbered grid: print cell coordinates
+  if (pattern === 'numbered') {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.font = `${Math.max(8, Math.round(cell * 0.25))}px monospace`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    for (let y = 0; y < cells; y++) {
+      for (let x = 0; x < cells; x++) {
+        ctx.fillText(`${x},${y}`, x * cell + 3, y * cell + 3);
+      }
+    }
+  }
 
   return canvas;
 }
@@ -223,9 +413,18 @@ function initScene(){
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  checkerTexture = new THREE.CanvasTexture(createCheckerCanvas());
-  checkerTexture.wrapS = checkerTexture.wrapT = THREE.RepeatWrapping; // UVs outside 0-1 visibly tile instead of silently clamping
-  if(THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
+  function updateCheckerTexture() {
+    if (checkerTexture) checkerTexture.dispose();
+    checkerTexture = new THREE.CanvasTexture(createCheckerCanvas(checkerOptions));
+    checkerTexture.wrapS = checkerTexture.wrapT = THREE.RepeatWrapping;
+    checkerTexture.generateMipmaps = true;
+    checkerTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    checkerTexture.magFilter = THREE.LinearFilter;
+    checkerTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+
+  updateCheckerTexture();
 
   (function animate(){
     requestAnimationFrame(animate);
@@ -259,14 +458,38 @@ function frameObject(object){
 async function handleFile(file){
   if(!file) return;
 
+  // Cancel any ongoing analysis
+  analysisAbort = true;
+  analysisResults = null;
+  uv2DBaseCanvas = null;
+  current3DMode = 'checker';
+  current2DOverlay = 'none';
+  problemFilters = { flipped: true, zeroArea: true, outside: true };
+
   if(currentRoot){ scene.remove(currentRoot); currentRoot = null; }
   activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
   activeBlobUrls = [];
   document.getElementById('viewer-section').style.display = 'none';
   document.getElementById('uv-2d-section').style.display = 'none';
   document.getElementById('uv-mode-2d').classList.remove('active');
+  document.getElementById('uv-2d-overlay-controls').style.display = 'none';
   wireframeOn = false;
   document.getElementById('uv-mode-wire').classList.remove('active');
+
+  // Reset all mode buttons
+  document.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.classList.contains('btn')) btn.classList.remove('btn-outline');
+  });
+  document.getElementById('uv-mode-checker').classList.add('active');
+  document.getElementById('checker-options-panel').style.display = 'block';
+  document.getElementById('problems-panel').style.display = 'none';
+  document.getElementById('texel-panel').style.display = 'none';
+  document.getElementById('overlap-panel').style.display = 'none';
+  document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.add('active'));
+  document.getElementById('problems-legend').style.display = 'none';
+  document.getElementById('texel-legend').style.display = 'none';
+  document.getElementById('overlap-legend').style.display = 'none';
 
   st('⏳ Reading file…', 'loading');
 
@@ -358,34 +581,507 @@ async function handleFile(file){
   }
 }
 
-document.getElementById('uv-mode-checker').addEventListener('click', () => {
-  if(!currentRoot) return;
+function set3DMode(mode) {
+  if (!currentRoot) return;
+  current3DMode = mode;
   wireframeOn = false;
-  document.getElementById('uv-mode-wire').classList.remove('active');
-  currentRoot.traverse(child => {
-    if(child.isMesh){ child.material.map = checkerTexture; child.material.color.set(0xffffff); child.material.wireframe = false; child.material.needsUpdate = true; }
+
+  // Update button states
+  document.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+    if (btn.classList.contains('btn')) {
+      btn.classList.toggle('btn-outline', btn.dataset.mode !== mode);
+    }
   });
-  document.getElementById('uv-mode-checker').classList.add('active');
-  document.getElementById('uv-mode-real').classList.remove('active');
+
+  // Show/hide option panels
+  document.getElementById('checker-options-panel').style.display = mode === 'checker' ? 'block' : 'none';
+  document.getElementById('problems-panel').style.display = mode === 'problems' ? 'block' : 'none';
+  document.getElementById('texel-panel').style.display = mode === 'texel' ? 'block' : 'none';
+  document.getElementById('overlap-panel').style.display = mode === 'overlap' ? 'block' : 'none';
+
+  // Apply mode
+  if (mode === 'checker') {
+    currentRoot.traverse(child => {
+      if (child.isMesh) {
+        child.material.map = checkerTexture;
+        child.material.color.set(0xffffff);
+        child.material.wireframe = false;
+        child.material.vertexColors = false;
+        child.material.needsUpdate = true;
+      }
+    });
+  } else if (mode === 'real') {
+    currentRoot.traverse(child => {
+      if (child.isMesh) {
+        child.material.map = child.userData.realMap;
+        child.material.color.set(0xffffff);
+        child.material.wireframe = false;
+        child.material.vertexColors = false;
+        child.material.needsUpdate = true;
+      }
+    });
+  } else if (mode === 'wire') {
+    wireframeOn = true;
+    currentRoot.traverse(child => { if (child.isMesh) child.material.wireframe = true; });
+  } else if (mode === 'problems' || mode === 'texel' || mode === 'overlap') {
+    // These modes need analysis results
+    runAnalysisIfNeeded(mode);
+  }
+}
+
+document.querySelectorAll('[data-mode]').forEach(btn => {
+  btn.addEventListener('click', () => set3DMode(btn.dataset.mode));
 });
 
-document.getElementById('uv-mode-real').addEventListener('click', () => {
-  if(!currentRoot) return;
-  wireframeOn = false;
-  document.getElementById('uv-mode-wire').classList.remove('active');
-  currentRoot.traverse(child => {
-    if(child.isMesh){ child.material.map = child.userData.realMap; child.material.color.set(0xffffff); child.material.wireframe = false; child.material.needsUpdate = true; }
-  });
-  document.getElementById('uv-mode-real').classList.add('active');
-  document.getElementById('uv-mode-checker').classList.remove('active');
+// Keep old IDs working for backward compat
+document.getElementById('uv-mode-checker').addEventListener('click', () => set3DMode('checker'));
+document.getElementById('uv-mode-real').addEventListener('click', () => set3DMode('real'));
+document.getElementById('uv-mode-wire').addEventListener('click', () => set3DMode('wire'));
+document.getElementById('uv-mode-problems').addEventListener('click', () => set3DMode('problems'));
+document.getElementById('uv-mode-texel').addEventListener('click', () => set3DMode('texel'));
+document.getElementById('uv-mode-overlap').addEventListener('click', () => set3DMode('overlap'));
+
+// Checker options handlers
+document.getElementById('checker-cells').addEventListener('change', e => {
+  checkerOptions.cells = parseInt(e.target.value);
+  if (current3DMode === 'checker') updateCheckerTexture();
+});
+document.getElementById('checker-pattern').addEventListener('change', e => {
+  checkerOptions.pattern = e.target.value;
+  if (current3DMode === 'checker') updateCheckerTexture();
+});
+document.getElementById('checker-texsize').addEventListener('change', e => {
+  checkerOptions.texSize = parseInt(e.target.value);
+  if (current3DMode === 'checker') updateCheckerTexture();
+});
+document.getElementById('checker-glyph').addEventListener('change', e => {
+  checkerOptions.showGlyph = e.target.checked;
+  if (current3DMode === 'checker') updateCheckerTexture();
+});
+document.getElementById('checker-glyph-char').addEventListener('input', e => {
+  checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F';
+  if (current3DMode === 'checker') updateCheckerTexture();
 });
 
-document.getElementById('uv-mode-wire').addEventListener('click', () => {
-  if(!currentRoot) return;
-  wireframeOn = !wireframeOn;
-  currentRoot.traverse(child => { if(child.isMesh) child.material.wireframe = wireframeOn; });
-  document.getElementById('uv-mode-wire').classList.toggle('active', wireframeOn);
+// Problem filters
+document.querySelectorAll('[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.filter;
+    problemFilters[filter] = !problemFilters[filter];
+    btn.classList.toggle('active', problemFilters[filter]);
+    if (current3DMode === 'problems' || current2DOverlay === 'problems') {
+      applyAnalysisToScene();
+      if (current2DOverlay === 'problems') draw2DOverlay();
+    }
+  });
 });
+
+// Texel options
+document.getElementById('texel-normalize').addEventListener('change', e => {
+  texelNormalizeGlobal = e.target.value === 'global';
+  if (current3DMode === 'texel' || current2DOverlay === 'texel') {
+    applyAnalysisToScene();
+    if (current2DOverlay === 'texel') draw2DOverlay();
+  }
+  updateTexelSummary();
+});
+document.getElementById('texel-texsize').addEventListener('change', e => {
+  texelTextureSize = parseInt(e.target.value);
+  if (current3DMode === 'texel') updateTexelSummary();
+});
+
+// Overlap options
+document.getElementById('overlap-resolution').addEventListener('change', e => {
+  overlapResolution = parseInt(e.target.value);
+  if (current3DMode === 'overlap' || current2DOverlay === 'overlap') {
+    runAnalysisIfNeeded(current3DMode);
+    if (current2DOverlay === 'overlap') draw2DOverlay();
+  }
+});
+
+async function runAnalysisIfNeeded(triggerMode) {
+  if (analysisResults && !analysisAbort) return; // Already have results
+  analysisAbort = false;
+
+  const statusBox = document.getElementById('uv-status');
+  const msgEl = document.getElementById('uv-msg');
+  const originalMsg = msgEl.textContent;
+
+  try {
+    st('⏳ Analyzing UVs…', 'loading');
+
+    // Run analysis in chunks to stay responsive
+    analysisResults = await analyzeAllMeshesChunked(currentRoot);
+
+    if (analysisAbort) return;
+
+    // Update summaries
+    updateProblemsSummary();
+    updateTexelSummary();
+    updateOverlapSummary();
+
+    // Apply to scene based on current mode
+    applyAnalysisToScene();
+
+  } catch (err) {
+    if (!analysisAbort) {
+      st('✗ Analysis failed: ' + err.message, 'err');
+    }
+  }
+}
+
+function analyzeAllMeshesChunked(root) {
+  return new Promise((resolve, reject) => {
+    const meshResults = [];
+    const allTriangles = [];
+    let totalTris = 0, totalFlipped = 0, totalZeroArea = 0, totalOutside = 0, totalNoUV = 0;
+    const allUdimTiles = new Set();
+
+    const meshes = [];
+    root.traverse(child => {
+      if (child.isMesh) meshes.push(child);
+    });
+
+    let meshIndex = 0;
+    function processNextMesh() {
+      if (analysisAbort) { reject(new Error('Aborted')); return; }
+      if (meshIndex >= meshes.length) {
+        // Compute global median
+        let medianDensity = 0;
+        if (allTriangles.length > 0) {
+          const weighted = [];
+          for (const tri of allTriangles) {
+            if (tri.area3D > 0 && tri.texelDensity > 0) {
+              weighted.push({ d: tri.texelDensity, w: tri.area3D });
+            }
+          }
+          if (weighted.length > 0) {
+            weighted.sort((a, b) => a.d - b.d);
+            let half = weighted.reduce((s, v) => s + v.w, 0) * 0.5;
+            let sum = 0;
+            for (const v of weighted) {
+              sum += v.w;
+              if (sum >= half) { medianDensity = v.d; break; }
+            }
+          }
+        }
+
+        // Run overlap detection
+        const overlapRes = rasterizeUVTriangles(allTriangles, overlapResolution);
+        // Tag triangles with overlap
+        for (let i = 0; i < allTriangles.length; i++) {
+          if (overlapRes.triOverlaps[i]) allTriangles[i].overlap = true;
+        }
+
+        resolve({
+          meshResults,
+          totals: {
+            triangles: totalTris,
+            flipped: totalFlipped,
+            zeroArea: totalZeroArea,
+            outside01: totalOutside,
+            noUV: totalNoUV,
+            udimTiles: Array.from(allUdimTiles).sort((a, b) => a - b),
+            overlapPct: overlapRes.overlapPct,
+            overlapPixels: overlapRes.overlapPixels,
+            coveredPixels: overlapRes.coveredPixels
+          },
+          allTriangles,
+          medianDensity,
+          overlapResolution
+        });
+        return;
+      }
+
+      const child = meshes[meshIndex];
+      const uvAttr = child.geometry.attributes?.uv;
+      const posAttr = child.geometry.attributes?.position;
+      const idx = child.geometry.index;
+
+      if (!uvAttr) {
+        meshResults.push({ mesh: child, noUV: true, triangles: [] });
+        totalNoUV++;
+        meshIndex++;
+        nextFrame().then(processNextMesh);
+        return;
+      }
+
+      const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+      const getUV = i => {
+        const vi = idx ? idx.getX(i) : i;
+        return [uvAttr.getX(vi), uvAttr.getY(vi)];
+      };
+      const getPos = i => {
+        const vi = idx ? idx.getX(i) : i;
+        return [posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)];
+      };
+
+      const meshTriangles = [];
+      let meshFlipped = 0, meshZeroArea = 0, meshOutside = 0;
+      const meshUdimTiles = new Set();
+
+      let triProcessed = 0;
+      function processChunk() {
+        if (analysisAbort) { reject(new Error('Aborted')); return; }
+        const chunkEnd = Math.min(triCount, triProcessed + ANALYSIS_CHUNK_TRIS);
+        for (let t = triProcessed; t < chunkEnd; t++) {
+          const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+          const [u0, v0] = getUV(i0);
+          const [u1, v1] = getUV(i1);
+          const [u2, v2] = getUV(i2);
+
+          const A = signedUVArea(u0, v0, u1, v1, u2, v2);
+          const absA = Math.abs(A);
+
+          let flipped = false, zeroArea = false, outside = false;
+
+          if (absA < EPS) {
+            zeroArea = true; meshZeroArea++;
+          } else if (A < -EPS) {
+            flipped = true; meshFlipped++;
+          }
+
+          const vertices = [[u0, v0], [u1, v1], [u2, v2]];
+          for (const [u, v] of vertices) {
+            if (u < 0 || u > 1 || v < 0 || v > 1) outside = true;
+            const tu = Math.floor(u), tv = Math.floor(v);
+            if (tu >= 0 && tu < 10 && tv >= 0 && tv < 10) {
+              meshUdimTiles.add(1001 + tu + tv * 10);
+              allUdimTiles.add(1001 + tu + tv * 10);
+            }
+          }
+          if (outside) meshOutside++;
+
+          let area3d = 0;
+          if (posAttr) {
+            const [ax, ay, az] = getPos(i0);
+            const [bx, by, bz] = getPos(i1);
+            const [cx, cy, cz] = getPos(i2);
+            area3d = triangleArea3D(ax, ay, az, bx, by, bz, cx, cy, cz);
+            if (area3d < EPS) area3d = 0;
+          }
+
+          const d = (absA > 0 && area3d > 0) ? Math.sqrt(absA / area3d) : 0;
+
+          const triData = {
+            flipped, zeroArea, outside,
+            areaUV: absA, area3D: area3d, texelDensity: d,
+            u0, v0, u1, v1, u2, v2, meshIndex
+          };
+          meshTriangles.push(triData);
+          allTriangles.push(triData);
+        }
+        triProcessed = chunkEnd;
+        totalTris += (chunkEnd - triProcessed + (chunkEnd - triProcessed)); // fixed below
+
+        if (triProcessed < triCount) {
+          nextFrame().then(processChunk);
+        } else {
+          meshResults.push({
+            mesh: child,
+            flipped: meshFlipped,
+            zeroArea: meshZeroArea,
+            outside01: meshOutside,
+            noUV: false,
+            udimTiles: meshUdimTiles,
+            triangles: meshTriangles
+          });
+          totalFlipped += meshFlipped;
+          totalZeroArea += meshZeroArea;
+          totalOutside += meshOutside;
+          meshIndex++;
+          nextFrame().then(processNextMesh);
+        }
+      }
+      processChunk();
+    }
+
+    processNextMesh();
+  });
+}
+
+function applyAnalysisToScene() {
+  if (!analysisResults || !currentRoot) return;
+
+  const { allTriangles, medianDensity } = analysisResults;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const geom = child.geometry;
+    const uvAttr = geom.attributes.uv;
+    const posAttr = geom.attributes.position;
+    const idx = geom.index;
+    if (!uvAttr) {
+      // No UV mesh stays red
+      child.material.color.set(0xff4466);
+      child.material.map = null;
+      child.material.vertexColors = false;
+      child.material.needsUpdate = true;
+      return;
+    }
+
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+    const colors = new Float32Array(triCount * 3 * 3); // 3 vertices * 3 components
+
+    let triIdx = 0;
+    // Find triangles belonging to this mesh
+    const meshTriangles = allTriangles.filter(t => {
+      const m = analysisResults.meshResults[t.meshIndex];
+      return m && m.mesh === child;
+    });
+
+    if (current3DMode === 'problems') {
+      // Color by problem type
+      for (const tri of meshTriangles) {
+        let r = 1, g = 1, b = 1; // default white (clean)
+        let show = false;
+        if (tri.flipped && problemFilters.flipped) { r = 1; g = 0; b = 0; show = true; } // red
+        else if (tri.zeroArea && problemFilters.zeroArea) { r = 1; g = 0.82; b = 0; show = true; } // amber
+        else if (tri.outside && problemFilters.outside) { r = 0.31; g = 0.91; b = 0.95; show = true; } // cyan
+
+        if (!show) { r = 1; g = 1; b = 1; } // clean = white
+
+        for (let v = 0; v < 3; v++) {
+          colors[triIdx * 9 + v * 3 + 0] = r;
+          colors[triIdx * 9 + v * 3 + 1] = g;
+          colors[triIdx * 9 + v * 3 + 2] = b;
+        }
+        triIdx++;
+      }
+    } else if (current3DMode === 'texel') {
+      // Color by texel density ratio
+      const meshResults = analysisResults.meshResults;
+      const meshResult = meshResults.find(m => m.mesh === child);
+      const refDensity = (texelNormalizeGlobal || !meshResult) ? medianDensity :
+        computeMedianDensity(meshResult.triangles);
+
+      for (const tri of meshTriangles) {
+        const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
+        const [r, g, b] = colorForRatio(ratio).map(v => v / 255);
+        for (let v = 0; v < 3; v++) {
+          colors[triIdx * 9 + v * 3 + 0] = r;
+          colors[triIdx * 9 + v * 3 + 1] = g;
+          colors[triIdx * 9 + v * 3 + 2] = b;
+        }
+        triIdx++;
+      }
+    } else if (current3DMode === 'overlap') {
+      // Color by overlap
+      for (const tri of meshTriangles) {
+        const isOverlap = tri.overlap === true;
+        const r = isOverlap ? 1 : 0.31;
+        const g = isOverlap ? 0 : 0.91;
+        const b = isOverlap ? 0 : 0.95;
+        for (let v = 0; v < 3; v++) {
+          colors[triIdx * 9 + v * 3 + 0] = r;
+          colors[triIdx * 9 + v * 3 + 1] = g;
+          colors[triIdx * 9 + v * 3 + 2] = b;
+        }
+        triIdx++;
+      }
+    }
+
+    // Apply vertex colors
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    child.material = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      wireframe: false,
+      map: null
+    });
+    child.material.needsUpdate = true;
+  });
+}
+
+function computeMedianDensity(triangles) {
+  const weighted = triangles.filter(t => t.area3D > 0 && t.texelDensity > 0)
+    .map(t => ({ d: t.texelDensity, w: t.area3D }));
+  if (weighted.length === 0) return 0;
+  weighted.sort((a, b) => a.d - b.d);
+  let half = weighted.reduce((s, v) => s + v.w, 0) * 0.5;
+  let sum = 0;
+  for (const v of weighted) {
+    sum += v.w;
+    if (sum >= half) return v.d;
+  }
+  return weighted[weighted.length - 1].d;
+}
+
+function updateProblemsSummary() {
+  if (!analysisResults) return;
+  const { totals, meshResults } = analysisResults;
+  const tri = totals.triangles;
+  const lines = [
+    `Total triangles: ${tri}`,
+    `Flipped: ${totals.flipped} (${tri ? ((totals.flipped / tri) * 100).toFixed(1) : 0}%)`,
+    `Zero-area: ${totals.zeroArea} (${tri ? ((totals.zeroArea / tri) * 100).toFixed(1) : 0}%)`,
+    `Outside 0–1: ${totals.outside01} (${tri ? ((totals.outside01 / tri) * 100).toFixed(1) : 0}%)`,
+    `No UV meshes: ${totals.noUV}`,
+    totals.udimTiles.length ? `UDIM tiles used: ${totals.udimTiles.join(', ')}` : ''
+  ].filter(Boolean).join('\n');
+  document.getElementById('problems-summary').textContent = lines;
+  document.getElementById('problems-legend').style.display = 'block';
+}
+
+function updateTexelSummary() {
+  if (!analysisResults) return;
+  const { totals, medianDensity, allTriangles, meshResults } = analysisResults;
+
+  if (texelNormalizeGlobal) {
+    const refDensity = medianDensity;
+    if (refDensity <= 0) {
+      document.getElementById('texel-summary').textContent = 'Insufficient 3D data for texel density';
+      return;
+    }
+    const texelsPerUnit = refDensity * texelTextureSize;
+    let within25 = 0, within50 = 0, totalArea = 0;
+    for (const tri of allTriangles) {
+      if (tri.area3D <= 0) continue;
+      const ratio = tri.texelDensity / refDensity;
+      totalArea += tri.area3D;
+      if (ratio >= 0.75 && ratio <= 1.25) within25 += tri.area3D;
+      if (ratio >= 0.5 && ratio <= 1.5) within50 += tri.area3D;
+    }
+    const pct25 = totalArea > 0 ? (within25 / totalArea * 100).toFixed(1) : 0;
+    const pct50 = totalArea > 0 ? (within50 / totalArea * 100).toFixed(1) : 0;
+
+    document.getElementById('texel-summary').innerHTML =
+      `Median texel density: <b>${texelsPerUnit.toFixed(1)} texels/unit</b> at ${texelTextureSize}px\n` +
+      `Surface within ±25%: <b>${pct25}%</b> · within ±50%: <b>${pct50}%</b>`;
+  } else {
+    // Per-mesh: show summary for each mesh
+    let html = '';
+    for (const m of meshResults) {
+      if (m.noUV || !m.triangles.length) continue;
+      const refDensity = computeMedianDensity(m.triangles);
+      if (refDensity <= 0) continue;
+      const texelsPerUnit = refDensity * texelTextureSize;
+      let within25 = 0, within50 = 0, totalArea = 0;
+      for (const tri of m.triangles) {
+        if (tri.area3D <= 0) continue;
+        const ratio = tri.texelDensity / refDensity;
+        totalArea += tri.area3D;
+        if (ratio >= 0.75 && ratio <= 1.25) within25 += tri.area3D;
+        if (ratio >= 0.5 && ratio <= 1.5) within50 += tri.area3D;
+      }
+      const pct25 = totalArea > 0 ? (within25 / totalArea * 100).toFixed(1) : 0;
+      const pct50 = totalArea > 0 ? (within50 / totalArea * 100).toFixed(1) : 0;
+      const name = m.mesh.name || `Mesh ${meshResults.indexOf(m)}`;
+      html += `${name}: ${texelsPerUnit.toFixed(1)} texels/unit · ±25%: ${pct25}% · ±50%: ${pct50}%\n`;
+    }
+    document.getElementById('texel-summary').innerHTML = html || 'No valid mesh data';
+  }
+  document.getElementById('texel-legend').style.display = 'block';
+}
+
+function updateOverlapSummary() {
+  if (!analysisResults) return;
+  const { totals } = analysisResults;
+  document.getElementById('overlap-summary').innerHTML =
+    `Overlap: <b>${totals.overlapPct.toFixed(2)}%</b> of covered area\n` +
+    `(${totals.overlapPixels} of ${totals.coveredPixels} pixels at ${totals.overlapResolution}²)`;
+  document.getElementById('overlap-legend').style.display = 'block';
+}
 
 // ── 2D UV layout: flatten every mesh's UVs into a single 0-1 image ──
 // Runs in chunks with requestAnimationFrame breathers so a dense, high-poly
@@ -394,8 +1090,313 @@ document.getElementById('uv-mode-wire').addEventListener('click', () => {
 // call instead of one stroke() per triangle, which is the main cost cut.
 const MESH_COLORS = ['#50E8F4','#00FFB3','#FFD166','#FF6B9D','#B084F5','#FF9F4A','#5DD9C1','#F45D9C'];
 const UV_CHUNK_TRIS = 4000; // triangles per yield within a single mesh
+const ANALYSIS_CHUNK_TRIS = 2000; // triangles per yield for analysis passes
 
 function nextFrame(){ return new Promise(r => requestAnimationFrame(r)); }
+
+// ============================================================================
+// ANALYSIS MATH (plain functions, no DOM/THREE dependencies)
+// These can be tested in Node. Keep all math here, UI/logic elsewhere.
+// ============================================================================
+
+const EPS = 1e-10;
+
+function signedUVArea(u0, v0, u1, v1, u2, v2) {
+  // A = 0.5 * ((u1-u0)*(v2-v0) - (u2-u0)*(v1-v0))
+  return 0.5 * ((u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0));
+}
+
+function triangleArea3D(ax, ay, az, bx, by, bz, cx, cy, cz) {
+  // 0.5 * |(b-a) x (c-a)|
+  const abx = bx - ax, aby = by - ay, abz = bz - az;
+  const acx = cx - ax, acy = cy - ay, acz = cz - az;
+  const cx_ = aby * acz - abz * acy;
+  const cy_ = abz * acx - abx * acz;
+  const cz_ = abx * acy - aby * acx;
+  return 0.5 * Math.sqrt(cx_ * cx_ + cy_ * cy_ + cz_ * cz_);
+}
+
+function analyzeMeshUV(geometry) {
+  const uvAttr = geometry.attributes.uv;
+  const posAttr = geometry.attributes.position;
+  const idx = geometry.index;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  const results = {
+    flipped: 0,
+    zeroArea: 0,
+    outside01: 0,
+    noUV: false,
+    udimTiles: new Set(),
+    triangles: [] // per-triangle data for heatmaps/overlap
+  };
+
+  if (!uvAttr) {
+    results.noUV = true;
+    return results;
+  }
+
+  const getUV = i => {
+    const vi = idx ? idx.getX(i) : i;
+    return [uvAttr.getX(vi), uvAttr.getY(vi)];
+  };
+  const getPos = i => {
+    const vi = idx ? idx.getX(i) : i;
+    return [posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)];
+  };
+
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const [u0, v0] = getUV(i0);
+    const [u1, v1] = getUV(i1);
+    const [u2, v2] = getUV(i2);
+
+    const A = signedUVArea(u0, v0, u1, v1, u2, v2);
+    const absA = Math.abs(A);
+
+    let flipped = false, zeroArea = false, outside = false;
+    let udimU = 0, udimV = 0;
+
+    if (absA < EPS) {
+      zeroArea = true;
+      results.zeroArea++;
+    } else if (A < -EPS) {
+      flipped = true;
+      results.flipped++;
+    }
+
+    // Check UV bounds and UDIM tiles
+    const vertices = [[u0, v0], [u1, v1], [u2, v2]];
+    for (const [u, v] of vertices) {
+      if (u < 0 || u > 1 || v < 0 || v > 1) {
+        outside = true;
+      }
+      // UDIM: tile (u, v) where u in [0,10), v in [0,10) -> 1001 + u + v*10
+      // We only track tile (0,0) for now, but record all tiles used
+      const tu = Math.floor(u);
+      const tv = Math.floor(v);
+      if (tu >= 0 && tu < 10 && tv >= 0 && tv < 10) {
+        results.udimTiles.add(1001 + tu + tv * 10);
+      }
+    }
+    if (outside) results.outside01++;
+
+    // 3D area for texel density
+    let area3d = 0;
+    if (posAttr) {
+      const [ax, ay, az] = getPos(i0);
+      const [bx, by, bz] = getPos(i1);
+      const [cx, cy, cz] = getPos(i2);
+      area3d = triangleArea3D(ax, ay, az, bx, by, bz, cx, cy, cz);
+      if (area3d < EPS) area3d = 0; // degenerate 3D triangle
+    }
+
+    const d = (absA > 0 && area3d > 0) ? Math.sqrt(absA / area3d) : 0;
+
+    results.triangles.push({
+      flipped,
+      zeroArea,
+      outside,
+      areaUV: absA,
+      area3D: area3d,
+      texelDensity: d,
+      u0, v0, u1, v1, u2, v2
+    });
+  }
+
+  return results;
+}
+
+function analyzeAllMeshes(root) {
+  const meshResults = [];
+  let totalTris = 0, totalFlipped = 0, totalZeroArea = 0, totalOutside = 0, totalNoUV = 0;
+  const allUdimTiles = new Set();
+  const allTriangles = []; // flattened for global analysis
+
+  root.traverse(child => {
+    if (child.isMesh && child.geometry.attributes && child.geometry.attributes.uv) {
+      const res = analyzeMeshUV(child.geometry);
+      meshResults.push({ mesh: child, ...res });
+      totalTris += res.triangles.length;
+      totalFlipped += res.flipped;
+      totalZeroArea += res.zeroArea;
+      totalOutside += res.outside01;
+      if (res.noUV) totalNoUV++;
+      for (const t of res.udimTiles) allUdimTiles.add(t);
+      // tag triangles with mesh index for later reference
+      for (const tri of res.triangles) {
+        allTriangles.push({ ...tri, meshIndex: meshResults.length - 1 });
+      }
+    } else if (child.isMesh) {
+      meshResults.push({ mesh: child, noUV: true, triangles: [] });
+      totalNoUV++;
+    }
+  });
+
+  // Area-weighted median texel density across all meshes
+  let medianDensity = 0;
+  if (allTriangles.length > 0) {
+    const weighted = [];
+    for (const tri of allTriangles) {
+      if (tri.area3D > 0 && tri.texelDensity > 0) {
+        weighted.push({ d: tri.texelDensity, w: tri.area3D });
+      }
+    }
+    if (weighted.length > 0) {
+      weighted.sort((a, b) => a.d - b.d);
+      let half = weighted.reduce((s, v) => s + v.w, 0) * 0.5;
+      let sum = 0;
+      for (const v of weighted) {
+        sum += v.w;
+        if (sum >= half) { medianDensity = v.d; break; }
+      }
+    }
+  }
+
+  return {
+    meshResults,
+    totals: {
+      triangles: totalTris,
+      flipped: totalFlipped,
+      zeroArea: totalZeroArea,
+      outside01: totalOutside,
+      noUV: totalNoUV,
+      udimTiles: Array.from(allUdimTiles).sort((a, b) => a - b)
+    },
+    allTriangles,
+    medianDensity
+  };
+}
+
+function rasterizeUVTriangles(triangles, resolution = 1024) {
+  // Rasterize triangles for tile (0,0) only (u,v in [0,1))
+  // Top-left fill rule: sample at pixel centers (x+0.5, y+0.5)
+  // UV origin is bottom-left, canvas is top-left -> flip V
+  const buffer = new Uint16Array(resolution * resolution);
+  const triOverlaps = new Uint8Array(triangles.length); // 1 if triangle touches overlap
+
+  // First pass: count coverage
+  for (let ti = 0; ti < triangles.length; ti++) {
+    const tri = triangles[ti];
+    // Only process triangles in tile (0,0)
+    if (tri.u0 < 0 || tri.u0 >= 1 || tri.u1 < 0 || tri.u1 >= 1 || tri.u2 < 0 || tri.u2 >= 1 ||
+        tri.v0 < 0 || tri.v0 >= 1 || tri.v1 < 0 || tri.v1 >= 1 || tri.v2 < 0 || tri.v2 >= 1) {
+      continue;
+    }
+
+    // Convert to pixel coordinates (canvas: top-left origin, V flipped)
+    const x0 = tri.u0 * resolution;
+    const y0 = (1 - tri.v0) * resolution;
+    const x1 = tri.u1 * resolution;
+    const y1 = (1 - tri.v1) * resolution;
+    const x2 = tri.u2 * resolution;
+    const y2 = (1 - tri.v2) * resolution;
+
+    // Bounding box
+    const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
+    const maxX = Math.min(resolution - 1, Math.floor(Math.max(x0, x1, x2)));
+    const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2)));
+    const maxY = Math.min(resolution - 1, Math.floor(Math.max(y0, y1, y2)));
+
+    // Edge functions for top-left fill rule
+    // For each pixel center (px+0.5, py+0.5), test if inside
+    for (let py = minY; py <= maxY; py++) {
+      const cy = py + 0.5;
+      for (let px = minX; px <= maxX; px++) {
+        const cx = px + 0.5;
+
+        // Barycentric / edge function test
+        // Edge: (x1-x0)*(y-y0) - (y1-y0)*(x-x0) >= 0 for all edges (CCW)
+        const e0 = (x1 - x0) * (cy - y0) - (y1 - y0) * (cx - x0);
+        const e1 = (x2 - x1) * (cy - y1) - (y2 - y1) * (cx - x1);
+        const e2 = (x0 - x2) * (cy - y2) - (y0 - y2) * (cx - x2);
+
+        // Top-left rule: allow edge if e == 0 and edge is "top" or "left"
+        // Simple approach: use >= -EPS for all edges (handles shared edges consistently)
+        if (e0 >= -EPS && e1 >= -EPS && e2 >= -EPS) {
+          const idx = py * resolution + px;
+          buffer[idx]++;
+        }
+      }
+    }
+  }
+
+  // Second pass: mark overlapping triangles
+  let overlapPixels = 0, coveredPixels = 0;
+  for (let ti = 0; ti < triangles.length; ti++) {
+    const tri = triangles[ti];
+    if (tri.u0 < 0 || tri.u0 >= 1 || tri.u1 < 0 || tri.u1 >= 1 || tri.u2 < 0 || tri.u2 >= 1 ||
+        tri.v0 < 0 || tri.v0 >= 1 || tri.v1 < 0 || tri.v1 >= 1 || tri.v2 < 0 || tri.v2 >= 1) {
+      continue;
+    }
+
+    const x0 = tri.u0 * resolution;
+    const y0 = (1 - tri.v0) * resolution;
+    const x1 = tri.u1 * resolution;
+    const y1 = (1 - tri.v1) * resolution;
+    const x2 = tri.u2 * resolution;
+    const y2 = (1 - tri.v2) * resolution;
+
+    const minX = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
+    const maxX = Math.min(resolution - 1, Math.floor(Math.max(x0, x1, x2)));
+    const minY = Math.max(0, Math.floor(Math.min(y0, y1, y2)));
+    const maxY = Math.min(resolution - 1, Math.floor(Math.max(y0, y1, y2)));
+
+    let touchesOverlap = false;
+    for (let py = minY; py <= maxY; py++) {
+      const cy = py + 0.5;
+      for (let px = minX; px <= maxX; px++) {
+        const cx = px + 0.5;
+        const e0 = (x1 - x0) * (cy - y0) - (y1 - y0) * (cx - x0);
+        const e1 = (x2 - x1) * (cy - y1) - (y2 - y1) * (cx - x1);
+        const e2 = (x0 - x2) * (cy - y2) - (y0 - y2) * (cx - x2);
+
+        if (e0 >= -EPS && e1 >= -EPS && e2 >= -EPS) {
+          const idx = py * resolution + px;
+          const count = buffer[idx];
+          if (count > 0) coveredPixels++;
+          if (count >= 2) {
+            overlapPixels++;
+            touchesOverlap = true;
+          }
+        }
+      }
+    }
+    if (touchesOverlap) triOverlaps[ti] = 1;
+  }
+
+  const overlapPct = coveredPixels > 0 ? (overlapPixels / coveredPixels) * 100 : 0;
+  return { buffer, triOverlaps, overlapPixels, coveredPixels, overlapPct, resolution };
+}
+
+function colorForRatio(r) {
+  // Diverging ramp: r<0.5 deep blue, 0.5-0.8 cyan, 0.8-1.25 green, 1.25-2 orange, >2 red
+  if (r < 0.5) {
+    // deep blue to cyan
+    const t = r / 0.5;
+    return [0, Math.round(100 + 155 * t), 255];
+  } else if (r < 0.8) {
+    // cyan to green
+    const t = (r - 0.5) / 0.3;
+    return [0, 255, Math.round(255 - 155 * t)];
+  } else if (r < 1.25) {
+    // green
+    const t = (r - 0.8) / 0.45;
+    return [Math.round(100 * t), 255, Math.round(100 * (1 - t))];
+  } else if (r < 2) {
+    // green to orange
+    const t = (r - 1.25) / 0.75;
+    return [255, Math.round(255 - 155 * t), 0];
+  } else {
+    // orange to red
+    const t = Math.min(1, (r - 2) / 2);
+    return [255, Math.round(100 * (1 - t)), 0];
+  }
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
 
 async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   const canvas = document.createElement('canvas');
@@ -466,6 +1467,9 @@ async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   return canvas;
 }
 
+// Store base 2D canvas for overlay redraws
+let uv2DBaseCanvas = null;
+
 document.getElementById('uv-mode-2d').addEventListener('click', async () => {
   if(!currentRoot) return;
   const section = document.getElementById('uv-2d-section');
@@ -474,6 +1478,7 @@ document.getElementById('uv-mode-2d').addEventListener('click', async () => {
   if(showing){
     section.style.display = 'none';
     btn.classList.remove('active');
+    document.getElementById('uv-2d-overlay-controls').style.display = 'none';
     return;
   }
 
@@ -484,6 +1489,7 @@ document.getElementById('uv-mode-2d').addEventListener('click', async () => {
 
   section.style.display = 'block';
   btn.classList.add('active');
+  document.getElementById('uv-2d-overlay-controls').style.display = 'block';
   btn.disabled = true;
   dest.style.display = 'none';
   progressWrap.style.display = 'block';
@@ -496,10 +1502,19 @@ document.getElementById('uv-mode-2d').addEventListener('click', async () => {
       progressFill.style.width = p + '%';
       progressLabel.textContent = `Building UV layout… ${p}%`;
     });
+    // Store base canvas for overlays
+    uv2DBaseCanvas = document.createElement('canvas');
+    uv2DBaseCanvas.width = src.width;
+    uv2DBaseCanvas.height = src.height;
+    uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
+
     dest.width = src.width; dest.height = src.height;
     dest.getContext('2d').drawImage(src, 0, 0);
     dest.style.display = 'block';
     progressWrap.style.display = 'none';
+    // Reset overlay to none
+    current2DOverlay = 'none';
+    document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b.dataset.overlay === 'none'));
   }catch(err){
     progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
     progressFill.style.width = '0%';
@@ -507,6 +1522,96 @@ document.getElementById('uv-mode-2d').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+// 2D Overlay controls
+document.querySelectorAll('[data-overlay]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    current2DOverlay = btn.dataset.overlay;
+    document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b.dataset.overlay === current2DOverlay));
+    draw2DOverlay();
+  });
+});
+
+function draw2DOverlay() {
+  if (!uv2DBaseCanvas || !analysisResults) {
+    // Just show base
+    const dest = document.getElementById('uv-2d-canvas');
+    if (uv2DBaseCanvas) {
+      dest.getContext('2d').drawImage(uv2DBaseCanvas, 0, 0);
+    }
+    return;
+  }
+
+  const dest = document.getElementById('uv-2d-canvas');
+  const ctx = dest.getContext('2d');
+  const size = dest.width;
+
+  // Draw base
+  ctx.drawImage(uv2DBaseCanvas, 0, 0);
+
+  const { allTriangles, medianDensity, meshResults } = analysisResults;
+
+  if (current2DOverlay === 'problems') {
+    // Draw problem triangles filled
+    ctx.globalAlpha = 0.6;
+    for (const tri of allTriangles) {
+      let show = false, fillStyle;
+      if (tri.flipped && problemFilters.flipped) { fillStyle = '#FF4466'; show = true; }
+      else if (tri.zeroArea && problemFilters.zeroArea) { fillStyle = '#FFD166'; show = true; }
+      else if (tri.outside && problemFilters.outside) { fillStyle = '#50E8F4'; show = true; }
+      if (!show) continue;
+
+      ctx.fillStyle = fillStyle;
+      ctx.beginPath();
+      ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+      ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+      ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (current2DOverlay === 'texel') {
+    // Draw texel density heatmap
+    ctx.globalAlpha = 0.7;
+
+    // Group triangles by mesh for per-mesh normalization
+    const trianglesByMesh = {};
+    for (const tri of allTriangles) {
+      if (!trianglesByMesh[tri.meshIndex]) trianglesByMesh[tri.meshIndex] = [];
+      trianglesByMesh[tri.meshIndex].push(tri);
+    }
+
+    for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
+      const refDensity = texelNormalizeGlobal ? medianDensity : computeMedianDensity(tris);
+      for (const tri of tris) {
+        const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
+        const [r, g, b] = colorForRatio(ratio);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  } else if (current2DOverlay === 'overlap') {
+    // Draw overlap triangles in red
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#FF4466';
+    for (const tri of allTriangles) {
+      if (!tri.overlap) continue;
+      ctx.beginPath();
+      ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+      ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+      ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
   const canvas = document.getElementById('uv-2d-canvas');
