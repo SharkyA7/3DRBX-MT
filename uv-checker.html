@@ -396,9 +396,17 @@ function createCheckerCanvas(opts = {}) {
 
 // Brave detection: Shields can block WebGL; we run 100% locally, no trackers
 function isBrave() {
-  return navigator.brave && typeof navigator.brave.isBrave === 'function' ||
-         /brave/i.test(navigator.userAgent) ||
-         (window.navigator.brave !== undefined);
+  // Brave exposes navigator.brave.isBrave() in newer versions
+  if (navigator.brave && typeof navigator.brave.isBrave === 'function') {
+    return true;
+  }
+  // Older versions or different configs
+  if (window.navigator.brave !== undefined) return true;
+  // User agent fallback (can be spoofed but helpful)
+  if (/brave/i.test(navigator.userAgent)) return true;
+  // Check for Brave-specific properties
+  if (window.navigator.brave?.isBrave === true) return true;
+  return false;
 }
 
 function initScene(){
@@ -413,9 +421,10 @@ function initScene(){
   try{
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, failIfMajorPerformanceCaveat: false });
   }catch(err){
+    const braveMsg = 'This tool runs 100% locally — zero trackers, no server calls. If using Brave, click the shield icon (top-right) → "Shields down" for this site, then reload.';
     const msg = isBrave()
-      ? 'WebGL blocked — Brave Shields may be preventing it. This tool runs 100% locally with zero trackers, no server calls. Click the Brave shield icon (top-right) → "Shields down" for this site, then reload.'
-      : 'WebGL is not supported in this browser/device.';
+      ? 'WebGL blocked — Brave Shields is likely preventing it. ' + braveMsg
+      : 'WebGL initialization failed. ' + braveMsg + ' Also check: browser privacy extensions, hardware acceleration (on), or try a different browser.';
     st(msg, 'err');
     return;
   }
