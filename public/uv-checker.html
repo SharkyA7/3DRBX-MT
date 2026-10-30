@@ -1417,19 +1417,8 @@ async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.strokeStyle = 'rgba(255,255,255,.08)';
-  ctx.lineWidth = 1;
-  for(let i = 0; i <= 16; i++){
-    const p = (i / 16) * size;
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
-  }
-  ctx.strokeStyle = 'rgba(255,255,255,.4)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, size - 2, size - 2);
+  // Transparent base - no background fill, no grid
+  // Background and grid are applied dynamically in draw2DOverlay() and download
 
   const meshes = [];
   root.traverse(child => {
@@ -1547,6 +1536,20 @@ document.querySelectorAll('[data-overlay]').forEach(btn => {
   });
 });
 
+// Helper: draw UV grid
+function drawGrid(ctx, size) {
+  ctx.strokeStyle = 'rgba(255,255,255,.08)';
+  ctx.lineWidth = 1;
+  for(let i = 0; i <= 16; i++){
+    const p = (i / 16) * size;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,.4)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, size - 2, size - 2);
+}
+
 // 2D Background controls
 document.querySelectorAll('[data-bg]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1557,21 +1560,35 @@ document.querySelectorAll('[data-bg]').forEach(btn => {
 });
 
 function draw2DOverlay() {
-  if (!uv2DBaseCanvas || !analysisResults) {
-    // Just show base
-    const dest = document.getElementById('uv-2d-canvas');
-    if (uv2DBaseCanvas) {
-      dest.getContext('2d').drawImage(uv2DBaseCanvas, 0, 0);
-    }
-    return;
-  }
-
   const dest = document.getElementById('uv-2d-canvas');
   const ctx = dest.getContext('2d');
   const size = dest.width;
 
-  // Draw base
-  ctx.drawImage(uv2DBaseCanvas, 0, 0);
+  // Apply background
+  if (current2DBg === 'black') {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
+  } else if (current2DBg === 'white') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
+  } else if (current2DBg === 'transparent') {
+    // Fully transparent - no background, no grid
+    ctx.clearRect(0, 0, size, size);
+  } else if (current2DBg === 'transdark') {
+    // Transparent with dark grid
+    ctx.clearRect(0, 0, size, size);
+    drawGrid(ctx, size);
+  }
+
+  // Draw base UV layout (transparent, UV lines only)
+  if (uv2DBaseCanvas) {
+    ctx.drawImage(uv2DBaseCanvas, 0, 0);
+  }
+
+  // If no analysis results, stop here
+  if (!analysisResults) return;
 
   const { allTriangles, medianDensity, meshResults } = analysisResults;
 
@@ -1638,46 +1655,34 @@ function draw2DOverlay() {
 }
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
-  const canvas = document.getElementById('uv-2d-canvas');
-  if(!canvas.width || !uv2DBaseCanvas) return;
+  if(!uv2DBaseCanvas || !uv2DBaseCanvas.width) return;
 
-  // Create export canvas with selected background
+  // Create export canvas with selected background + base UV layout
   const exportCanvas = document.createElement('canvas');
-  exportCanvas.width = canvas.width;
-  exportCanvas.height = canvas.height;
+  exportCanvas.width = uv2DBaseCanvas.width;
+  exportCanvas.height = uv2DBaseCanvas.height;
   const ctx = exportCanvas.getContext('2d');
+  const size = exportCanvas.width;
 
-  // Apply background
+  // Apply background + grid (same logic as preview)
   if (current2DBg === 'black') {
     ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-    ctx.drawImage(canvas, 0, 0);
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
   } else if (current2DBg === 'white') {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-    ctx.drawImage(canvas, 0, 0);
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
   } else if (current2DBg === 'transparent') {
-    // Transparent - just draw the canvas (which has transparent background for the UV layout)
-    ctx.drawImage(canvas, 0, 0);
+    // Fully transparent - no background, no grid
+    // ctx.clearRect not needed, canvas is transparent by default
   } else if (current2DBg === 'transdark') {
-    // Transparent with dark grid - recreate with dark background + grid
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-    // Draw grid
-    const size = exportCanvas.width;
-    ctx.strokeStyle = 'rgba(255,255,255,.08)';
-    ctx.lineWidth = 1;
-    for(let i = 0; i <= 16; i++){
-      const p = (i / 16) * size;
-      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,.4)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, size - 2, size - 2);
-    // Draw the UV layout on top
-    ctx.drawImage(canvas, 0, 0);
+    // Transparent with dark grid
+    drawGrid(ctx, size);
   }
+
+  // Draw base UV layout (transparent, UV lines only)
+  ctx.drawImage(uv2DBaseCanvas, 0, 0);
 
   exportCanvas.toBlob(blob => {
     const url = URL.createObjectURL(blob);
