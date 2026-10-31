@@ -1,13 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "3drbx-mt",
-  "compatibility_date": "2026-09-18",
+  "compatibility_date": "2026-10-27",
   "main": "worker.js",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": ".",
+    "directory": "public",
     "binding": "ASSETS"
   }
 }

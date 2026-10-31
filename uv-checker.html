@@ -15,6 +15,16 @@
   --font-px:'Press Start 2P',monospace;
   --font-mono:'Share Tech Mono',monospace;
   --font-ui:'Space Grotesk',sans-serif;
+  /* Layout sizes */
+  --layout-s: 280px;  /* sidebar width small */
+  --layout-m: 340px;  /* sidebar width medium */
+  --layout-w: 420px;  /* sidebar width wide */
+  /* Animation timings */
+  --anim-fast: 150ms;
+  --anim-normal: 250ms;
+  --anim-slow: 350ms;
+  --ease-out: cubic-bezier(0.25,0.46,0.45,0.94);
+  --ease-in: cubic-bezier(0.55,0.06,0.68,0.19);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{overflow-x:hidden;width:100%}
@@ -69,163 +79,573 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 
 .warn-box{margin-top:14px;padding:12px 14px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.35);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--amber);line-height:1.6;}
 .warn-box b{color:var(--white);}
+
+/* ============================================================================
+   MODALS: Device Picker & Loading Screen
+   ============================================================================ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;
+  z-index:10000;opacity:0;visibility:hidden;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);
+}
+.modal-overlay.visible{opacity:1;visibility:visible;transition:opacity var(--anim-normal) var(--ease-out);}
+.modal-box{
+  background:var(--s2);border:1px solid var(--border2);border-radius:16px;padding:28px 32px;max-width:420px;width:90%;
+  transform:scale(0.95);transition:transform var(--anim-normal) var(--ease-out);
+  box-shadow:0 24px 48px rgba(0,0,0,.4),0 0 0 1px rgba(80,232,244,.1);
+}
+.modal-overlay.visible .modal-box{transform:scale(1);}
+.modal-title{font-family:var(--font-px);font-size:clamp(12px,2.5vw,16px);color:var(--accent);letter-spacing:2px;margin-bottom:8px;}
+.modal-subtitle{font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.5;}
+.device-options{display:flex;flex-direction:column;gap:10px;}
+.device-btn{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--s1);border:1px solid var(--border2);border-radius:10px;
+  color:var(--white);font-family:var(--font-ui);font-size:13px;font-weight:500;cursor:pointer;text-align:left;
+  transition:background .15s,border-color .15s,transform .1s;
+}
+.device-btn:hover{background:var(--s3);border-color:var(--accent);transform:translateX(4px);}
+.device-btn:active{transform:translateX(0);}
+.device-btn svg{flex-shrink:0;width:24px;height:24px;color:var(--accent);}
+.device-btn .device-desc{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;}
+.modal-warning{margin-top:16px;padding:10px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:8px;font-size:11px;color:var(--amber);line-height:1.5;}
+.modal-warning b{color:var(--white);}
+
+.loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;opacity:0;visibility:hidden;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);}
+.loading-screen.visible{opacity:1;visibility:visible;transition:opacity var(--anim-normal) var(--ease-out);}
+.loading-title{font-family:var(--font-px);font-size:clamp(14px,3vw,22px);color:var(--white);letter-spacing:3px;margin-bottom:24px;}
+.loading-title span{color:var(--accent);}
+.loading-bar{width:280px;max-width:80vw;height:6px;background:var(--s2);border:1px solid var(--border2);border-radius:3px;overflow:hidden;}
+.loading-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#00FFB3);transition:width .3s ease-out;box-shadow:0 0 12px var(--accent);}
+.loading-text{margin-top:16px;font-size:12px;color:var(--muted);font-family:var(--font-mono);}
+
+/* ============================================================================
+   RESPONSIVE LAYOUT SYSTEM
+   ============================================================================ */
+.app-root{display:flex;flex-direction:column;min-height:100vh;}
+
+/* Top Bar */
+.top-bar{
+  position:sticky;top:0;z-index:1000;display:flex;align-items:center;justify-content:space-between;
+  height:48px;padding:0 16px;background:rgba(3,24,28,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);
+  gap:12px;flex-wrap:wrap;
+}
+.top-bar-left{display:flex;align-items:center;gap:12px;}
+.top-bar-center{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;}
+.top-bar-right{display:flex;align-items:center;gap:8px;}
+.top-bar-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:transparent;border:1px solid var(--border2);border-radius:8px;
+  color:var(--white);font-family:var(--font-ui);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.top-bar-btn:hover{background:var(--s3);border-color:var(--accent);color:var(--accent);}
+.top-bar-btn.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
+.top-bar-btn svg{width:16px;height:16px;}
+.top-bar-select{background:var(--s1);border:1px solid var(--border2);border-radius:6px;color:var(--white);font-family:var(--font-ui);font-size:11px;padding:6px 10px;cursor:pointer;}
+
+/* Main Layout */
+.main-layout{display:flex;flex:1;overflow:hidden;position:relative;}
+
+/* Left Sidebar - Tools */
+.left-sidebar{
+  width:var(--layout-m);min-width:260px;max-width:480px;background:var(--s1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;
+  transform:translateX(0);transition:transform var(--anim-normal) var(--ease-out),width var(--anim-normal) var(--ease-out);
+}
+.left-sidebar.collapsed{transform:translateX(-100%);width:0;min-width:0;border-right:none;}
+.sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);}
+.sidebar-title{font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:1.5px;}
+.sidebar-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;}
+.sidebar-toggle:hover{color:var(--accent);}
+.sidebar-content{padding:10px;flex:1;overflow-y:auto;}
+.tool-group{margin-bottom:16px;}
+.tool-group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;border-radius:6px;transition:background .15s;}
+.tool-group-header:hover{background:var(--s2);}
+.tool-group-title{font-size:11px;font-weight:600;color:var(--white);text-transform:uppercase;letter-spacing:.08em;}
+.tool-group-chevron{width:16px;height:16px;color:var(--muted);transition:transform .2s var(--ease-out);flex-shrink:0;}
+.tool-group.open .tool-group-chevron{transform:rotate(180deg);}
+.tool-group-body{overflow:hidden;max-height:0;transition:max-height var(--anim-normal) var(--ease-out);}
+.tool-group.open .tool-group-body{max-height:500px;}
+.tool-btn{
+  display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:transparent;border:none;border-radius:6px;
+  color:var(--white);font-family:var(--font-ui);font-size:12px;text-align:left;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.tool-btn:hover{background:var(--s2);color:var(--accent);}
+.tool-btn.active{background:rgba(80,232,244,.12);color:var(--accent);}
+.tool-btn svg{width:18px;height:18px;flex-shrink:0;}
+
+/* Center - Viewport */
+.viewport-area{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden;background:#0a0a0a;}
+.viewport-canvas{width:100%;height:100%;display:block;touch-action:none;}
+.viewport-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-family:var(--font-mono);font-size:10px;color:var(--muted);pointer-events:none;opacity:.7;white-space:nowrap;}
+
+/* Right Sidebar - Options/Inspector */
+.right-sidebar{
+  width:var(--layout-m);min-width:260px;max-width:480px;background:var(--s1);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;
+  transform:translateX(0);transition:transform var(--anim-normal) var(--ease-out),width var(--anim-normal) var(--ease-out);
+}
+.right-sidebar.collapsed{transform:translateX(100%);width:0;min-width:0;border-left:none;}
+
+/* Bottom Bar */
+.bottom-bar{
+  position:sticky;bottom:0;z-index:100;display:flex;align-items:center;justify-content:space-between;
+  height:36px;padding:0 16px;background:rgba(3,24,28,.95);backdrop-filter:blur(8px);border-top:1px solid var(--border);
+  gap:12px;font-family:var(--font-ui);font-size:11px;color:var(--muted);
+}
+.bottom-bar-left{display:flex;align-items:center;gap:16px;}
+.bottom-bar-right{display:flex;align-items:center;gap:12px;}
+.bottom-bar-tab{padding:6px 10px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:var(--font-ui);font-size:11px;cursor:pointer;transition:all .15s;}
+.bottom-bar-tab:hover{border-color:var(--accent);color:var(--accent);}
+.bottom-bar-tab.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
+
+/* ============================================================================
+   BOTTOM SHEETS (Tablet/Mobile)
+   ============================================================================ */
+.bottom-sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:2000;background:var(--s2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;
+  transform:translateY(100%);transition:transform var(--anim-normal) var(--ease-out);
+  max-height:70vh;display:flex;flex-direction:column;box-shadow:0 -8px 32px rgba(0,0,0,.4);
+}
+.bottom-sheet.open{transform:translateY(0);}
+.bottom-sheet-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 6px;}
+.bottom-sheet-header{display:flex;align-items:center;justify-content:space-between;padding:0 16px 12px;border-bottom:1px solid var(--border);}
+.bottom-sheet-title{font-family:var(--font-px);font-size:11px;color:var(--accent);letter-spacing:1.5px;}
+.bottom-sheet-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;}
+.bottom-sheet-close:hover{color:var(--accent);}
+.bottom-sheet-content{flex:1;overflow-y:auto;padding:16px;}
+
+/* ============================================================================
+   SETTINGS MODAL
+   ============================================================================ */
+.settings-modal{width:100%;max-width:480px;}
+.settings-section{margin-bottom:24px;}
+.settings-label{display:block;font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:500;}
+.settings-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.layout-size-btn{flex:1;min-width:70px;padding:10px 8px;background:var(--s1);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-family:var(--font-ui);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;}
+.layout-size-btn:hover{border-color:var(--accent);}
+.layout-size-btn.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
+.slider-wrap{display:flex;align-items:center;gap:12px;margin-top:8px;}
+.slider-wrap label{min-width:80px;font-size:11px;color:var(--muted);}
+.slider-wrap input[type=range]{flex:1;height:6px;-webkit-appearance:none;appearance:none;background:var(--s2);border-radius:3px;outline:none;cursor:pointer;}
+.slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 8px var(--accent);transition:transform .15s;}
+.slider-wrap input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15);}
+.slider-wrap output{min-width:44px;text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--accent);}
+.color-picker-wrap{display:flex;align-items:center;gap:12px;margin-top:8px;}
+.color-picker-wrap label{min-width:80px;font-size:11px;color:var(--muted);}
+.color-picker-wrap input[type=color]{width:40px;height:40px;border:none;border-radius:8px;cursor:pointer;background:none;}
+.boost-mode-wrap{display:flex;align-items:flex-start;gap:12px;padding:14px;background:rgba(255,209,102,.06);border:1px solid rgba(255,209,102,.25);border-radius:10px;margin-top:8px;}
+.boost-mode-wrap input[type=checkbox]{width:20px;height:20px;accent-color:var(--amber);flex-shrink:0;margin-top:2px;}
+.boost-mode-label{flex:1;}
+.boost-mode-title{font-size:12px;font-weight:600;color:var(--white);margin-bottom:4px;}
+.boost-mode-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+.boost-mode-warning{font-size:10px;color:var(--amber);margin-top:6px;padding:8px 10px;background:rgba(255,68,102,.08);border:1px solid rgba(255,68,102,.3);border-radius:6px;}
+.boost-mode-warning b{color:var(--red);}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+@keyframes slideInLeft{from{transform:translateX(-100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes slideOutLeft{from{transform:translateX(0);opacity:1;}to{transform:translateX(-100%);opacity:0;}}
+@keyframes slideInRight{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes slideOutRight{from{transform:translateX(0);opacity:1;}to{transform:translateX(100%);opacity:0;}}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+@keyframes slideDown{from{transform:translateY(0);opacity:1;}to{transform:translateY(100%);opacity:0;}}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}
+
+.anim-slide-in-left{animation:slideInLeft var(--anim-normal) var(--ease-out) forwards;}
+.anim-slide-out-left{animation:slideOutLeft var(--anim-fast) var(--ease-in) forwards;}
+.anim-slide-in-right{animation:slideInRight var(--anim-normal) var(--ease-out) forwards;}
+.anim-slide-out-right{animation:slideOutRight var(--anim-fast) var(--ease-in) forwards;}
+.anim-slide-up{animation:slideUp var(--anim-normal) var(--ease-out) forwards;}
+.anim-slide-down{animation:slideDown var(--anim-fast) var(--ease-in) forwards;}
+.anim-fade-in{animation:fadeIn var(--anim-normal) var(--ease-out) forwards;}
+.anim-fade-out{animation:fadeOut var(--anim-fast) var(--ease-in) forwards;}
+
+/* ============================================================================
+   DEVICE-SPECIFIC OVERRIDES
+   ============================================================================ */
+/* Desktop: sidebars visible */
+@media (min-width:1024px){
+  .left-sidebar,.right-sidebar{display:flex;}
+  .bottom-sheet{display:none !important;}
+  .bottom-bar-tab[data-sheet]{display:none;}
+  .top-bar-btn[data-sidebar]{display:flex;}
+}
+
+/* Tablet: sidebars as bottom sheets */
+@media (max-width:1023px) and (min-width:600px){
+  .left-sidebar,.right-sidebar{display:none;}
+  .bottom-sheet{display:flex;}
+  .bottom-bar-tab[data-sheet]{display:flex;}
+  .top-bar-btn[data-sidebar]{display:flex;}
+  .top-bar-center{display:none;}
+}
+
+/* Mobile: compact, full-height sheets */
+@media (max-width:599px){
+  .left-sidebar,.right-sidebar{display:none;}
+  .bottom-sheet{display:flex;max-height:85vh;border-radius:20px 20px 0 0;}
+  .bottom-bar-tab[data-sheet]{display:flex;}
+  .top-bar-btn[data-sidebar]{display:flex;}
+  .top-bar-center{display:none;}
+  .top-bar{height:44px;padding:0 10px;}
+  .top-bar-btn{padding:6px 8px;font-size:10px;}
+  .bottom-bar{height:44px;padding:0 10px;}
+}
 </style>
 </head>
 <body>
 
-<div style="max-width:640px;margin:0 auto;padding:14px 20px 0"><a href="/" class="back-link">← Back to 3DRBXMT</a></div>
+<!-- Device Selection Modal (shown on first visit) -->
+<div class="modal-overlay" id="device-modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
+  <div class="modal-box">
+    <h2 class="modal-title" id="device-modal-title">UV EDITOR</h2>
+    <p class="modal-subtitle">Choose what device you're using. <b>Note:</b> Choosing the wrong one will result in unexpected UI layout.</p>
+    <div class="device-options">
+      <button class="device-btn" data-device="desktop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M2 9h20"/></svg>
+        <span>Desktop / PC <span class="device-desc">Mouse & keyboard, full layout</span></span>
+      </button>
+      <button class="device-btn" data-device="laptop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M2 9h20"/></svg>
+        <span>Laptop <span class="device-desc">Trackpad & keyboard, medium layout</span></span>
+      </button>
+      <button class="device-btn" data-device="tablet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M12 22v-4"/></svg>
+        <span>Tablet / iPad <span class="device-desc">Touch-first, sidebars as bottom sheets</span></span>
+      </button>
+      <button class="device-btn" data-device="mobile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 22v-4"/></svg>
+        <span>Mobile / iPhone <span class="device-desc">Touch-first, compact, fullscreen option</span></span>
+      </button>
+    </div>
+    <div class="modal-warning">
+      <b>This tool runs 100% locally</b> — zero trackers, no server calls, no analytics. If using Brave, try disabling Shields for this site if WebGL fails.
+    </div>
+  </div>
+</div>
 
-<header>
-  <div class="hero-tag">🎨 UV INSPECTOR</div>
-  <h1>UV MAP <span class="hl">CHECKER</span></h1>
-  <div class="sub">Upload a 3D model and see exactly how its UVs are laid out — spot stretching, mirroring, and missing UVs before you use the file.</div>
-</header>
+<!-- Loading Screen -->
+<div class="loading-screen" id="loading-screen" role="status" aria-live="polite">
+  <div class="loading-title">UV EDITOR <span>LOADING</span></div>
+  <div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div>
+  <div class="loading-text" id="loading-text">Initializing…</div>
+</div>
 
-<div class="container">
+<!-- App Root -->
+<div class="app-root" id="app-root" style="display:none">
 
-  <div class="drop-zone" id="drop-zone">
-    <div class="icon">📦</div>
-    <div class="label">Click or drag a file here</div>
-    <div class="hint">Accepts a plain <b>.obj</b>, or the <b>.zip</b> (OBJ+MTL+texture) downloaded from 3DRBXMT — from anywhere, not just this tool.</div>
-    <input type="file" id="file-input" accept=".obj,.zip" style="display:none">
+  <!-- Top Bar -->
+  <header class="top-bar" role="banner">
+    <div class="top-bar-left">
+      <button class="top-bar-btn" id="btn-toggle-left" data-sidebar="left" title="Tools" aria-label="Toggle tools panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="3" x2="21" y2="3"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="21" x2="21" y2="21"/></svg>
+      </button>
+      <span style="font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:1.5px">UV EDITOR</span>
+    </div>
+    <div class="top-bar-center">
+      <button class="top-bar-btn" id="btn-cam-persp" data-camera="perspective" title="Perspective Camera" aria-pressed="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/><path d="M21 21l-6-6"/></svg>
+        <span>3D</span>
+      </button>
+      <button class="top-bar-btn" id="btn-cam-ortho" data-camera="orthographic" title="Orthographic Camera" aria-pressed="false">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/></svg>
+        <span>2D</span>
+      </button>
+    </div>
+    <div class="top-bar-right">
+      <button class="top-bar-btn" id="btn-fullscreen" title="Fullscreen" aria-label="Toggle fullscreen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>
+      </button>
+      <button class="top-bar-btn" id="btn-settings" title="Settings" aria-label="Open settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+      <button class="top-bar-btn" id="btn-device" title="Change Device" aria-label="Change device type">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M12 22v-4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="main-layout">
+    <!-- Left Sidebar - Tools -->
+    <aside class="left-sidebar" id="left-sidebar" role="complementary" aria-label="Tools">
+      <div class="sidebar-header">
+        <span class="sidebar-title">TOOLS</span>
+        <button class="sidebar-toggle" id="btn-close-left" aria-label="Close tools panel">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-content">
+        <!-- Selection & Transform -->
+        <div class="tool-group" id="group-selection">
+          <div class="tool-group-header">
+            <span class="tool-group-title">Selection & Transform</span>
+            <svg class="tool-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="tool-group-body">
+            <button class="tool-btn" id="tool-select" data-tool="select" title="Select (V)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
+              Select
+            </button>
+            <button class="tool-btn" id="tool-move" data-tool="move" title="Move (G)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3"/><path d="M19 9l3 3-3 3"/><path d="M9 5l3-3 3 3"/><path d="M9 19l3 3 3-3"/></svg>
+              Move
+            </button>
+            <button class="tool-btn" id="tool-rotate" data-tool="rotate" title="Rotate (R)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6"/><path d="M1 20v-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              Rotate
+            </button>
+            <button class="tool-btn" id="tool-scale" data-tool="scale" title="Scale (S)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h6v6"/><path d="M21 3h-6v6"/><path d="M3 21h6v-6"/><path d="M21 21h-6v-6"/></svg>
+              Scale
+            </button>
+          </div>
+        </div>
+
+        <!-- UV Editing -->
+        <div class="tool-group open" id="group-uv">
+          <div class="tool-group-header">
+            <span class="tool-group-title">UV Editing</span>
+            <svg class="tool-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="tool-group-body">
+            <button class="tool-btn" id="tool-straighten" data-tool="straighten" title="Straighten UVs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M12 3v18"/></svg>
+              Straighten
+            </button>
+            <button class="tool-btn" id="tool-align" data-tool="align" title="Align UVs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="7" y2="10"/><line x1="7" y1="20" x2="7" y2="4"/></svg>
+              Align
+            </button>
+            <button class="tool-btn" id="tool-relax" data-tool="relax" title="Relax UVs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/></svg>
+              Relax
+            </button>
+            <button class="tool-btn" id="tool-unwrap" data-tool="unwrap" title="Unwrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              Unwrap
+            </button>
+            <button class="tool-btn" id="tool-pack" data-tool="pack" title="Pack Islands">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+              Pack
+            </button>
+            <button class="tool-btn" id="tool-organize" data-tool="organize" title="Organize / Unfoldify">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+              Organize
+            </button>
+          </div>
+        </div>
+
+        <!-- View Options -->
+        <div class="tool-group" id="group-view">
+          <div class="tool-group-header">
+            <span class="tool-group-title">View Options</span>
+            <svg class="tool-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="tool-group-body">
+            <button class="tool-btn" id="tool-checker" data-mode="checker" title="Checker Map">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></svg>
+              Checker Map
+            </button>
+            <button class="tool-btn" id="tool-real" data-mode="real" title="Real Texture" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Real Texture
+            </button>
+            <button class="tool-btn" id="tool-wire" data-mode="wire" title="Wireframe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18v3a2 2 0 01-2 2h-3M3 16v3a2 2 0 002 2h3"/></svg>
+              Wireframe
+            </button>
+            <button class="tool-btn" id="tool-problems" data-mode="problems" title="Problem Finder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Problem Finder
+            </button>
+            <button class="tool-btn" id="tool-texel" data-mode="texel" title="Texel Density">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="9"/><rect x="3" y="15" width="7" height="9"/><rect x="14" y="15" width="7" height="9"/></svg>
+              Texel Density
+            </button>
+            <button class="tool-btn" id="tool-overlap" data-mode="overlap" title="Overlap Detection">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              Overlap Detection
+            </button>
+            <button class="tool-btn" id="tool-2d" data-mode="2d" title="2D UV Map">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+              2D UV Map
+            </button>
+          </div>
+        </div>
+
+        <!-- File Operations -->
+        <div class="tool-group" id="group-file">
+          <div class="tool-group-header">
+            <span class="tool-group-title">File Operations</span>
+            <svg class="tool-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="tool-group-body">
+            <button class="tool-btn" id="tool-import" title="Import Model">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import (OBJ/ZIP)
+            </button>
+            <button class="tool-btn" id="tool-export-obj" title="Export OBJ">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Export OBJ
+            </button>
+            <button class="tool-btn" id="tool-export-png" title="Export UV Layout PNG">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Export UV PNG
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center - Viewport -->
+    <main class="viewport-area" id="viewport-area" role="main">
+      <canvas class="viewport-canvas" id="uv-canvas"></canvas>
+      <div class="viewport-hint" id="viewport-hint">drag to orbit · scroll to zoom · shift+scroll to pan</div>
+      <div class="status-box idle" id="uv-status" style="position:absolute;top:12px;left:12px;right:auto;max-width:300px;z-index:10"><div class="dot"></div><span id="uv-msg">No model loaded.</span></div>
+    </main>
+
+    <!-- Right Sidebar - Options/Inspector -->
+    <aside class="right-sidebar" id="right-sidebar" role="complementary" aria-label="Options">
+      <div class="sidebar-header">
+        <span class="sidebar-title">OPTIONS</span>
+        <button class="sidebar-toggle" id="btn-close-right" aria-label="Close options panel">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-content" id="right-sidebar-content">
+        <!-- Dynamic content based on active tool/mode -->
+        <div id="panel-placeholder" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">
+          Select a tool or mode to see options here
+        </div>
+      </div>
+    </aside>
   </div>
 
-  <div class="status-box idle" id="uv-status"><div class="dot"></div><span id="uv-msg">No model loaded yet.</span></div>
-
-  <div id="viewer-section" style="display:none">
-    <div class="viewer-wrap">
-      <canvas id="uv-canvas"></canvas>
-      <div class="viewer-hint">drag to orbit · scroll to zoom</div>
+  <!-- Bottom Bar -->
+  <footer class="bottom-bar" role="statusbar">
+    <div class="bottom-bar-left">
+      <span id="status-triangles" style="display:none">Triangles: —</span>
+      <span id="status-selection" style="display:none">Selected: —</span>
     </div>
-    <div class="toggle-row">
-      <button class="btn active" id="uv-mode-checker" data-mode="checker">🏁 CHECKER</button>
-      <button class="btn-outline" id="uv-mode-real" data-mode="real" style="display:none">🖼 REAL TEXTURE</button>
-      <button class="btn-outline" id="uv-mode-wire" data-mode="wire">◇ WIREFRAME</button>
-      <button class="btn-outline" id="uv-mode-problems" data-mode="problems">⚠ PROBLEMS</button>
-      <button class="btn-outline" id="uv-mode-texel" data-mode="texel">🌡 TEXEL DENSITY</button>
-      <button class="btn-outline" id="uv-mode-overlap" data-mode="overlap">🔴 OVERLAP</button>
-      <button class="btn-outline" id="uv-mode-2d">🗺 2D UV MAP</button>
+    <div class="bottom-bar-right">
+      <button class="bottom-bar-tab" id="tab-tools" data-sheet="tools" title="Tools">🔧 Tools</button>
+      <button class="bottom-bar-tab" id="tab-options" data-sheet="options" title="Options">⚙ Options</button>
+      <button class="bottom-bar-tab" id="tab-layers" data-sheet="layers" title="Layers">📋 Layers</button>
     </div>
+  </footer>
 
-    <!-- Checker Options Panel -->
-    <div id="checker-options-panel" class="legend" style="margin-top:12px;display:none">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        <label style="font-size:11px;color:var(--muted)">Grid:</label>
-        <select id="checker-cells" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="8">8</option>
-          <option value="16" selected>16</option>
-          <option value="32">32</option>
-          <option value="64">64</option>
-        </select>
-        <label style="font-size:11px;color:var(--muted)">Pattern:</label>
-        <select id="checker-pattern" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="rainbow" selected>Rainbow</option>
-          <option value="numbered">Numbered</option>
-          <option value="bw">Black-White</option>
-        </select>
-        <label style="font-size:11px;color:var(--muted)">Tex Size:</label>
-        <select id="checker-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="1024" selected>1024</option>
-          <option value="2048">2048</option>
-          <option value="4096">4096</option>
-        </select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer">
-          <input type="checkbox" id="checker-glyph" style="width:14px;height:14px;accent-color:var(--accent)"> Glyph
-        </label>
-        <input type="text" id="checker-glyph-char" value="F" maxlength="1" style="width:36px;padding:6px 8px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;text-align:center" placeholder="F">
-      </div>
-      <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
-        ⚠ <b>Visual warning:</b> high grid density (32/64) with rainbow pattern creates dense line patterns that may shimmer. If sensitive, use lower density or black-white pattern.
-      </div>
-    </div>
+</div>
 
-    <!-- Problems Panel -->
-    <div id="problems-panel" class="legend" style="margin-top:12px;display:none">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        <span style="font-size:11px;color:var(--muted)">Show:</span>
-        <button class="btn-outline active" id="prob-filter-flipped" data-filter="flipped" style="padding:6px 10px;font-size:11px">Flipped</button>
-        <button class="btn-outline active" id="prob-filter-zero" data-filter="zeroArea" style="padding:6px 10px;font-size:11px">Zero-Area</button>
-        <button class="btn-outline active" id="prob-filter-outside" data-filter="outside" style="padding:6px 10px;font-size:11px">Outside 0-1</button>
-      </div>
-      <div id="problems-summary" style="font-size:11px;color:var(--muted)"></div>
-      <div id="problems-legend" style="margin-top:8px;display:none">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px">
-          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Flipped</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#FFD166;margin-right:4px;vertical-align:middle"></span>Zero-area</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Outside 0-1</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle;border:1px dashed #fff"></span>No UV</span>
-        </div>
-        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
-          ⚠ <b>Visual warning:</b> problem overlay shows dense triangle patterns that may appear to shimmer. View in short intervals if sensitive.
-        </div>
-      </div>
-    </div>
+<!-- Bottom Sheet: Tools (Tablet/Mobile) -->
+<div class="bottom-sheet" id="sheet-tools" role="dialog" aria-label="Tools" aria-modal="false">
+  <div class="bottom-sheet-handle"></div>
+  <div class="bottom-sheet-header">
+    <span class="bottom-sheet-title">TOOLS</span>
+    <button class="bottom-sheet-close" id="btn-close-sheet-tools" aria-label="Close tools sheet">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="bottom-sheet-content" id="sheet-tools-content">
+    <!-- Tools content mirrored from left sidebar -->
+  </div>
+</div>
 
-    <!-- Texel Density Panel -->
-    <div id="texel-panel" class="legend" style="margin-top:12px;display:none">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        <label style="font-size:11px;color:var(--muted)">Normalize:</label>
-        <select id="texel-normalize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="global" selected>Global (all meshes)</option>
-          <option value="per-mesh">Per Mesh</option>
-        </select>
-        <label style="font-size:11px;color:var(--muted)">Texture Size:</label>
-        <select id="texel-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="512">512</option>
-          <option value="1024" selected>1024</option>
-          <option value="2048">2048</option>
-          <option value="4096">4096</option>
-        </select>
+<!-- Bottom Sheet: Options (Tablet/Mobile) -->
+<div class="bottom-sheet" id="sheet-options" role="dialog" aria-label="Options" aria-modal="false">
+  <div class="bottom-sheet-handle"></div>
+  <div class="bottom-sheet-header">
+    <span class="bottom-sheet-title">OPTIONS</span>
+    <button class="bottom-sheet-close" id="btn-close-sheet-options" aria-label="Close options sheet">
+      <svg width="20" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="bottom-sheet-content" id="sheet-options-content">
+    <!-- Options content mirrored from right sidebar -->
+  </div>
+</div>
+
+<!-- Bottom Sheet: Layers (Tablet/Mobile) -->
+<div class="bottom-sheet" id="sheet-layers" role="dialog" aria-label="Layers" aria-modal="false">
+  <div class="bottom-sheet-handle"></div>
+  <div class="bottom-sheet-header">
+    <span class="bottom-sheet-title">LAYERS</span>
+    <button class="bottom-sheet-close" id="btn-close-sheet-layers" aria-label="Close layers sheet">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="bottom-sheet-content" id="sheet-layers-content">
+    <div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Layer management coming soon</div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+  <div class="modal-box settings-modal">
+    <h2 class="modal-title" id="settings-modal-title">SETTINGS</h2>
+
+    <div class="settings-section">
+      <span class="settings-label">Layout Size</span>
+      <div class="settings-row">
+        <button class="layout-size-btn" data-size="s" title="Small (280px)">Small</button>
+        <button class="layout-size-btn" data-size="m" title="Medium (340px)" class="active">Medium</button>
+        <button class="layout-size-btn" data-size="w" title="Wide (420px)">Wide</button>
       </div>
-      <div id="texel-summary" style="font-size:11px;color:var(--muted)"></div>
-      <div id="texel-legend" style="margin-top:8px;display:none">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;align-items:center">
-          <span style="display:inline-block;width:16px;height:12px;background:#0066FF;margin-right:4px;vertical-align:middle"></span><0.5×
-          <span style="display:inline-block;width:16px;height:12px;background:#00FFFF;margin-right:4px;vertical-align:middle"></span>0.5–0.8×
-          <span style="display:inline-block;width:16px;height:12px;background:#00FF66;margin-right:4px;vertical-align:middle"></span>0.8–1.25×
-          <span style="display:inline-block;width:16px;height:12px;background:#FF8800;margin-right:4px;vertical-align:middle"></span>1.25–2×
-          <span style="display:inline-block;width:16px;height:12px;background:#FF0000;margin-right:4px;vertical-align:middle"></span>>2×
-        </div>
-        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
-          ⚠ <b>Visual warning:</b> density heatmap uses color gradients that may trigger sensitivity. View zoomed in on one area at a time.
-        </div>
+      <div class="slider-wrap">
+        <label for="layout-custom">Custom</label>
+        <input type="range" id="layout-custom" min="240" max="560" value="340" step="10">
+        <output id="layout-custom-val">340px</output>
       </div>
     </div>
 
-    <!-- Overlap Panel -->
-    <div id="overlap-panel" class="legend" style="margin-top:12px;display:none">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        <label style="font-size:11px;color:var(--muted)">Resolution:</label>
-        <select id="overlap-resolution" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-          <option value="1024" selected>1024²</option>
-          <option value="2048">2048²</option>
-        </select>
+    <div class="settings-section">
+      <span class="settings-label">Colors</span>
+      <div class="color-picker-wrap">
+        <label for="color-bg">Background</label>
+        <input type="color" id="color-bg" value="#001619" title="Background color">
       </div>
-      <div id="overlap-summary" style="font-size:11px;color:var(--muted)"></div>
-      <div id="overlap-legend" style="margin-top:8px;display:none">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;align-items:center">
-          <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Overlap (red)</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Clean</span>
-        </div>
-        <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
-          <b>Note:</b> Stacked/mirrored islands overlap on purpose — this is expected. Results are approximate at the chosen raster resolution. Only tile (0,0) is analyzed.
+      <div class="color-picker-wrap">
+        <label for="color-stroke">Stroke / Border</label>
+        <input type="color" id="color-stroke" value="#0C2A2E" title="Border/stroke color">
+      </div>
+      <div class="color-picker-wrap">
+        <label for="color-accent">Accent</label>
+        <input type="color" id="color-accent" value="#50E8F4" title="Accent color">
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="boost-mode-wrap">
+        <input type="checkbox" id="boost-mode" title="Enable Boost Mode">
+        <div class="boost-mode-label">
+          <div class="boost-mode-title">⚡ Boost Mode</div>
+          <div class="boost-mode-desc">Reduces render quality for higher performance. Useful on older devices or complex scenes.</div>
+          <div class="boost-mode-warning"><b>WARNING:</b> Using Boost mode will give more performance but unexpected resolution on preview — textures and edges may appear pixelated.</div>
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="legend">
-      Each square is one UV tile. <b>Even, unstretched squares</b> = clean UVs. <b>Squares that stretch, squish, or blur</b> mark distorted UVs on that part of the mesh. The colored corner labels help spot mirrored or rotated UV shells. Meshes with <b>no UV data at all</b> render solid <span style="color:var(--red)">red</span>.
+<!-- 2D UV Map Modal -->
+<div class="modal-overlay" id="uv2d-modal" role="dialog" aria-modal="true" aria-labelledby="uv2d-modal-title" style="max-width:95vw;max-height:95vh;">
+  <div class="modal-box" style="width:100%;max-width:none;padding:0;overflow:hidden;background:#0a0a0a;">
+    <div class="bottom-sheet-header" style="border-radius:0;border-bottom:1px solid var(--border);padding:12px 16px;background:var(--s2);">
+      <span class="bottom-sheet-title" id="uv2d-modal-title">2D UV MAP</span>
+      <button class="bottom-sheet-close" id="btn-close-uv2d-modal" aria-label="Close 2D UV map">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-
-    <div id="uv-2d-section" style="display:none;margin-top:18px">
-      <div id="uv-2d-progress-wrap" style="display:none">
+    <div style="padding:16px;overflow:auto;max-height:calc(95vh - 60px);">
+      <div id="uv-2d-progress-wrap" style="display:none;margin-bottom:12px">
         <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
         <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
       </div>
-      <div class="viewer-wrap" style="background:#0a0a0a">
-        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:none"></canvas>
+      <div style="aspect-ratio:1;background:#0a0a0a;border:1px solid var(--border2);border-radius:8px;overflow:hidden;position:relative">
+        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:block"></canvas>
       </div>
-      <div class="toggle-row">
+      <div class="toggle-row" style="margin-top:12px">
         <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
       </div>
       <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
@@ -244,7 +664,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
           <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" style="padding:6px 10px;font-size:11px" title="Transparent with dark grid">☑ Trans+Dark</button>
         </div>
       </div>
-      <div class="warn-box">
+      <div class="warn-box" style="margin-top:10px">
         ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
       </div>
       <div class="legend">
@@ -252,7 +672,6 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       </div>
     </div>
   </div>
-
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -269,6 +688,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 
 let scene, camera, renderer, controls;
 let currentRoot = null;
@@ -293,6 +713,37 @@ let problemFilters = { flipped: true, zeroArea: true, outside: true };
 let texelNormalizeGlobal = true;
 let texelTextureSize = 1024;
 let overlapResolution = 1024;
+
+// ============================================================================
+// UV SELECTION SYSTEM
+// ============================================================================
+
+let selectionMode = 'vertex'; // 'vertex' | 'edge' | 'face' | 'island'
+let selection = {
+  vertices: new Set(),   // Set of "meshIndex:vertIndex"
+  edges: new Set(),      // Set of "meshIndex:edgeKey"
+  faces: new Set(),      // Set of "meshIndex:faceIndex"
+  islands: new Set()     // Set of island IDs
+};
+let selectionGizmo = null;
+let gizmoMode = 'translate'; // 'translate' | 'rotate' | 'scale'
+let gizmoVisible = false;
+let lastMouseUV = { u: 0, v: 0 };
+let isTransforming = false;
+let transformStart = { u: 0, v: 0 };
+let transformSnapshot = null; // For undo during transform
+let dragBox = null; // For box selection on 2D canvas
+
+// Selection colors
+const SELECT_COLOR = '#50E8F4';
+const SELECT_COLOR_FACE = 'rgba(80, 232, 244, 0.3)';
+const HOVER_COLOR = '#FFD166';
+const GIZMO_COLOR_X = '#FF4466';
+const GIZMO_COLOR_Y = '#00FFB3';
+
+// UV Island detection cache
+let islandCache = null;
+let islandCacheVersion = 0;
 
 function st(msg, kind){
   const box = document.getElementById('uv-status');
@@ -394,6 +845,580 @@ function createCheckerCanvas(opts = {}) {
   return canvas;
 }
 
+// ============================================================================
+// UV SELECTION SYSTEM - Core Functions
+// ============================================================================
+
+// Get UV attribute and index for a mesh
+function getUVData(mesh) {
+  const geom = mesh.geometry;
+  const uvAttr = geom.attributes.uv;
+  const idx = geom.index;
+  const posAttr = geom.attributes.position;
+  if (!uvAttr) return null;
+  return { uvAttr, idx, posAttr };
+}
+
+// Convert mesh vertex index to UV coordinates
+function getUV(mesh, vertIndex) {
+  const data = getUVData(mesh);
+  if (!data) return null;
+  const { uvAttr, idx } = data;
+  const vi = idx ? idx.getX(vertIndex) : vertIndex;
+  return [uvAttr.getX(vi), uvAttr.getY(vi)];
+}
+
+// Get all UVs for a mesh as flat array [u0,v0,u1,v1,...]
+function getAllUVs(mesh) {
+  const data = getUVData(mesh);
+  if (!data) return null;
+  const { uvAttr, idx, posAttr } = data;
+  const count = idx ? idx.count : uvAttr.count;
+  const uvs = new Float32Array(count * 2);
+  for (let i = 0; i < count; i++) {
+    const vi = idx ? idx.getX(i) : i;
+    uvs[i * 2] = uvAttr.getX(vi);
+    uvs[i * 2 + 1] = uvAttr.getY(vi);
+  }
+  return { uvs, count, idx, posAttr };
+}
+
+// Build edge list for a mesh (for edge selection)
+function buildMeshEdges(mesh) {
+  const data = getUVData(mesh);
+  if (!data) return [];
+  const { idx, uvAttr } = data;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+  const edges = new Map(); // key -> { a, b, faceIndices[] }
+
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+
+    const tris = [v0, v1, v2];
+    for (let e = 0; e < 3; e++) {
+      const a = tris[e];
+      const b = tris[(e + 1) % 3];
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      if (!edges.has(key)) edges.set(key, { a, b, faces: [] });
+      edges.get(key).faces.push(t);
+    }
+  }
+  return Array.from(edges.values());
+}
+
+// Detect UV islands using BFS on shared edges
+function detectUVIslands(mesh) {
+  const data = getUVData(mesh);
+  if (!data) return [];
+  const { uvAttr, idx } = data;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  // Build adjacency: vertex -> connected vertices via edges
+  const adj = new Map();
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const tris = [v0, v1, v2];
+    for (let e = 0; e < 3; e++) {
+      const a = tris[e];
+      const b = tris[(e + 1) % 3];
+      if (!adj.has(a)) adj.set(a, new Set());
+      if (!adj.has(b)) adj.set(b, new Set());
+      adj.get(a).add(b);
+      adj.get(b).add(a);
+    }
+  }
+
+  // BFS to find connected components (islands)
+  const visited = new Set();
+  const islands = [];
+
+  for (const [vert] of adj) {
+    if (visited.has(vert)) continue;
+    const island = { vertices: new Set(), faces: new Set(), edges: new Set() };
+    const queue = [vert];
+    visited.add(vert);
+
+    while (queue.length > 0) {
+      const v = queue.pop();
+      island.vertices.add(v);
+      const neighbors = adj.get(v);
+      if (neighbors) {
+        for (const n of neighbors) {
+          const key = v < n ? `${v}:${n}` : `${n}:${v}`;
+          island.edges.add(key);
+          if (!visited.has(n)) {
+            visited.add(n);
+            queue.push(n);
+          }
+        }
+      }
+    }
+
+    // Find faces belonging to this island
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3;
+      const v0 = idx ? idx.getX(i0) : i0;
+      if (island.vertices.has(v0)) island.faces.add(t);
+    }
+
+    islands.push(island);
+  }
+
+  return islands;
+}
+
+// Get all islands for all meshes (cached)
+function getAllIslands() {
+  if (!currentRoot) return [];
+  if (islandCache && islandCacheVersion === currentRoot.uuid) return islandCache;
+
+  const allIslands = [];
+  let islandId = 0;
+  currentRoot.traverse(child => {
+    if (child.isMesh) {
+      const islands = detectUVIslands(child);
+      for (const isl of islands) {
+        isl.mesh = child;
+        isl.id = islandId++;
+        allIslands.push(isl);
+      }
+    }
+  });
+  islandCache = allIslands;
+  islandCacheVersion = currentRoot.uuid;
+  return allIslands;
+}
+
+// Clear selection
+function clearSelection() {
+  selection.vertices.clear();
+  selection.edges.clear();
+  selection.faces.clear();
+  selection.islands.clear();
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// Update selection status in bottom bar
+function updateSelectionStatus() {
+  const el = document.getElementById('status-selection');
+  if (!el) return;
+  const total = selection.vertices.size + selection.edges.size + selection.faces.size + selection.islands.size;
+  if (total === 0) {
+    el.style.display = 'none';
+  } else {
+    el.style.display = 'inline';
+    const parts = [];
+    if (selection.vertices.size) parts.push(`${selection.vertices.size} verts`);
+    if (selection.edges.size) parts.push(`${selection.edges.size} edges`);
+    if (selection.faces.size) parts.push(`${selection.faces.size} faces`);
+    if (selection.islands.size) parts.push(`${selection.islands.size} islands`);
+    el.textContent = `Selected: ${parts.join(', ')}`;
+  }
+}
+
+// Raycast in UV space (for 2D UV map click)
+function raycastUV(mouseU, mouseV, threshold = 0.008) {
+  if (!currentRoot) return null;
+
+  let bestHit = null;
+  let bestDist = threshold;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      const u0 = uvAttr.getX(v0), v0_ = uvAttr.getY(v0);
+      const u1 = uvAttr.getX(v1), v1_ = uvAttr.getY(v1);
+      const u2 = uvAttr.getX(v2), v2_ = uvAttr.getY(v2);
+
+      // Check if point is in triangle (barycentric)
+      const denom = (v1_ - v2_) * (u0 - u2) + (u2 - u1) * (v0_ - v2_);
+      if (Math.abs(denom) < 1e-10) continue;
+
+      const a = ((v1_ - v2_) * (mouseU - u2) + (u2 - u1) * (mouseV - v2_)) / denom;
+      const b = ((v2_ - v0_) * (mouseU - u2) + (u0 - u2) * (mouseV - v2_)) / denom;
+      const c = 1 - a - b;
+
+      if (a >= -0.001 && b >= -0.001 && c >= -0.001) {
+        // Point is in triangle - check vertex/edge proximity
+        const verts = [{u: u0, v: v0_, idx: v0}, {u: u1, v: v1_, idx: v1}, {u: u2, v: v2_, idx: v2}];
+        for (const vert of verts) {
+          const du = vert.u - mouseU;
+          const dv = vert.v - mouseV;
+          const dist = Math.sqrt(du * du + dv * dv);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestHit = { mesh: child, type: 'vertex', vertex: vert.idx, face: t, uv: [vert.u, vert.v] };
+          }
+        }
+
+        // Check edge proximity
+        const edges = [[verts[0], verts[1]], [verts[1], verts[2]], [verts[2], verts[0]]];
+        for (const [va, vb] of edges) {
+          const dist = pointToLineDist(mouseU, mouseV, va.u, va.v, vb.u, vb.v);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestHit = { mesh: child, type: 'edge', vertices: [va.idx, vb.idx], face: t, uv: [mouseU, mouseV] };
+          }
+        }
+
+        // Face hit (center)
+        const centerU = (u0 + u1 + u2) / 3;
+        const centerV = (v0_ + v1_ + v2_) / 3;
+        const faceDist = Math.sqrt((centerU - mouseU) ** 2 + (centerV - mouseV) ** 2);
+        if (faceDist < bestDist) {
+          bestDist = faceDist;
+          bestHit = { mesh: child, type: 'face', face: t, uv: [centerU, centerV] };
+        }
+      }
+    }
+  });
+
+  return bestHit;
+}
+
+function pointToLineDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t * dx, cy = y1 + t * dy;
+  return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+}
+
+// Find island containing a vertex
+function findIslandForVertex(mesh, vertIndex) {
+  const islands = getAllIslands();
+  for (const isl of islands) {
+    if (isl.mesh === mesh && isl.vertices.has(vertIndex)) return isl;
+  }
+  return null;
+}
+
+// Expand selection to island
+function selectIsland(mesh, vertIndex) {
+  const isl = findIslandForVertex(mesh, vertIndex);
+  if (!isl) return;
+
+  // Add all vertices of island to selection
+  for (const v of isl.vertices) {
+    selection.vertices.add(`${mesh.uuid}:${v}`);
+  }
+  selection.islands.add(isl.id);
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// Select all connected (by edges) from current selection
+function selectConnected() {
+  if (!currentRoot) return;
+  // For each selected vertex, find connected vertices via edges
+  // This is a simplified version - full implementation would use island detection
+  const newVerts = new Set();
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const edges = buildMeshEdges(child);
+    for (const edge of edges) {
+      const keyA = `${child.uuid}:${edge.a}`;
+      const keyB = `${child.uuid}:${edge.b}`;
+      if (selection.vertices.has(keyA)) newVerts.add(keyB);
+      if (selection.vertices.has(keyB)) newVerts.add(keyA);
+    }
+  });
+  for (const v of newVerts) selection.vertices.add(v);
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// Invert selection
+function invertSelection() {
+  if (!currentRoot) return;
+  const allVerts = new Set();
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+    const count = idx ? idx.count : uvAttr.count;
+    for (let i = 0; i < count; i++) {
+      const vi = idx ? idx.getX(i) : i;
+      allVerts.add(`${child.uuid}:${vi}`);
+    }
+  });
+  const oldSel = new Set(selection.vertices);
+  selection.vertices.clear();
+  for (const v of allVerts) {
+    if (!oldSel.has(v)) selection.vertices.add(v);
+  }
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// Gizmo system
+function createSelectionGizmo() {
+  if (selectionGizmo) {
+    scene.remove(selectionGizmo);
+    selectionGizmo.geometry.dispose();
+    selectionGizmo.material.dispose();
+  }
+
+  // Calculate selection bounds in 3D space
+  let min = new THREE.Vector3(Infinity, Infinity, Infinity);
+  let max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  let hasSelection = false;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { posAttr, idx, uvAttr } = data;
+    if (!posAttr) return;
+
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      const key0 = `${child.uuid}:${v0}`;
+      const key1 = `${child.uuid}:${v1}`;
+      const key2 = `${child.uuid}:${v2}`;
+
+      let include = false;
+      if (selectionMode === 'vertex' && (selection.vertices.has(key0) || selection.vertices.has(key1) || selection.vertices.has(key2))) include = true;
+      if (selectionMode === 'face' && selection.faces.has(`${child.uuid}:${t}`)) include = true;
+
+      if (include) {
+        hasSelection = true;
+        const p0 = new THREE.Vector3(posAttr.getX(v0), posAttr.getY(v0), posAttr.getZ(v0));
+        const p1 = new THREE.Vector3(posAttr.getX(v1), posAttr.getY(v1), posAttr.getZ(v1));
+        const p2 = new THREE.Vector3(posAttr.getX(v2), posAttr.getY(v2), posAttr.getZ(v2));
+        min.min(p0); min.min(p1); min.min(p2);
+        max.max(p0); max.max(p1); max.max(p2);
+      }
+    }
+  });
+
+  if (!hasSelection) {
+    gizmoVisible = false;
+    return;
+  }
+
+  const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+  const size = new THREE.Vector3().subVectors(max, min);
+  const maxDim = Math.max(size.x, size.y, size.z);
+
+  // Create gizmo based on mode
+  const group = new THREE.Group();
+  group.position.copy(center);
+
+  const gizmoSize = maxDim * 0.5;
+
+  if (gizmoMode === 'translate') {
+    // Translation gizmo - three arrows
+    const arrowGeom = new THREE.ConeGeometry(gizmoSize * 0.1, gizmoSize * 0.6, 8);
+    const shaftGeom = new THREE.CylinderGeometry(gizmoSize * 0.03, gizmoSize * 0.03, gizmoSize * 0.4, 8);
+
+    // X axis (red)
+    const xArrow = new THREE.Mesh(arrowGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_X, transparent: true, opacity: 0.8 }));
+    xArrow.rotation.z = -Math.PI / 2;
+    xArrow.position.x = gizmoSize * 0.5;
+    group.add(xArrow);
+    const xShaft = new THREE.Mesh(shaftGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_X, transparent: true, opacity: 0.5 }));
+    xShaft.rotation.z = -Math.PI / 2;
+    xShaft.position.x = gizmoSize * 0.2;
+    group.add(xShaft);
+
+    // Y axis (green)
+    const yArrow = new THREE.Mesh(arrowGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_Y, transparent: true, opacity: 0.8 }));
+    yArrow.position.y = gizmoSize * 0.5;
+    group.add(yArrow);
+    const yShaft = new THREE.Mesh(shaftGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_Y, transparent: true, opacity: 0.5 }));
+    yShaft.position.y = gizmoSize * 0.2;
+    group.add(yShaft);
+
+    // Z axis (blue)
+    const zArrow = new THREE.Mesh(arrowGeom, new THREE.MeshBasicMaterial({ color: '#50E8F4', transparent: true, opacity: 0.8 }));
+    zArrow.rotation.x = Math.PI / 2;
+    zArrow.position.z = gizmoSize * 0.5;
+    group.add(zArrow);
+    const zShaft = new THREE.Mesh(shaftGeom, new THREE.MeshBasicMaterial({ color: '#50E8F4', transparent: true, opacity: 0.5 }));
+    zShaft.rotation.x = Math.PI / 2;
+    zShaft.position.z = gizmoSize * 0.2;
+    group.add(zShaft);
+  } else if (gizmoMode === 'rotate') {
+    // Rotation gizmo - three rings
+    const ringGeom = new THREE.RingGeometry(gizmoSize * 0.6, gizmoSize * 0.7, 32);
+
+    const xRing = new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_X, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+    xRing.rotation.y = Math.PI / 2;
+    group.add(xRing);
+
+    const yRing = new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_Y, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+    yRing.rotation.x = -Math.PI / 2;
+    group.add(yRing);
+
+    const zRing = new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({ color: '#50E8F4', side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+    group.add(zRing);
+  } else if (gizmoMode === 'scale') {
+    // Scale gizmo - three boxes at ends
+    const boxGeom = new THREE.BoxGeometry(gizmoSize * 0.2, gizmoSize * 0.2, gizmoSize * 0.2);
+    const lineGeom = new THREE.CylinderGeometry(gizmoSize * 0.02, gizmoSize * 0.02, gizmoSize * 0.7, 8);
+
+    const xBox = new THREE.Mesh(boxGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_X }));
+    xBox.position.x = gizmoSize * 0.5;
+    group.add(xBox);
+    const xLine = new THREE.Mesh(lineGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_X, transparent: true, opacity: 0.4 }));
+    xLine.rotation.z = -Math.PI / 2;
+    xLine.position.x = gizmoSize * 0.35;
+    group.add(xLine);
+
+    const yBox = new THREE.Mesh(boxGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_Y }));
+    yBox.position.y = gizmoSize * 0.5;
+    group.add(yBox);
+    const yLine = new THREE.Mesh(lineGeom, new THREE.MeshBasicMaterial({ color: GIZMO_COLOR_Y, transparent: true, opacity: 0.4 }));
+    yLine.position.y = gizmoSize * 0.35;
+    group.add(yLine);
+
+    const zBox = new THREE.Mesh(boxGeom, new THREE.MeshBasicMaterial({ color: '#50E8F4' }));
+    zBox.position.z = gizmoSize * 0.5;
+    group.add(zBox);
+    const zLine = new THREE.Mesh(lineGeom, new THREE.MeshBasicMaterial({ color: '#50E8F4', transparent: true, opacity: 0.4 }));
+    zLine.rotation.x = Math.PI / 2;
+    zLine.position.z = gizmoSize * 0.35;
+    group.add(zLine);
+  }
+
+  selectionGizmo = group;
+  scene.add(group);
+  gizmoVisible = true;
+}
+
+function updateSelectionGizmo() {
+  if (!currentRoot || selection.vertices.size === 0 && selection.faces.size === 0) {
+    if (selectionGizmo) {
+      scene.remove(selectionGizmo);
+      selectionGizmo.geometry?.dispose?.();
+      selectionGizmo.material?.dispose?.();
+      selectionGizmo = null;
+      gizmoVisible = false;
+    }
+    return;
+  }
+  createSelectionGizmo();
+}
+
+function removeSelectionGizmo() {
+  if (selectionGizmo) {
+    scene.remove(selectionGizmo);
+    selectionGizmo.geometry?.dispose?.();
+    selectionGizmo.material?.dispose?.();
+    selectionGizmo = null;
+    gizmoVisible = false;
+  }
+}
+
+// Transform selection (move/rotate/scale in UV space)
+function transformSelectionUV(deltaU, deltaV) {
+  if (!currentRoot) return;
+  if (!transformSnapshot) return;
+
+  // Apply transform to selected vertices
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    uvAttr.array = uvAttr.array.slice(); // Force update
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const key = `${child.uuid}:${i}`;
+      if (selection.vertices.has(key)) {
+        const snap = transformSnapshot.get(key);
+        if (snap) {
+          uvAttr.setX(i, snap.u + deltaU);
+          uvAttr.setY(i, snap.v + deltaV);
+        }
+      }
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  // Update 3D view (checker texture coordinates)
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  // Update 2D UV map if open
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+    buildUV2DInModal();
+  }
+
+  requestRender();
+}
+
+function startTransform() {
+  if (!currentRoot) return;
+  transformSnapshot = new Map();
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const key = `${child.uuid}:${i}`;
+      if (selection.vertices.has(key)) {
+        transformSnapshot.set(key, { u: uvAttr.getX(i), v: uvAttr.getY(i) });
+      }
+    }
+  });
+  isTransforming = true;
+}
+
+function endTransform() {
+  isTransforming = false;
+  transformSnapshot = null;
+  // Invalidate island cache since UVs changed
+  islandCache = null;
+}
+
+
+// Selection mode from toolbar
+function setSelectionMode(mode) {
+  selectionMode = mode;
+  document.querySelectorAll('.tool-btn[data-sel-mode]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.selMode === mode);
+  });
+  updateRightSidebarForTool(activeTool); // Refresh sidebar
+  requestRender();
+}
+
 // Brave detection: Shields can block WebGL; we run 100% locally, no trackers
 function isBrave() {
   // Brave exposes navigator.brave.isBrave() in newer versions
@@ -455,6 +1480,205 @@ function initScene(){
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+
+  // Gizmo interaction state
+  let gizmoDragState = null; // { axis: 'x'|'y'|'z', mode: 'translate'|'rotate'|'scale', startPoint, startMouse }
+
+  // Raycaster for gizmo interaction
+  const gizmoRaycaster = new THREE.Raycaster();
+  const gizmoMouse = new THREE.Vector2();
+
+  function getGizmoIntersections(clientX, clientY) {
+    if (!selectionGizmo || !gizmoVisible) return [];
+    const rect = canvas.getBoundingClientRect();
+    gizmoMouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    gizmoMouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    gizmoRaycaster.setFromCamera(gizmoMouse, camera);
+    // Only test against gizmo children (the axis handles)
+    const gizmoObjects = [];
+    selectionGizmo.traverse(obj => {
+      if (obj.isMesh) gizmoObjects.push(obj);
+    });
+    return gizmoRaycaster.intersectObjects(gizmoObjects, true);
+  }
+
+  function handleGizmoMouseDown(e) {
+    if (!selectionGizmo || !gizmoVisible || !['move', 'rotate', 'scale'].includes(activeTool)) return;
+    if (e.button !== 0) return; // Only left click
+
+    const intersects = getGizmoIntersections(e.clientX, e.clientY);
+    if (intersects.length === 0) return;
+
+    // Prevent orbit controls from handling this click
+    e.stopPropagation();
+
+    const hit = intersects[0].object;
+    // Determine axis from object color or name
+    let axis = null;
+    const color = hit.material.color.getHex();
+    if (color === 0xFF4466) axis = 'x';
+    else if (color === 0x00FFB3) axis = 'y';
+    else if (color === 0x50E8F4) axis = 'z';
+
+    if (!axis) return;
+
+    // Calculate intersection point on the axis plane
+    const planeNormal = new THREE.Vector3();
+    if (axis === 'x') planeNormal.set(1, 0, 0);
+    else if (axis === 'y') planeNormal.set(0, 1, 0);
+    else planeNormal.set(0, 0, 1);
+
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, selectionGizmo.position);
+    const intersectPoint = new THREE.Vector3();
+    gizmoRaycaster.ray.intersectPlane(plane, intersectPoint);
+
+    gizmoDragState = {
+      axis,
+      mode: gizmoMode,
+      startPoint: intersectPoint.clone(),
+      startMouse: { x: e.clientX, y: e.clientY },
+      gizmoCenter: selectionGizmo.position.clone()
+    };
+
+    startTransform();
+    controls.enabled = false; // Disable orbit while dragging gizmo
+    canvas.style.cursor = 'grabbing';
+  }
+
+  function handleGizmoMouseMove(e) {
+    if (!gizmoDragState) return;
+
+    gizmoMouse.x = ((e.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth) * 2 - 1;
+    gizmoMouse.y = -((e.clientY - canvas.getBoundingClientRect().top) / canvas.clientHeight) * 2 + 1;
+    gizmoRaycaster.setFromCamera(gizmoMouse, camera);
+
+    const planeNormal = new THREE.Vector3();
+    if (gizmoDragState.axis === 'x') planeNormal.set(1, 0, 0);
+    else if (gizmoDragState.axis === 'y') planeNormal.set(0, 1, 0);
+    else planeNormal.set(0, 0, 1);
+
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, gizmoDragState.gizmoCenter);
+    const currentPoint = new THREE.Vector3();
+    if (!gizmoRaycaster.ray.intersectPlane(plane, currentPoint)) return;
+
+    // Calculate delta in world space
+    const delta = new THREE.Vector3().subVectors(currentPoint, gizmoDragState.startPoint);
+
+    if (gizmoDragState.mode === 'translate') {
+      // Convert world delta to UV delta (project onto UV plane)
+      // For simplicity, use X/Y world axes as U/V
+      let deltaU = 0, deltaV = 0;
+      if (gizmoDragState.axis === 'x') deltaU = delta.x;
+      else if (gizmoDragState.axis === 'y') deltaV = delta.y;
+      else { deltaU = delta.x; deltaV = delta.y; } // Z axis moves in both
+
+      // Scale factor to make it reasonable
+      const scale = 0.01;
+      transformSelectionUV(deltaU * scale, deltaV * scale);
+      gizmoDragState.startPoint.copy(currentPoint);
+      updateSelectionGizmo();
+    } else if (gizmoDragState.mode === 'scale') {
+      // Scale along axis
+      const scaleFactor = 1 + delta.length() * 0.01 * (delta.dot(new THREE.Vector3(
+        gizmoDragState.axis === 'x' ? 1 : 0,
+        gizmoDragState.axis === 'y' ? 1 : 0,
+        gizmoDragState.axis === 'z' ? 1 : 0
+      )) > 0 ? 1 : -1);
+      // Apply scale to UVs
+      applyGizmoScale(gizmoDragState.axis, scaleFactor);
+      gizmoDragState.startPoint.copy(currentPoint);
+      updateSelectionGizmo();
+    } else if (gizmoDragState.mode === 'rotate') {
+      // Rotate around axis
+      const angle = delta.length() * 0.01;
+      applyGizmoRotate(gizmoDragState.axis, angle);
+      gizmoDragState.startPoint.copy(currentPoint);
+      updateSelectionGizmo();
+    }
+  }
+
+  function handleGizmoMouseUp(e) {
+    if (!gizmoDragState) return;
+    gizmoDragState = null;
+    controls.enabled = true;
+    canvas.style.cursor = 'default';
+    endTransform();
+  }
+
+  canvas.addEventListener('mousedown', handleGizmoMouseDown);
+  window.addEventListener('mousemove', handleGizmoMouseMove);
+  window.addEventListener('mouseup', handleGizmoMouseUp);
+
+  function applyGizmoScale(axis, factor) {
+    if (!currentRoot || !transformSnapshot) return;
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr } = data;
+      uvAttr.array = uvAttr.array.slice();
+      for (let i = 0; i < uvAttr.count; i++) {
+        const key = `${child.uuid}:${i}`;
+        if (selection.vertices.has(key)) {
+          const snap = transformSnapshot.get(key);
+          if (snap) {
+            const centerU = snap.u; // Use original position as pivot
+            const centerV = snap.v;
+            if (axis === 'x' || axis === 'z') {
+              uvAttr.setX(i, centerU + (uvAttr.getX(i) - centerU) * factor);
+            }
+            if (axis === 'y' || axis === 'z') {
+              uvAttr.setY(i, centerV + (uvAttr.getY(i) - centerV) * factor);
+            }
+          }
+        }
+      }
+      uvAttr.needsUpdate = true;
+    });
+    if (current3DMode === 'checker') updateCheckerTexture();
+    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    requestRender();
+  }
+
+  function applyGizmoRotate(axis, angle) {
+    if (!currentRoot || !transformSnapshot) return;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr } = data;
+      uvAttr.array = uvAttr.array.slice();
+      for (let i = 0; i < uvAttr.count; i++) {
+        const key = `${child.uuid}:${i}`;
+        if (selection.vertices.has(key)) {
+          const snap = transformSnapshot.get(key);
+          if (snap) {
+            const centerU = snap.u;
+            const centerV = snap.v;
+            const u = uvAttr.getX(i) - centerU;
+            const v = uvAttr.getY(i) - centerV;
+            let newU = u, newV = v;
+            if (axis === 'z') { // Rotate in UV plane
+              newU = u * cos - v * sin;
+              newV = u * sin + v * cos;
+            } else if (axis === 'x') { // Rotate V around center
+              newV = v * cos - u * sin;
+            } else if (axis === 'y') { // Rotate U around center
+              newU = u * cos + v * sin;
+            }
+            uvAttr.setX(i, centerU + newU);
+            uvAttr.setY(i, centerV + newV);
+          }
+        }
+      }
+      uvAttr.needsUpdate = true;
+    });
+    if (current3DMode === 'checker') updateCheckerTexture();
+    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    requestRender();
+  }
 
   function updateCheckerTexture() {
     if (checkerTexture) checkerTexture.dispose();
@@ -649,7 +1873,7 @@ function set3DMode(mode) {
   current3DMode = mode;
   wireframeOn = false;
 
-  // Update button states
+  // Update button states (works for both old and new buttons)
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
     if (btn.classList.contains('btn')) {
@@ -657,11 +1881,8 @@ function set3DMode(mode) {
     }
   });
 
-  // Show/hide option panels
-  document.getElementById('checker-options-panel').style.display = mode === 'checker' ? 'block' : 'none';
-  document.getElementById('problems-panel').style.display = mode === 'problems' ? 'block' : 'none';
-  document.getElementById('texel-panel').style.display = mode === 'texel' ? 'block' : 'none';
-  document.getElementById('overlap-panel').style.display = mode === 'overlap' ? 'block' : 'none';
+  // Update right sidebar with mode-specific options
+  updateRightSidebarForMode(mode);
 
   // Apply mode
   if (mode === 'checker') {
@@ -1709,6 +2930,130 @@ function draw2DOverlay() {
     }
     ctx.globalAlpha = 1;
   }
+
+  // Draw drag selection box
+  if (dragBox) {
+    ctx.strokeStyle = '#50E8F4';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(dragBox.x1, dragBox.y1, dragBox.x2 - dragBox.x1, dragBox.y2 - dragBox.y1);
+    ctx.setLineDash([]);
+  }
+
+  // Draw selection highlights
+  if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
+    draw2DSelectionHighlights(ctx, size);
+  }
+}
+
+// Draw selection highlights on 2D UV canvas
+function draw2DSelectionHighlights(ctx, size) {
+  if (!currentRoot) return;
+
+  // Draw selected faces (filled)
+  if (selection.faces.size > 0) {
+    ctx.fillStyle = 'rgba(80, 232, 244, 0.4)';
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr, idx } = data;
+
+      for (const key of selection.faces) {
+        const [meshId, faceIdx] = key.split(':');
+        if (meshId !== child.uuid) continue;
+        const t = parseInt(faceIdx);
+        const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+
+        const u0 = uvAttr.getX(v0), v0_ = uvAttr.getY(v0);
+        const u1 = uvAttr.getX(v1), v1_ = uvAttr.getY(v1);
+        const u2 = uvAttr.getX(v2), v2_ = uvAttr.getY(v2);
+
+        ctx.beginPath();
+        ctx.moveTo(u0 * size, (1 - v0_) * size);
+        ctx.lineTo(u1 * size, (1 - v1_) * size);
+        ctx.lineTo(u2 * size, (1 - v2_) * size);
+        ctx.closePath();
+        ctx.fill();
+      }
+    });
+  }
+
+  // Draw selected vertices (points)
+  if (selection.vertices.size > 0) {
+    ctx.fillStyle = '#50E8F4';
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr, idx } = data;
+
+      for (const key of selection.vertices) {
+        const [meshId, vertIdx] = key.split(':');
+        if (meshId !== child.uuid) continue;
+        const vi = parseInt(vertIdx);
+        const u = uvAttr.getX(vi);
+        const v = uvAttr.getY(vi);
+
+        ctx.beginPath();
+        ctx.arc(u * size, (1 - v) * size, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+
+  // Draw selected edges (lines)
+  if (selection.edges.size > 0) {
+    ctx.strokeStyle = '#FFD166';
+    ctx.lineWidth = 3;
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr, idx } = data;
+
+      for (const key of selection.edges) {
+        const [meshId, edgeKey] = key.split(':');
+        if (meshId !== child.uuid) continue;
+        const [a, b] = edgeKey.split(':').map(Number);
+        const u0 = uvAttr.getX(a), v0 = uvAttr.getY(a);
+        const u1 = uvAttr.getX(b), v1 = uvAttr.getY(b);
+
+        ctx.beginPath();
+        ctx.moveTo(u0 * size, (1 - v0) * size);
+        ctx.lineTo(u1 * size, (1 - v1) * size);
+        ctx.stroke();
+      }
+    });
+  }
+
+  // Draw selected islands (outline)
+  if (selection.islands.size > 0) {
+    ctx.strokeStyle = '#00FFB3';
+    ctx.lineWidth = 2;
+    const islands = getAllIslands();
+    for (const isl of islands) {
+      if (!selection.islands.has(isl.id)) continue;
+      const data = getUVData(isl.mesh);
+      if (!data) continue;
+      const { uvAttr, idx } = data;
+
+      // Draw island boundary edges
+      for (const edgeKey of isl.edges) {
+        const [a, b] = edgeKey.split(':').map(Number);
+        const u0 = uvAttr.getX(a), v0 = uvAttr.getY(a);
+        const u1 = uvAttr.getX(b), v1 = uvAttr.getY(b);
+
+        ctx.beginPath();
+        ctx.moveTo(u0 * size, (1 - v0) * size);
+        ctx.lineTo(u1 * size, (1 - v1) * size);
+        ctx.stroke();
+      }
+    }
+  }
 }
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
@@ -1761,7 +3106,1750 @@ fileInput.addEventListener('change', e => { if(e && e.target && e.target.files &
 ['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
 dropZone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
 
-initScene();
+// ============================================================================
+// NEW UI LOGIC: Device Selection, Loading, Sidebars, Sheets, Settings, Camera
+// ============================================================================
+
+// Device detection and persistence
+const DEVICE_KEY = 'uv-editor-device';
+const DEVICES = ['desktop', 'laptop', 'tablet', 'mobile'];
+
+function getSavedDevice() {
+  return localStorage.getItem(DEVICE_KEY);
+}
+
+function setDevice(device) {
+  localStorage.setItem(DEVICE_KEY, device);
+  document.body.dataset.device = device;
+  updateViewportHint();
+}
+
+function showDeviceModal() {
+  document.getElementById('device-modal').classList.add('visible');
+}
+
+function hideDeviceModal() {
+  document.getElementById('device-modal').classList.remove('visible');
+}
+
+function showLoadingScreen() {
+  document.getElementById('loading-screen').classList.add('visible');
+  animateLoadingBar();
+}
+
+function hideLoadingScreen() {
+  document.getElementById('loading-screen').classList.remove('visible');
+}
+
+function animateLoadingBar() {
+  const fill = document.getElementById('loading-fill');
+  const text = document.getElementById('loading-text');
+  const steps = [
+    { pct: 15, text: 'Initializing Three.js…' },
+    { pct: 35, text: 'Loading shaders…' },
+    { pct: 55, text: 'Setting up viewport…' },
+    { pct: 75, text: 'Preparing UI…' },
+    { pct: 95, text: 'Ready!' },
+    { pct: 100, text: 'Welcome to UV Editor' }
+  ];
+  let i = 0;
+  function next() {
+    if (i >= steps.length) return;
+    fill.style.width = steps[i].pct + '%';
+    text.textContent = steps[i].text;
+    i++;
+    setTimeout(next, 180);
+  }
+  next();
+}
+
+function showApp() {
+  document.getElementById('app-root').style.display = 'flex';
+  initScene();
+}
+
+function initDeviceFlow() {
+  const saved = getSavedDevice();
+  if (saved && DEVICES.includes(saved)) {
+    setDevice(saved);
+    showLoadingScreen();
+    setTimeout(() => {
+      hideLoadingScreen();
+      showApp();
+    }, 1100);
+  } else {
+    showDeviceModal();
+  }
+}
+
+// Device modal button handlers
+document.querySelectorAll('.device-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const device = btn.dataset.device;
+    hideDeviceModal();
+    setDevice(device);
+    showLoadingScreen();
+    setTimeout(() => {
+      hideLoadingScreen();
+      showApp();
+    }, 1100);
+  });
+});
+
+// Change device button in top bar
+document.getElementById('btn-device').addEventListener('click', showDeviceModal);
+
+// Sidebar toggles
+function toggleLeftSidebar() {
+  document.getElementById('left-sidebar').classList.toggle('collapsed');
+}
+function toggleRightSidebar() {
+  document.getElementById('right-sidebar').classList.toggle('collapsed');
+}
+document.getElementById('btn-toggle-left').addEventListener('click', toggleLeftSidebar);
+document.getElementById('btn-close-left').addEventListener('click', toggleLeftSidebar);
+document.getElementById('btn-close-right').addEventListener('click', toggleRightSidebar);
+
+// Bottom sheet tabs
+const sheets = {
+  tools: document.getElementById('sheet-tools'),
+  options: document.getElementById('sheet-options'),
+  layers: document.getElementById('sheet-layers')
+};
+const sheetTabs = {
+  tools: document.getElementById('tab-tools'),
+  options: document.getElementById('tab-options'),
+  layers: document.getElementById('tab-layers')
+};
+
+function openSheet(name) {
+  Object.values(sheets).forEach(s => s.classList.remove('open'));
+  Object.values(sheetTabs).forEach(t => t.classList.remove('active'));
+  sheets[name].classList.add('open');
+  sheetTabs[name].classList.add('active');
+  // Mirror content for tools/options sheets
+  if (name === 'tools') mirrorToolsToSheet();
+  if (name === 'options') mirrorOptionsToSheet();
+}
+function closeAllSheets() {
+  Object.values(sheets).forEach(s => s.classList.remove('open'));
+  Object.values(sheetTabs).forEach(t => t.classList.remove('active'));
+}
+Object.entries(sheetTabs).forEach(([name, tab]) => {
+  tab.addEventListener('click', () => openSheet(name));
+});
+document.getElementById('btn-close-sheet-tools').addEventListener('click', closeAllSheets);
+document.getElementById('btn-close-sheet-options').addEventListener('click', closeAllSheets);
+document.getElementById('btn-close-sheet-layers').addEventListener('click', closeAllSheets);
+
+function mirrorToolsToSheet() {
+  const src = document.getElementById('left-sidebar');
+  const dst = document.getElementById('sheet-tools-content');
+  dst.innerHTML = src.querySelector('.sidebar-content').innerHTML;
+  // Re-bind tool buttons in sheet
+  dst.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => handleToolClick(btn.dataset.tool));
+  });
+  dst.querySelectorAll('.tool-btn[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => set3DMode(btn.dataset.mode));
+  });
+  // Re-bind tool group headers
+  dst.querySelectorAll('.tool-group-header').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('open'));
+  });
+}
+function mirrorOptionsToSheet() {
+  const src = document.getElementById('right-sidebar-content');
+  const dst = document.getElementById('sheet-options-content');
+  dst.innerHTML = src.innerHTML;
+  // Re-bind any interactive elements in options
+  bindOptionsPanel(dst);
+}
+
+// Camera mode toggle
+let cameraMode = 'perspective'; // 'perspective' | 'orthographic'
+let orthoCamera = null;
+
+function setCameraMode(mode) {
+  cameraMode = mode;
+  document.getElementById('btn-cam-persp').classList.toggle('active', mode === 'perspective');
+  document.getElementById('btn-cam-persp').setAttribute('aria-pressed', mode === 'perspective');
+  document.getElementById('btn-cam-ortho').classList.toggle('active', mode === 'orthographic');
+  document.getElementById('btn-cam-ortho').setAttribute('aria-pressed', mode === 'orthographic');
+
+  if (mode === 'orthographic') {
+    if (!orthoCamera) {
+      const aspect = 1;
+      const frustumSize = 2;
+      orthoCamera = new THREE.OrthographicCamera(
+        frustumSize * aspect / -2, frustumSize * aspect / 2,
+        frustumSize / 2, frustumSize / -2,
+        0.01, 1000
+      );
+      orthoCamera.position.copy(camera.position);
+      orthoCamera.quaternion.copy(camera.quaternion);
+    }
+    camera = orthoCamera;
+    controls.object = camera;
+  } else {
+    if (!camera.isPerspectiveCamera) {
+      camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+      camera.position.set(3, 2.5, 4);
+      controls.object = camera;
+    }
+  }
+  frameObject(currentRoot || new THREE.Object3D());
+  updateViewportHint();
+}
+document.getElementById('btn-cam-persp').addEventListener('click', () => setCameraMode('perspective'));
+document.getElementById('btn-cam-ortho').addEventListener('click', () => setCameraMode('orthographic'));
+
+// Fullscreen toggle
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  const elem = document.documentElement;
+  if (!document.fullscreenElement) {
+    elem.requestFullscreen().catch(() => {});
+    document.getElementById('btn-fullscreen').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3M3 18v3a2 2 0 002 2h3M21 18v3a2 2 0 00-2 2h-3"/></svg>';
+  } else {
+    document.exitFullscreen();
+    document.getElementById('btn-fullscreen').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>';
+  }
+});
+
+// Settings modal
+const settingsModal = document.getElementById('settings-modal');
+function openSettings() {
+  settingsModal.classList.add('visible');
+}
+function closeSettings() {
+  settingsModal.classList.remove('visible');
+}
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal) closeSettings();
+});
+
+// Layout size buttons
+let currentLayoutSize = 'm'; // 's' | 'm' | 'w' | 'custom'
+function setLayoutSize(size) {
+  currentLayoutSize = size;
+  const root = document.documentElement;
+  if (size === 's') root.style.setProperty('--layout-m', '280px');
+  else if (size === 'm') root.style.setProperty('--layout-m', '340px');
+  else if (size === 'w') root.style.setProperty('--layout-m', '420px');
+  else if (size === 'custom') return; // handled by slider
+
+  document.querySelectorAll('.layout-size-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === size);
+  });
+}
+document.querySelectorAll('.layout-size-btn').forEach(btn => {
+  btn.addEventListener('click', () => setLayoutSize(btn.dataset.size));
+});
+
+// Custom layout slider
+const layoutSlider = document.getElementById('layout-custom');
+const layoutVal = document.getElementById('layout-custom-val');
+layoutSlider.addEventListener('input', (e) => {
+  const val = e.target.value + 'px';
+  document.documentElement.style.setProperty('--layout-m', val);
+  layoutVal.textContent = val;
+  currentLayoutSize = 'custom';
+  document.querySelectorAll('.layout-size-btn').forEach(btn => btn.classList.remove('active'));
+});
+
+// Color pickers
+document.getElementById('color-bg').addEventListener('input', (e) => {
+  document.documentElement.style.setProperty('--bg', e.target.value);
+});
+document.getElementById('color-stroke').addEventListener('input', (e) => {
+  document.documentElement.style.setProperty('--border', e.target.value);
+  document.documentElement.style.setProperty('--border2', adjustColor(e.target.value, 20));
+});
+document.getElementById('color-accent').addEventListener('input', (e) => {
+  document.documentElement.style.setProperty('--accent', e.target.value);
+});
+
+// Boost mode
+let boostMode = false;
+document.getElementById('boost-mode').addEventListener('change', (e) => {
+  boostMode = e.target.checked;
+  if (boostMode) {
+    renderer.setPixelRatio(1);
+    st('⚡ Boost mode ON — reduced pixel ratio for performance', 'loading');
+  } else {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    st('⚡ Boost mode OFF — normal quality restored', 'ok');
+  }
+});
+
+function adjustColor(hex, amount) {
+  // Lighten/darken hex color
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+  const g = Math.max(0, Math.min(255, ((num >> 8) & 0xFF) + amount));
+  const b = Math.max(0, Math.min(255, (num & 0xFF) + amount));
+  return '#' + (r << 16 | g << 8 | b).toString(16).padStart(6, '0');
+}
+
+// Tool handling
+let activeTool = 'select';
+const toolButtons = [
+  'select', 'move', 'rotate', 'scale',
+  'straighten', 'align', 'relax', 'unwrap', 'pack', 'organize'
+];
+
+function handleToolClick(tool) {
+  activeTool = tool;
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tool === tool);
+  });
+  updateRightSidebarForTool(tool);
+  updateViewportHint();
+}
+
+function updateRightSidebarForTool(tool) {
+  const content = document.getElementById('right-sidebar-content');
+  const sheetContent = document.getElementById('sheet-options-content');
+
+  let html = '';
+  switch (tool) {
+    case 'select':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">SELECTION MODE</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:12px">
+            <button class="tool-btn" data-sel-mode="vertex" style="justify-content:center;padding:8px;font-size:11px">${selectionMode==='vertex'?'✓ ':''}Vertex (1)</button>
+            <button class="tool-btn" data-sel-mode="edge" style="justify-content:center;padding:8px;font-size:11px">${selectionMode==='edge'?'✓ ':''}Edge (2)</button>
+            <button class="tool-btn" data-sel-mode="face" style="justify-content:center;padding:8px;font-size:11px">${selectionMode==='face'?'✓ ':''}Face (3)</button>
+            <button class="tool-btn" data-sel-mode="island" style="justify-content:center;padding:8px;font-size:11px">${selectionMode==='island'?'✓ ':''}Island (4)</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">OPTIONS</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="opt-multi-select" checked> Multi-select
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-top:8px">
+            <input type="checkbox" id="opt-select-through" checked> Select through
+          </label>
+          <div style="margin-top:12px;font-size:11px;color:var(--muted)">Use V / G / R / S shortcuts</div>
+        </div>`;
+      break;
+    case 'move':
+    case 'rotate':
+    case 'scale':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${tool.toUpperCase()} OPTIONS</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="opt-snap" checked> Snap to grid
+          </label>
+          <div style="margin-top:12px;font-size:11px;color:var(--muted)">Use G / R / S shortcuts</div>
+        </div>`;
+      break;
+    case 'straighten':
+    case 'align':
+    case 'relax':
+    case 'unwrap':
+    case 'pack':
+    case 'organize':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${tool.toUpperCase()} UV</div>
+          <button class="btn" id="btn-apply-${tool}" style="width:100%">Apply ${tool.charAt(0).toUpperCase() + tool.slice(1)}</button>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)">Select UV islands first, then apply</div>
+        </div>`;
+      break;
+  }
+  content.innerHTML = html;
+  if (sheetContent) sheetContent.innerHTML = html;
+
+  // Bind apply buttons
+  if (['straighten', 'align', 'relax', 'unwrap', 'pack', 'organize'].includes(tool)) {
+    const btn = document.getElementById(`btn-apply-${tool}`);
+    if (btn) btn.addEventListener('click', () => applyUVTool(tool));
+  }
+
+  // Bind selection mode buttons
+  if (tool === 'select') {
+    document.querySelectorAll('[data-sel-mode]').forEach(btn => {
+      btn.addEventListener('click', () => setSelectionMode(btn.dataset.selMode));
+    });
+  }
+}
+
+// Keyboard shortcuts for gizmo mode and tools
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  // Selection modes
+  if (e.key === '1') setSelectionMode('vertex');
+  else if (e.key === '2') setSelectionMode('edge');
+  else if (e.key === '3') setSelectionMode('face');
+  else if (e.key === '4') setSelectionMode('island');
+
+  // Transform tools
+  else if (e.key === 'v') handleToolClick('select');
+  else if (e.key === 'g') handleToolClick('move');
+  else if (e.key === 'r') handleToolClick('rotate');
+  else if (e.key === 's') handleToolClick('scale');
+
+  // Gizmo modes (when transform tool active)
+  if (['move', 'rotate', 'scale'].includes(activeTool)) {
+    if (e.key === 'g') gizmoMode = 'translate';
+    else if (e.key === 'r') gizmoMode = 'rotate';
+    else if (e.key === 's') gizmoMode = 'scale';
+    updateSelectionGizmo();
+  }
+
+  // Selection operations
+  if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+    // Select all - could implement
+    e.preventDefault();
+  }
+  if (e.key === 'i' && (e.ctrlKey || e.metaKey)) {
+    // Invert selection
+    e.preventDefault();
+    invertSelection();
+  }
+  if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+    // Connected selection
+    e.preventDefault();
+    selectConnected();
+  }
+  if (e.key === 'Escape') {
+    clearSelection();
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // Could delete selected UVs - for now just clear
+    clearSelection();
+  }
+});
+
+function applyUVTool(tool) {
+  if (tool === 'straighten') {
+    applyStraightenUV();
+  } else if (tool === 'align') {
+    applyAlignUV();
+  } else if (tool === 'relax') {
+    applyRelaxUV();
+  } else if (tool === 'unwrap') {
+    applyUnwrapUV();
+  } else if (tool === 'pack') {
+    applyPackUV();
+  } else if (tool === 'organize') {
+    applyOrganizeUV();
+  } else {
+    st(`⚙ ${tool.charAt(0).toUpperCase() + tool.slice(1)} — implementation pending`, 'loading');
+  }
+}
+
+// Straighten UV: Align selected edges to nearest axis (horizontal/vertical)
+function applyStraightenUV() {
+  if (!currentRoot) return;
+  if (selection.vertices.size === 0 && selection.edges.size === 0 && selection.faces.size === 0 && selection.islands.size === 0) {
+    st('✗ No selection — select vertices, edges, faces, or islands first', 'err');
+    return;
+  }
+
+  st('⚙ Straightening UVs…', 'loading');
+
+  // Collect selected vertices
+  const selectedVerts = new Map(); // mesh -> Set of vertex indices
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    // Check faces
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      const t = parseInt(faceIdx);
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+      selectedVerts.get(child).add(v0);
+      selectedVerts.get(child).add(v1);
+      selectedVerts.get(child).add(v2);
+    }
+
+    // Check vertices directly
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+      selectedVerts.get(child).add(parseInt(vertIdx));
+    }
+
+    // Check edges
+    for (const key of selection.edges) {
+      const [meshId, edgeKey] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      const [a, b] = edgeKey.split(':').map(Number);
+      if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+      selectedVerts.get(child).add(a);
+      selectedVerts.get(child).add(b);
+    }
+
+    // Check islands
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+          for (const v of isl.vertices) {
+            selectedVerts.get(child).add(v);
+          }
+        }
+      }
+    }
+  });
+
+  // For each mesh with selected vertices, straighten edges
+  for (const [mesh, vertSet] of selectedVerts) {
+    const data = getUVData(mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+
+    // Build edges from triangles that have selected vertices
+    const edgeMap = new Map(); // edgeKey -> {a, b, count}
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      const tris = [v0, v1, v2];
+      let hasSelected = false;
+      for (const v of tris) {
+        if (vertSet.has(v)) { hasSelected = true; break; }
+      }
+      if (!hasSelected) continue;
+
+      for (let e = 0; e < 3; e++) {
+        const a = tris[e];
+        const b = tris[(e + 1) % 3];
+        if (!vertSet.has(a) || !vertSet.has(b)) continue;
+
+        const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+        if (!edgeMap.has(key)) {
+          edgeMap.set(key, { a, b, count: 0 });
+        }
+        edgeMap.get(key).count++;
+      }
+    }
+
+    // Straighten each edge to nearest axis
+    uvAttr.array = uvAttr.array.slice(); // Force update
+    let modified = 0;
+
+    for (const [, edge] of edgeMap) {
+      const u0 = uvAttr.getX(edge.a), v0 = uvAttr.getY(edge.a);
+      const u1 = uvAttr.getX(edge.b), v1 = uvAttr.getY(edge.b);
+
+      const du = u1 - u0;
+      const dv = v1 - v0;
+      const len = Math.sqrt(du * du + dv * dv);
+
+      if (len < 1e-6) continue;
+
+      // Determine if edge is more horizontal or vertical
+      const isHorizontal = Math.abs(du) > Math.abs(dv);
+
+      if (isHorizontal) {
+        // Align to horizontal: set both vertices to same V (average)
+        const avgV = (v0 + v1) / 2;
+        uvAttr.setY(edge.a, avgV);
+        uvAttr.setY(edge.b, avgV);
+      } else {
+        // Align to vertical: set both vertices to same U (average)
+        const avgU = (u0 + u1) / 2;
+        uvAttr.setX(edge.a, avgU);
+        uvAttr.setX(edge.b, avgU);
+      }
+      modified++;
+    }
+
+    if (modified > 0) {
+      uvAttr.needsUpdate = true;
+    }
+  }
+
+  // Update 3D view
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  // Update 2D UV map if open
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+    buildUV2DInModal();
+  }
+
+  // Invalidate island cache
+  islandCache = null;
+
+  st(`✓ Straightened UVs (${selectedVerts.size} mesh${selectedVerts.size === 1 ? '' : 'es'} modified)`, 'ok');
+  requestRender();
+}
+
+// Align UV: Align selected vertices to grid or bounding box
+function applyAlignUV() {
+  if (!currentRoot) return;
+  if (selection.vertices.size === 0 && selection.faces.size === 0 && selection.islands.size === 0) {
+    st('✗ No selection — select vertices, faces, or islands first', 'err');
+    return;
+  }
+
+  st('⚙ Aligning UVs…', 'loading');
+
+  const selectedVerts = new Map();
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    // Collect selected vertices
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      const t = parseInt(faceIdx);
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+      selectedVerts.get(child).add(v0);
+      selectedVerts.get(child).add(v1);
+      selectedVerts.get(child).add(v2);
+    }
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+      selectedVerts.get(child).add(parseInt(vertIdx));
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          if (!selectedVerts.has(child)) selectedVerts.set(child, new Set());
+          for (const v of isl.vertices) {
+            selectedVerts.get(child).add(v);
+          }
+        }
+      }
+    }
+  });
+
+  // Align to grid (0.1 increments) or bounding box
+  for (const [mesh, vertSet] of selectedVerts) {
+    const data = getUVData(mesh);
+    if (!data) continue;
+    const { uvAttr } = data;
+
+    uvAttr.array = uvAttr.array.slice();
+
+    // Find bounds
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    for (const vi of vertSet) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+    }
+
+    // Align to grid (0.125 = 1/8 grid)
+    const gridSize = 0.125;
+    for (const vi of vertSet) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      uvAttr.setX(vi, Math.round(u / gridSize) * gridSize);
+      uvAttr.setY(vi, Math.round(v / gridSize) * gridSize);
+    }
+    uvAttr.needsUpdate = true;
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  st('✓ UVs aligned to grid', 'ok');
+  requestRender();
+}
+
+// Relax UV: Smooth selected vertices by averaging neighbor positions
+function applyRelaxUV() {
+  if (!currentRoot) return;
+  if (selection.vertices.size === 0 && selection.faces.size === 0 && selection.islands.size === 0) {
+    st('✗ No selection — select vertices, faces, or islands first', 'err');
+    return;
+  }
+
+  st('⚙ Relaxing UVs…', 'loading');
+
+  const iterations = 5; // Number of relaxation iterations
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const newPositions = new Map(); // mesh -> Map<vertIndex, {u,v}>
+
+    currentRoot.traverse(child => {
+      if (!child.isMesh) return;
+      const data = getUVData(child);
+      if (!data) return;
+      const { uvAttr, idx } = data;
+
+      const selectedSet = new Set();
+      // Collect selected vertices
+      for (const key of selection.faces) {
+        const [meshId, faceIdx] = key.split(':');
+        if (meshId !== child.uuid) continue;
+        const t = parseInt(faceIdx);
+        const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+        selectedSet.add(v0);
+        selectedSet.add(v1);
+        selectedSet.add(v2);
+      }
+      for (const key of selection.vertices) {
+        const [meshId, vertIdx] = key.split(':');
+        if (meshId !== child.uuid) continue;
+        selectedSet.add(parseInt(vertIdx));
+      }
+      if (selection.islands.size > 0) {
+        const islands = getAllIslands();
+        for (const isl of islands) {
+          if (selection.islands.has(isl.id) && isl.mesh === child) {
+            for (const v of isl.vertices) selectedSet.add(v);
+          }
+        }
+      }
+
+      if (selectedSet.size === 0) return;
+
+      // Build adjacency for selected vertices
+      const adj = new Map();
+      const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+      for (let t = 0; t < triCount; t++) {
+        const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+        const tris = [v0, v1, v2];
+
+        for (let e = 0; e < 3; e++) {
+          const a = tris[e];
+          const b = tris[(e + 1) % 3];
+          if (selectedSet.has(a) && selectedSet.has(b)) {
+            if (!adj.has(a)) adj.set(a, new Set());
+            if (!adj.has(b)) adj.set(b, new Set());
+            adj.get(a).add(b);
+            adj.get(b).add(a);
+          }
+        }
+      }
+
+      // Relax: move each vertex to average of neighbors
+      for (const vi of selectedSet) {
+        const neighbors = adj.get(vi);
+        if (!neighbors || neighbors.size === 0) continue;
+
+        let sumU = 0, sumV = 0;
+        for (const n of neighbors) {
+          sumU += uvAttr.getX(n);
+          sumV += uvAttr.getY(n);
+        }
+        const avgU = sumU / neighbors.size;
+        const avgV = sumV / neighbors.size;
+
+        if (!newPositions.has(child)) newPositions.set(child, new Map());
+        newPositions.get(child).set(vi, { u: avgU, v: avgV });
+      }
+    });
+
+    // Apply new positions
+    for (const [mesh, posMap] of newPositions) {
+      const data = getUVData(mesh);
+      if (!data) continue;
+      const { uvAttr } = data;
+      uvAttr.array = uvAttr.array.slice();
+      for (const [vi, pos] of posMap) {
+        uvAttr.setX(vi, pos.u);
+        uvAttr.setY(vi, pos.v);
+      }
+      uvAttr.needsUpdate = true;
+    }
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  st('✓ UVs relaxed', 'ok');
+  requestRender();
+}
+
+// Unwrap UV: Simple planar projection for selected faces
+function applyUnwrapUV() {
+  if (!currentRoot) return;
+  if (selection.faces.size === 0 && selection.islands.size === 0) {
+    st('✗ No selection — select faces or islands first', 'err');
+    return;
+  }
+
+  st('⚙ Unwrapping UVs…', 'loading');
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) return;
+
+    const selectedFaces = new Set();
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      selectedFaces.add(parseInt(faceIdx));
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          for (const f of isl.faces) selectedFaces.add(f);
+        }
+      }
+    }
+
+    if (selectedFaces.size === 0) return;
+
+    // Compute best-fit plane for selected faces
+    const positions = [];
+    for (const t of selectedFaces) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      positions.push(
+        new THREE.Vector3(posAttr.getX(v0), posAttr.getY(v0), posAttr.getZ(v0)),
+        new THREE.Vector3(posAttr.getX(v1), posAttr.getY(v1), posAttr.getZ(v1)),
+        new THREE.Vector3(posAttr.getX(v2), posAttr.getY(v2), posAttr.getZ(v2))
+      );
+    }
+
+    // Simple planar projection: find dominant axis
+    const box = new THREE.Box3().setFromObject(child);
+    const size = box.getSize(new THREE.Vector3());
+    let projAxis = 'z';
+    if (size.x > size.y && size.x > size.z) projAxis = 'x';
+    else if (size.y > size.x && size.y > size.z) projAxis = 'y';
+
+    uvAttr.array = uvAttr.array.slice();
+    for (const t of selectedFaces) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      for (const vi of [v0, v1, v2]) {
+        const x = posAttr.getX(vi);
+        const y = posAttr.getY(vi);
+        const z = posAttr.getZ(vi);
+
+        let u, v;
+        if (projAxis === 'x') { u = z; v = y; }
+        else if (projAxis === 'y') { u = x; v = z; }
+        else { u = x; v = y; }
+
+        // Normalize to 0-1
+        const min = box.min, max = box.max;
+        if (projAxis === 'x') {
+          u = (u - min.z) / (max.z - min.z);
+          v = (v - min.y) / (max.y - min.y);
+        } else if (projAxis === 'y') {
+          u = (u - min.x) / (max.x - min.x);
+          v = (v - min.z) / (max.z - min.z);
+        } else {
+          u = (u - min.x) / (max.x - min.x);
+          v = (v - min.y) / (max.y - min.y);
+        }
+
+        uvAttr.setX(vi, u);
+        uvAttr.setY(vi, v);
+      }
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  st('✓ UVs unwrapped (planar projection)', 'ok');
+  requestRender();
+}
+
+// Pack UV Islands: Simple bin packing for selected islands
+function applyPackUV() {
+  if (!currentRoot) return;
+
+  st('⚙ Packing UV islands…', 'loading');
+
+  const islands = getAllIslands();
+  if (islands.length === 0) {
+    st('✗ No UV islands found', 'err');
+    return;
+  }
+
+  // Simple grid packing
+  const padding = 0.01;
+  const gridCols = Math.ceil(Math.sqrt(islands.length));
+  let col = 0, row = 0;
+  let maxHeight = 0;
+
+  for (const isl of islands) {
+    const data = getUVData(isl.mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+
+    // Compute island bounds
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    for (const vi of isl.vertices) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+    }
+    const w = maxU - minU;
+    const h = maxV - minV;
+    maxHeight = Math.max(maxHeight, h);
+
+    // Calculate offset to move island to grid position
+    const targetU = col * (1 / gridCols);
+    const targetV = row * (1 / gridCols);
+    const offsetU = targetU - minU + padding;
+    const offsetV = targetV - minV + padding;
+
+    uvAttr.array = uvAttr.array.slice();
+    for (const vi of isl.vertices) {
+      uvAttr.setX(vi, uvAttr.getX(vi) + offsetU);
+      uvAttr.setY(vi, uvAttr.getY(vi) + offsetV);
+    }
+    uvAttr.needsUpdate = true;
+
+    col++;
+    if (col >= gridCols) {
+      col = 0;
+      row++;
+    }
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  st(`✓ Packed ${islands.length} UV islands`, 'ok');
+  requestRender();
+}
+
+// Organize / Unfoldify: Layout islands in a grid with uniform scale
+function applyOrganizeUV() {
+  if (!currentRoot) return;
+
+  st('⚙ Organizing UV islands…', 'loading');
+
+  const islands = getAllIslands();
+  if (islands.length === 0) {
+    st('✗ No UV islands found', 'err');
+    return;
+  }
+
+  // Scale islands to uniform size and pack
+  const gridCols = Math.ceil(Math.sqrt(islands.length));
+  const cellSize = 0.9 / gridCols;
+  const padding = 0.005;
+  let col = 0, row = 0;
+
+  for (const isl of islands) {
+    const data = getUVData(isl.mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+
+    // Compute island bounds and center
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    for (const vi of isl.vertices) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+    }
+    const w = maxU - minU;
+    const h = maxV - minV;
+    const centerU = (minU + maxU) / 2;
+    const centerV = (minV + maxV) / 2;
+
+    // Scale to fit cell
+    const scale = Math.min(cellSize / Math.max(w, h), 1) * 0.9;
+
+    // Target position
+    const targetU = col * (1 / gridCols) + (1 / gridCols) / 2;
+    const targetV = row * (1 / gridCols) + (1 / gridCols) / 2;
+
+    uvAttr.array = uvAttr.array.slice();
+    for (const vi of isl.vertices) {
+      const u = uvAttr.getX(vi) - centerU;
+      const v = uvAttr.getY(vi) - centerV;
+      uvAttr.setX(vi, targetU + u * scale);
+      uvAttr.setY(vi, targetV + v * scale);
+    }
+    uvAttr.needsUpdate = true;
+
+    col++;
+    if (col >= gridCols) {
+      col = 0;
+      row++;
+    }
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  st(`✓ Organized ${islands.length} UV islands`, 'ok');
+  requestRender();
+}
+
+function updateRightSidebarForMode(mode) {
+  const content = document.getElementById('right-sidebar-content');
+  const sheetContent = document.getElementById('sheet-options-content');
+
+  let html = '';
+  switch (mode) {
+    case 'checker':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">CHECKER OPTIONS</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <label style="font-size:11px;color:var(--muted)">Grid:</label>
+            <select id="checker-cells" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="8">8</option>
+              <option value="16" selected>16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+            </select>
+            <label style="font-size:11px;color:var(--muted)">Pattern:</label>
+            <select id="checker-pattern" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="rainbow" selected>Rainbow</option>
+              <option value="numbered">Numbered</option>
+              <option value="bw">Black-White</option>
+            </select>
+            <label style="font-size:11px;color:var(--muted)">Tex Size:</label>
+            <select id="checker-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="1024" selected>1024</option>
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer">
+              <input type="checkbox" id="checker-glyph" style="width:14px;height:14px;accent-color:var(--accent)"> Glyph
+            </label>
+            <input type="text" id="checker-glyph-char" value="F" maxlength="1" style="width:36px;padding:6px 8px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;text-align:center" placeholder="F">
+          </div>
+          <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
+            ⚠ <b>Visual warning:</b> high grid density (32/64) with rainbow pattern creates dense line patterns that may shimmer. If sensitive, use lower density or black-white pattern.
+          </div>
+        </div>`;
+      break;
+    case 'problems':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">PROBLEM FINDER</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--muted)">Show:</span>
+            <button class="btn-outline active" id="prob-filter-flipped" data-filter="flipped" style="padding:6px 10px;font-size:11px">Flipped</button>
+            <button class="btn-outline active" id="prob-filter-zero" data-filter="zeroArea" style="padding:6px 10px;font-size:11px">Zero-Area</button>
+            <button class="btn-outline active" id="prob-filter-outside" data-filter="outside" style="padding:6px 10px;font-size:11px">Outside 0-1</button>
+          </div>
+          <div id="problems-summary" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+          <div id="problems-legend" style="display:none">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;margin-bottom:8px">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Flipped</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#FFD166;margin-right:4px;vertical-align:middle"></span>Zero-area</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Outside 0-1</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle;border:1px dashed #fff"></span>No UV</span>
+            </div>
+            <div class="warn-box" style="font-size:10px;padding:8px 10px">
+              ⚠ <b>Visual warning:</b> problem overlay shows dense triangle patterns that may appear to shimmer. View in short intervals if sensitive.
+            </div>
+          </div>
+        </div>`;
+      break;
+    case 'texel':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">TEXEL DENSITY</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <label style="font-size:11px;color:var(--muted)">Normalize:</label>
+            <select id="texel-normalize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="global" selected>Global (all meshes)</option>
+              <option value="per-mesh">Per Mesh</option>
+            </select>
+            <label style="font-size:11px;color:var(--muted)">Texture Size:</label>
+            <select id="texel-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="512">512</option>
+              <option value="1024" selected>1024</option>
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+            </select>
+          </div>
+          <div id="texel-summary" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+          <div id="texel-legend" style="display:none">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;align-items:center;margin-bottom:8px">
+              <span style="display:inline-block;width:16px;height:12px;background:#0066FF;margin-right:4px;vertical-align:middle"></span><0.5×
+              <span style="display:inline-block;width:16px;height:12px;background:#00FFFF;margin-right:4px;vertical-align:middle"></span>0.5–0.8×
+              <span style="display:inline-block;width:16px;height:12px;background:#00FF66;margin-right:4px;vertical-align:middle"></span>0.8–1.25×
+              <span style="display:inline-block;width:16px;height:12px;background:#FF8800;margin-right:4px;vertical-align:middle"></span>1.25–2×
+              <span style="display:inline-block;width:16px;height:12px;background:#FF0000;margin-right:4px;vertical-align:middle"></span>>2×
+            </div>
+            <div class="warn-box" style="font-size:10px;padding:8px 10px">
+              ⚠ <b>Visual warning:</b> density heatmap uses color gradients that may trigger sensitivity. View zoomed in on one area at a time.
+            </div>
+          </div>
+        </div>`;
+      break;
+    case 'overlap':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">OVERLAP DETECTION</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <label style="font-size:11px;color:var(--muted)">Resolution:</label>
+            <select id="overlap-resolution" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
+              <option value="1024" selected>1024²</option>
+              <option value="2048">2048²</option>
+            </select>
+          </div>
+          <div id="overlap-summary" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+          <div id="overlap-legend" style="display:none">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;align-items:center;margin-bottom:8px">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#FF4466;margin-right:4px;vertical-align:middle"></span>Overlap (red)</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#50E8F4;margin-right:4px;vertical-align:middle"></span>Clean</span>
+            </div>
+            <div class="warn-box" style="font-size:10px;padding:8px 10px">
+              <b>Note:</b> Stacked/mirrored islands overlap on purpose — this is expected. Results are approximate at the chosen raster resolution. Only tile (0,0) is analyzed.
+            </div>
+          </div>
+        </div>`;
+      break;
+    case 'wire':
+    case 'real':
+    case '2d':
+      html = `
+        <div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">
+          No options for ${mode.toUpperCase()} mode
+        </div>`;
+      break;
+  }
+  content.innerHTML = html;
+  if (sheetContent) sheetContent.innerHTML = html;
+
+  // Re-bind event handlers for the new content
+  bindModeOptions(mode);
+}
+
+function bindModeOptions(mode) {
+  if (mode === 'checker') {
+    const cells = document.getElementById('checker-cells');
+    const pattern = document.getElementById('checker-pattern');
+    const texsize = document.getElementById('checker-texsize');
+    const glyph = document.getElementById('checker-glyph');
+    const glyphChar = document.getElementById('checker-glyph-char');
+    if (cells) cells.addEventListener('change', e => { checkerOptions.cells = parseInt(e.target.value); if (current3DMode === 'checker') updateCheckerTexture(); });
+    if (pattern) pattern.addEventListener('change', e => { checkerOptions.pattern = e.target.value; if (current3DMode === 'checker') updateCheckerTexture(); });
+    if (texsize) texsize.addEventListener('change', e => { checkerOptions.texSize = parseInt(e.target.value); if (current3DMode === 'checker') updateCheckerTexture(); });
+    if (glyph) glyph.addEventListener('change', e => { checkerOptions.showGlyph = e.target.checked; if (current3DMode === 'checker') updateCheckerTexture(); });
+    if (glyphChar) glyphChar.addEventListener('input', e => { checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F'; if (current3DMode === 'checker') updateCheckerTexture(); });
+  } else if (mode === 'problems') {
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.filter;
+        problemFilters[filter] = !problemFilters[filter];
+        btn.classList.toggle('active', problemFilters[filter]);
+        if (current3DMode === 'problems' || current2DOverlay === 'problems') {
+          applyAnalysisToScene();
+          if (current2DOverlay === 'problems') draw2DOverlay();
+        }
+      });
+    });
+  } else if (mode === 'texel') {
+    const normalize = document.getElementById('texel-normalize');
+    const texsize = document.getElementById('texel-texsize');
+    if (normalize) normalize.addEventListener('change', e => {
+      texelNormalizeGlobal = e.target.value === 'global';
+      if (current3DMode === 'texel' || current2DOverlay === 'texel') {
+        applyAnalysisToScene();
+        if (current2DOverlay === 'texel') draw2DOverlay();
+      }
+      updateTexelSummary();
+    });
+    if (texsize) texsize.addEventListener('change', e => {
+      texelTextureSize = parseInt(e.target.value);
+      if (current3DMode === 'texel') updateTexelSummary();
+    });
+  } else if (mode === 'overlap') {
+    const resolution = document.getElementById('overlap-resolution');
+    if (resolution) resolution.addEventListener('change', e => {
+      overlapResolution = parseInt(e.target.value);
+      if (current3DMode === 'overlap' || current2DOverlay === 'overlap') {
+        runAnalysisIfNeeded(current3DMode);
+        if (current2DOverlay === 'overlap') draw2DOverlay();
+      }
+    });
+  }
+}
+
+// Viewport hint updates
+function updateViewportHint() {
+  const hint = document.getElementById('viewport-hint');
+  const device = document.body.dataset.device || 'desktop';
+  const hints = {
+    desktop: 'drag to orbit · scroll to zoom · shift+scroll to pan',
+    laptop: 'drag to orbit · two-finger scroll to zoom · shift+scroll to pan',
+    tablet: 'one finger: orbit · two fingers: zoom/pan',
+    mobile: 'one finger: orbit · two fingers: zoom/pan · double-tap: frame'
+  };
+  hint.textContent = hints[device] || hints.desktop;
+}
+
+// Mode buttons in left sidebar (View Options group) - exclude 2d which has special handling
+document.querySelectorAll('.tool-btn[data-mode]:not([data-mode="2d"])').forEach(btn => {
+  btn.addEventListener('click', () => set3DMode(btn.dataset.mode));
+});
+
+// 2D UV Map modal handler
+document.getElementById('tool-2d').addEventListener('click', openUV2DModal);
+document.getElementById('btn-close-uv2d-modal').addEventListener('click', closeUV2DModal);
+document.getElementById('uv2d-modal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('uv2d-modal')) closeUV2DModal();
+});
+
+function openUV2DModal() {
+  if (!currentRoot) return;
+  const modal = document.getElementById('uv2d-modal');
+  modal.classList.add('visible');
+  buildUV2DInModal();
+}
+function closeUV2DModal() {
+  document.getElementById('uv2d-modal').classList.remove('visible');
+}
+
+async function buildUV2DInModal() {
+  const progressWrap = document.getElementById('uv-2d-progress-wrap');
+  const progressFill = document.getElementById('uv-2d-progress-fill');
+  const progressLabel = document.getElementById('uv-2d-progress-label');
+  const dest = document.getElementById('uv-2d-canvas');
+
+  const overlayControls = document.getElementById('uv-2d-overlay-controls');
+  overlayControls.style.display = 'none';
+  dest.style.display = 'none';
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressLabel.textContent = 'Building UV layout… 0%';
+
+  try {
+    const src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
+      const p = Math.round(pct * 100);
+      progressFill.style.width = p + '%';
+      progressLabel.textContent = `Building UV layout… ${p}%`;
+    });
+
+    // Store base canvas for overlays
+    uv2DBaseCanvas = document.createElement('canvas');
+    uv2DBaseCanvas.width = src.width;
+    uv2DBaseCanvas.height = src.height;
+    uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
+
+    dest.width = src.width; dest.height = src.height;
+    dest.getContext('2d').drawImage(src, 0, 0);
+    dest.style.display = 'block';
+    progressWrap.style.display = 'none';
+    overlayControls.style.display = 'block';
+
+    // Bind mouse events for UV selection on 2D canvas
+    bindUV2DSelectionEvents(dest);
+
+    // Reset overlay to none
+    current2DOverlay = 'none';
+    document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b.dataset.overlay === 'none'));
+    current2DBg = 'black';
+    document.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('active', b.dataset.bg === 'black'));
+    draw2DOverlay();
+
+  } catch (err) {
+    progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
+    progressFill.style.width = '0%';
+  }
+}
+
+// Bind 2D overlay controls (in modal)
+document.querySelectorAll('[data-overlay]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    current2DOverlay = btn.dataset.overlay;
+    document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b.dataset.overlay === current2DOverlay));
+    draw2DOverlay();
+  });
+});
+
+// Bind 2D background controls (in modal)
+document.querySelectorAll('[data-bg]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    current2DBg = btn.dataset.bg;
+    document.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('active', b.dataset.bg === current2DBg));
+    draw2DOverlay();
+  });
+});
+
+// Bind mouse events for UV selection on 2D canvas
+function bindUV2DSelectionEvents(canvas) {
+  // Remove existing listeners
+  canvas.onmousedown = null;
+  canvas.onmousemove = null;
+  canvas.onmouseup = null;
+  canvas.oncontextmenu = null;
+
+  let isDragging = false;
+  let dragStart = { x: 0, y: 0 };
+  // dragBox is now global (declared at top level)
+  dragBox = null;
+  const multiSelect = () => document.getElementById('opt-multi-select')?.checked;
+
+  function getUVFromMouse(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const u = x / canvas.width;
+    const v = 1 - y / canvas.height; // Flip Y since canvas origin is top-left
+    return { u, v, x, y };
+  }
+
+  canvas.onmousedown = (e) => {
+    if (e.button === 2) return; // Right click handled separately
+    const { u, v, x, y } = getUVFromMouse(e);
+    lastMouseUV = { u, v };
+
+    if (e.shiftKey && activeTool === 'select') {
+      // Box selection
+      isDragging = true;
+      dragStart = { x, y };
+      dragBox = { x1: x, y1: y, x2: x, y2: y };
+      canvas.style.cursor = 'crosshair';
+    } else if (activeTool === 'select') {
+      // Single click selection
+      const hit = raycastUV(u, v);
+      if (hit) {
+        if (!multiSelect()) clearSelection();
+        handleSelectionHit(hit);
+      } else if (!multiSelect()) {
+        clearSelection();
+      }
+    } else if (['move', 'rotate', 'scale'].includes(activeTool)) {
+      // Start transform
+      startTransform();
+      isTransforming = true;
+      transformStart = { u, v };
+    }
+  };
+
+  canvas.onmousemove = (e) => {
+    const { u, v, x, y } = getUVFromMouse(e);
+    lastMouseUV = { u, v };
+
+    if (isDragging && dragBox) {
+      dragBox.x2 = x;
+      dragBox.y2 = y;
+      draw2DOverlay(); // Redraw with selection box
+    } else if (isTransforming && activeTool !== 'select') {
+      const deltaU = u - transformStart.u;
+      const deltaV = v - transformStart.v;
+      if (activeTool === 'move') {
+        transformSelectionUV(deltaU, deltaV);
+        transformStart = { u, v };
+      }
+      // Rotate/Scale would need more complex implementation
+    }
+  };
+
+  canvas.onmouseup = (e) => {
+    if (isDragging && dragBox) {
+      // Complete box selection
+      const rect = canvas.getBoundingClientRect();
+      const x1 = Math.min(dragBox.x1, dragBox.x2) / canvas.width;
+      const x2 = Math.max(dragBox.x1, dragBox.x2) / canvas.width;
+      const y1 = 1 - Math.max(dragBox.y1, dragBox.y2) / canvas.height; // Flip Y
+      const y2 = 1 - Math.min(dragBox.y1, dragBox.y2) / canvas.height;
+
+      if (!multiSelect()) clearSelection();
+      boxSelectUV(x1, y1, x2, y2);
+
+      isDragging = false;
+      dragBox = null;
+      canvas.style.cursor = 'default';
+      draw2DOverlay();
+    } else if (isTransforming) {
+      endTransform();
+      isTransforming = false;
+    }
+  };
+
+  canvas.oncontextmenu = (e) => {
+    e.preventDefault();
+    // Context menu for selection options
+    if (selection.vertices.size > 0 || selection.faces.size > 0 || selection.islands.size > 0) {
+      // Could show a context menu here
+      selectConnected();
+    }
+  };
+}
+
+// Box selection in UV space
+function boxSelectUV(uMin, vMin, uMax, vMax) {
+  if (!currentRoot) return;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      const u0 = uvAttr.getX(v0), v0_ = uvAttr.getY(v0);
+      const u1 = uvAttr.getX(v1), v1_ = uvAttr.getY(v1);
+      const u2 = uvAttr.getX(v2), v2_ = uvAttr.getY(v2);
+
+      // Check if triangle center is in box
+      const centerU = (u0 + u1 + u2) / 3;
+      const centerV = (v0_ + v1_ + v2_) / 3;
+
+      if (centerU >= uMin && centerU <= uMax && centerV >= vMin && centerV <= vMax) {
+        if (selectionMode === 'vertex' || selectionMode === 'island') {
+          [v0, v1, v2].forEach(vi => selection.vertices.add(`${child.uuid}:${vi}`));
+        }
+        if (selectionMode === 'face') {
+          selection.faces.add(`${child.uuid}:${t}`);
+        }
+      }
+    }
+  });
+
+  // If island mode, expand to full islands
+  if (selectionMode === 'island' && selection.vertices.size > 0) {
+    const islands = getAllIslands();
+    const selectedIslands = new Set();
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      for (const isl of islands) {
+        if (isl.mesh.uuid === meshId && isl.vertices.has(parseInt(vertIdx))) {
+          selectedIslands.add(isl.id);
+        }
+      }
+    }
+    // Select all vertices in selected islands
+    selection.vertices.clear();
+    for (const isl of islands) {
+      if (selectedIslands.has(isl.id)) {
+        for (const v of isl.vertices) {
+          selection.vertices.add(`${isl.mesh.uuid}:${v}`);
+        }
+        selection.islands.add(isl.id);
+      }
+    }
+  }
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// Handle selection hit from raycast
+function handleSelectionHit(hit) {
+  if (!hit) return;
+
+  if (selectionMode === 'vertex') {
+    const key = `${hit.mesh.uuid}:${hit.vertex}`;
+    if (selection.vertices.has(key)) {
+      selection.vertices.delete(key);
+    } else {
+      selection.vertices.add(key);
+    }
+  } else if (selectionMode === 'edge') {
+    const key = hit.vertices ? `${hit.mesh.uuid}:${hit.vertices.sort().join(':')}` : null;
+    if (key) {
+      if (selection.edges.has(key)) {
+        selection.edges.delete(key);
+      } else {
+        selection.edges.add(key);
+      }
+    }
+  } else if (selectionMode === 'face') {
+    const key = `${hit.mesh.uuid}:${hit.face}`;
+    if (selection.faces.has(key)) {
+      selection.faces.delete(key);
+    } else {
+      selection.faces.add(key);
+    }
+  } else if (selectionMode === 'island') {
+    const isl = findIslandForVertex(hit.mesh, hit.vertex);
+    if (isl) {
+      if (selection.islands.has(isl.id)) {
+        // Deselect island
+        selection.islands.delete(isl.id);
+        for (const v of isl.vertices) {
+          selection.vertices.delete(`${hit.mesh.uuid}:${v}`);
+        }
+      } else {
+        // Select island
+        selectIsland(hit.mesh, hit.vertex);
+        return; // selectIsland already updates gizmo/status
+      }
+    }
+  }
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+}
+
+// 2D Download handler (in modal)
+document.getElementById('uv-2d-download').addEventListener('click', () => {
+  if(!uv2DBaseCanvas || !uv2DBaseCanvas.width) return;
+
+  // Create export canvas with selected background + base UV layout
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = uv2DBaseCanvas.width;
+  exportCanvas.height = uv2DBaseCanvas.height;
+  const ctx = exportCanvas.getContext('2d');
+  const size = exportCanvas.width;
+
+  // Apply background + grid (same logic as preview)
+  if (current2DBg === 'black') {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
+  } else if (current2DBg === 'white') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    drawGrid(ctx, size);
+  } else if (current2DBg === 'transparent') {
+    // Fully transparent - no background, no grid
+  } else if (current2DBg === 'transdark') {
+    drawGrid(ctx, size);
+  }
+
+  // Draw base UV layout (transparent, UV lines only)
+  ctx.drawImage(uv2DBaseCanvas, 0, 0);
+
+  exportCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'uv-layout.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+});
+
+// Tool buttons in left sidebar (Selection & Transform, UV Editing groups)
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+  btn.addEventListener('click', () => handleToolClick(btn.dataset.tool));
+});
+
+// Tool group accordion
+document.querySelectorAll('.tool-group-header').forEach(header => {
+  header.addEventListener('click', () => {
+    header.parentElement.classList.toggle('open');
+  });
+});
+
+// File import button
+document.getElementById('tool-import').addEventListener('click', () => fileInput.click());
+
+// Export buttons
+document.getElementById('tool-export-obj').addEventListener('click', exportOBJ);
+document.getElementById('tool-export-png').addEventListener('click', () => {
+  // Open 2D UV map modal and trigger download after build
+  openUV2DModal();
+  // Wait for modal to build then click download
+  const checkDownload = setInterval(() => {
+    const dest = document.getElementById('uv-2d-canvas');
+    if (dest && dest.width > 0) {
+      clearInterval(checkDownload);
+      setTimeout(() => document.getElementById('uv-2d-download').click(), 100);
+    }
+  }, 200);
+});
+
+// OBJ Export function
+function exportOBJ() {
+  if (!currentRoot) {
+    st('✗ No model loaded to export', 'err');
+    return;
+  }
+
+  try {
+    // Custom OBJ export that preserves UV coordinates
+    const objText = exportOBJWithUVs(currentRoot);
+
+    const blob = new Blob([objText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'model.obj';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    st('✓ OBJ exported with UVs', 'ok');
+  } catch (err) {
+    console.error('[UV Editor] OBJ export failed:', err);
+    st('✗ OBJ export failed: ' + err.message, 'err');
+  }
+}
+
+// Custom OBJ exporter that properly writes UV coordinates
+function exportOBJWithUVs(root) {
+  let output = '# Exported from UV Editor\n';
+  let vertexOffset = 0;
+  let uvOffset = 0;
+  let normalOffset = 0;
+
+  const meshes = [];
+  root.traverse(child => {
+    if (child.isMesh) meshes.push(child);
+  });
+
+  for (const mesh of meshes) {
+    const geom = mesh.geometry;
+    const posAttr = geom.attributes.position;
+    const uvAttr = geom.attributes.uv;
+    const normAttr = geom.attributes.normal;
+    const idx = geom.index;
+
+    if (!posAttr) continue;
+
+    const hasUV = !!uvAttr;
+    const hasNormals = !!normAttr;
+    const vertexCount = idx ? idx.count : posAttr.count;
+
+    // Write vertices
+    output += `g ${mesh.name || 'mesh'}\n`;
+    for (let i = 0; i < vertexCount; i++) {
+      const vi = idx ? idx.getX(i) : i;
+      const x = posAttr.getX(vi);
+      const y = posAttr.getY(vi);
+      const z = posAttr.getZ(vi);
+      output += `v ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}\n`;
+    }
+
+    // Write UVs
+    if (hasUV) {
+      for (let i = 0; i < vertexCount; i++) {
+        const vi = idx ? idx.getX(i) : i;
+        const u = uvAttr.getX(vi);
+        const v = uvAttr.getY(vi);
+        output += `vt ${u.toFixed(6)} ${v.toFixed(6)}\n`;
+      }
+    }
+
+    // Write normals
+    if (hasNormals) {
+      for (let i = 0; i < vertexCount; i++) {
+        const vi = idx ? idx.getX(i) : i;
+        const nx = normAttr.getX(vi);
+        const ny = normAttr.getY(vi);
+        const nz = normAttr.getZ(vi);
+        output += `vn ${nx.toFixed(6)} ${ny.toFixed(6)} ${nz.toFixed(6)}\n`;
+      }
+    }
+
+    // Write faces
+    const triCount = Math.floor(vertexCount / 3);
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = vertexOffset + i0 + 1;
+      const v1 = vertexOffset + i1 + 1;
+      const v2 = vertexOffset + i2 + 1;
+
+      let faceLine = 'f ';
+      if (hasUV && hasNormals) {
+        const uv0 = uvOffset + i0 + 1;
+        const uv1 = uvOffset + i1 + 1;
+        const uv2 = uvOffset + i2 + 1;
+        const n0 = normalOffset + i0 + 1;
+        const n1 = normalOffset + i1 + 1;
+        const n2 = normalOffset + i2 + 1;
+        faceLine += `${v0}/${uv0}/${n0} ${v1}/${uv1}/${n1} ${v2}/${uv2}/${n2}`;
+      } else if (hasUV) {
+        const uv0 = uvOffset + i0 + 1;
+        const uv1 = uvOffset + i1 + 1;
+        const uv2 = uvOffset + i2 + 1;
+        faceLine += `${v0}/${uv0} ${v1}/${uv1} ${v2}/${uv2}`;
+      } else if (hasNormals) {
+        const n0 = normalOffset + i0 + 1;
+        const n1 = normalOffset + i1 + 1;
+        const n2 = normalOffset + i2 + 1;
+        faceLine += `${v0}//${n0} ${v1}//${n1} ${v2}//${n2}`;
+      } else {
+        faceLine += `${v0} ${v1} ${v2}`;
+      }
+      output += faceLine + '\n';
+    }
+
+    vertexOffset += vertexCount;
+    if (hasUV) uvOffset += vertexCount;
+    if (hasNormals) normalOffset += vertexCount;
+  }
+
+  return output;
+}
+
+// Status function update for new status boxes (extends original st function)
+const originalSt = st;
+st = function(msg, kind) {
+  originalSt(msg, kind);
+  // Also update viewport status if it exists
+  const vpBox = document.getElementById('uv-status-viewport');
+  if (vpBox) {
+    vpBox.className = 'status-box ' + kind;
+    const span = vpBox.querySelector('span');
+    if (span) span.textContent = msg;
+  }
+};
+
+// Initialize device flow on load
+initDeviceFlow();
+// initScene() is called by showApp() after device selection/loading
 </script>
 </body>
 </html>
