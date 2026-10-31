@@ -958,6 +958,7 @@ function detectUVIslands(mesh) {
   // BFS to find connected components (islands)
   const visited = new Set();
   const islands = [];
+  const vertIsland = new Map(); // vertex -> island index (lets us assign faces in one pass)
 
   for (const [vert] of adj) {
     if (visited.has(vert)) continue;
@@ -968,6 +969,7 @@ function detectUVIslands(mesh) {
     while (queue.length > 0) {
       const v = queue.pop();
       island.vertices.add(v);
+      vertIsland.set(v, islands.length);
       const neighbors = adj.get(v);
       if (neighbors) {
         for (const n of neighbors) {
@@ -981,14 +983,15 @@ function detectUVIslands(mesh) {
       }
     }
 
-    // Find faces belonging to this island
-    for (let t = 0; t < triCount; t++) {
-      const i0 = t * 3;
-      const v0 = idx ? idx.getX(i0) : i0;
-      if (island.vertices.has(v0)) island.faces.add(t);
-    }
-
     islands.push(island);
+  }
+
+  // Assign faces to islands in a single pass over all triangles
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const k = vertIsland.get(v0);
+    if (k !== undefined) islands[k].faces.add(t);
   }
 
   return islands;
@@ -4309,8 +4312,10 @@ document.getElementById('uv2d-modal').addEventListener('click', (e) => {
   if (e.target === document.getElementById('uv2d-modal')) closeUV2DModal();
 });
 
+let uv2dOpenedAt = 0; // used to ignore the ghost tap that lands on the canvas right after opening
 function openUV2DModal() {
   if (!currentRoot) return;
+  uv2dOpenedAt = performance.now();
   const modal = document.getElementById('uv2d-modal');
   modal.classList.add('visible');
   buildUV2DInModal();
@@ -4409,6 +4414,7 @@ function bindUV2DSelectionEvents(canvas) {
   }
 
   canvas.onmousedown = (e) => {
+    if (performance.now() - uv2dOpenedAt < 600) return; // ghost tap right after opening
     if (e.button === 2) return; // Right click handled separately
     const { u, v, x, y } = getUVFromMouse(e);
     lastMouseUV = { u, v };
