@@ -1740,10 +1740,10 @@ async function handleFile(file){
   if(currentRoot){ scene.remove(currentRoot); currentRoot = null; }
   activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
   activeBlobUrls = [];
-  document.getElementById('viewer-section')?.style.display = 'none';
-  document.getElementById('uv-2d-section')?.style.display = 'none';
+  { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'none'; }
+  { const _e = document.getElementById('uv-2d-section'); if (_e) _e.style.display = 'none'; }
   document.getElementById('tool-2d')?.classList.remove('active');
-  document.getElementById('uv-2d-overlay-controls')?.style.display = 'none';
+  { const _e = document.getElementById('uv-2d-overlay-controls'); if (_e) _e.style.display = 'none'; }
   wireframeOn = false;
   document.getElementById('tool-wire')?.classList.remove('active');
 
@@ -1846,8 +1846,8 @@ async function handleFile(file){
 
     document.getElementById('tool-checker')?.classList.add('active');
     document.getElementById('tool-real')?.classList.remove('active');
-    document.getElementById('tool-real')!.style.display = hasRealTexture ? 'inline-block' : 'none';
-    document.getElementById('viewer-section')?.style.display = 'block';
+    { const _r = document.getElementById('tool-real'); if (_r) _r.style.display = hasRealTexture ? 'inline-block' : 'none'; }
+    { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'block'; }
 
     let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded.`;
     if(uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
@@ -1914,23 +1914,23 @@ on('tool-texel', 'click', () => set3DMode('texel'));
 on('tool-overlap', 'click', () => set3DMode('overlap'));
 
 // Checker options handlers
-document.getElementById('checker-cells').addEventListener('change', e => {
+on('checker-cells', 'change', e => {
   checkerOptions.cells = parseInt(e.target.value);
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-pattern').addEventListener('change', e => {
+on('checker-pattern', 'change', e => {
   checkerOptions.pattern = e.target.value;
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-texsize').addEventListener('change', e => {
+on('checker-texsize', 'change', e => {
   checkerOptions.texSize = parseInt(e.target.value);
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-glyph').addEventListener('change', e => {
+on('checker-glyph', 'change', e => {
   checkerOptions.showGlyph = e.target.checked;
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-glyph-char').addEventListener('input', e => {
+on('checker-glyph-char', 'input', e => {
   checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F';
   if (current3DMode === 'checker') updateCheckerTexture();
 });
@@ -1949,7 +1949,7 @@ document.querySelectorAll('[data-filter]').forEach(btn => {
 });
 
 // Texel options
-document.getElementById('texel-normalize').addEventListener('change', e => {
+on('texel-normalize', 'change', e => {
   texelNormalizeGlobal = e.target.value === 'global';
   if (current3DMode === 'texel' || current2DOverlay === 'texel') {
     applyAnalysisToScene();
@@ -1957,13 +1957,13 @@ document.getElementById('texel-normalize').addEventListener('change', e => {
   }
   updateTexelSummary();
 });
-document.getElementById('texel-texsize').addEventListener('change', e => {
+on('texel-texsize', 'change', e => {
   texelTextureSize = parseInt(e.target.value);
   if (current3DMode === 'texel') updateTexelSummary();
 });
 
 // Overlap options
-document.getElementById('overlap-resolution').addEventListener('change', e => {
+on('overlap-resolution', 'change', e => {
   overlapResolution = parseInt(e.target.value);
   if (current3DMode === 'overlap' || current2DOverlay === 'overlap') {
     runAnalysisIfNeeded(current3DMode);
