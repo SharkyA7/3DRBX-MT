@@ -690,6 +690,9 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 
+// Safe event listener helper - guards against missing elements
+const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
+
 let scene, camera, renderer, controls;
 let currentRoot = null;
 let checkerTexture = null;
@@ -1737,33 +1740,21 @@ async function handleFile(file){
   if(currentRoot){ scene.remove(currentRoot); currentRoot = null; }
   activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
   activeBlobUrls = [];
-  document.getElementById('viewer-section').style.display = 'none';
-  document.getElementById('uv-2d-section').style.display = 'none';
-  document.getElementById('uv-mode-2d').classList.remove('active');
-  document.getElementById('uv-2d-overlay-controls').style.display = 'none';
+  { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'none'; }
+  { const _e = document.getElementById('uv-2d-section'); if (_e) _e.style.display = 'none'; }
+  document.getElementById('tool-2d')?.classList.remove('active');
+  { const _e = document.getElementById('uv-2d-overlay-controls'); if (_e) _e.style.display = 'none'; }
   wireframeOn = false;
-  document.getElementById('uv-mode-wire').classList.remove('active');
+  document.getElementById('tool-wire')?.classList.remove('active');
 
   // Reset all mode buttons
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.classList.remove('active');
     if (btn.classList.contains('btn')) btn.classList.remove('btn-outline');
   });
-  document.getElementById('uv-mode-checker').classList.add('active');
-  document.getElementById('checker-options-panel').style.display = 'block';
-  document.getElementById('problems-panel').style.display = 'none';
-  document.getElementById('texel-panel').style.display = 'none';
-  document.getElementById('overlap-panel').style.display = 'none';
-  document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.add('active'));
-  document.querySelectorAll('[data-bg]').forEach(btn => btn.classList.toggle('active', btn.dataset.bg === 'black'));
-  document.getElementById('problems-legend').style.display = 'none';
-  document.getElementById('texel-legend').style.display = 'none';
-  document.getElementById('overlap-legend').style.display = 'none';
-  document.getElementById('overlap-panel').style.display = 'none';
-  document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.add('active'));
-  document.getElementById('problems-legend').style.display = 'none';
-  document.getElementById('texel-legend').style.display = 'none';
-  document.getElementById('overlap-legend').style.display = 'none';
+  document.getElementById('tool-checker')?.classList.add('active');
+  current3DMode = 'checker';
+  updateRightSidebarForMode('checker');
 
   st('⏳ Reading file…', 'loading');
 
@@ -1853,10 +1844,10 @@ async function handleFile(file){
     currentRoot = root;
     frameObject(root);
 
-    document.getElementById('uv-mode-checker').classList.add('active');
-    document.getElementById('uv-mode-real').classList.remove('active');
-    document.getElementById('uv-mode-real').style.display = hasRealTexture ? 'inline-block' : 'none';
-    document.getElementById('viewer-section').style.display = 'block';
+    document.getElementById('tool-checker')?.classList.add('active');
+    document.getElementById('tool-real')?.classList.remove('active');
+    { const _r = document.getElementById('tool-real'); if (_r) _r.style.display = hasRealTexture ? 'inline-block' : 'none'; }
+    { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'block'; }
 
     let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded.`;
     if(uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
@@ -1914,36 +1905,32 @@ function set3DMode(mode) {
   }
 }
 
-document.querySelectorAll('[data-mode]').forEach(btn => {
-  btn.addEventListener('click', () => set3DMode(btn.dataset.mode));
-});
-
-// Keep old IDs working for backward compat
-document.getElementById('uv-mode-checker').addEventListener('click', () => set3DMode('checker'));
-document.getElementById('uv-mode-real').addEventListener('click', () => set3DMode('real'));
-document.getElementById('uv-mode-wire').addEventListener('click', () => set3DMode('wire'));
-document.getElementById('uv-mode-problems').addEventListener('click', () => set3DMode('problems'));
-document.getElementById('uv-mode-texel').addEventListener('click', () => set3DMode('texel'));
-document.getElementById('uv-mode-overlap').addEventListener('click', () => set3DMode('overlap'));
+// Mode button handlers (new UI uses tool-* IDs with data-mode attribute)
+on('tool-checker', 'click', () => set3DMode('checker'));
+on('tool-real', 'click', () => set3DMode('real'));
+on('tool-wire', 'click', () => set3DMode('wire'));
+on('tool-problems', 'click', () => set3DMode('problems'));
+on('tool-texel', 'click', () => set3DMode('texel'));
+on('tool-overlap', 'click', () => set3DMode('overlap'));
 
 // Checker options handlers
-document.getElementById('checker-cells').addEventListener('change', e => {
+on('checker-cells', 'change', e => {
   checkerOptions.cells = parseInt(e.target.value);
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-pattern').addEventListener('change', e => {
+on('checker-pattern', 'change', e => {
   checkerOptions.pattern = e.target.value;
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-texsize').addEventListener('change', e => {
+on('checker-texsize', 'change', e => {
   checkerOptions.texSize = parseInt(e.target.value);
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-glyph').addEventListener('change', e => {
+on('checker-glyph', 'change', e => {
   checkerOptions.showGlyph = e.target.checked;
   if (current3DMode === 'checker') updateCheckerTexture();
 });
-document.getElementById('checker-glyph-char').addEventListener('input', e => {
+on('checker-glyph-char', 'input', e => {
   checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F';
   if (current3DMode === 'checker') updateCheckerTexture();
 });
@@ -1962,7 +1949,7 @@ document.querySelectorAll('[data-filter]').forEach(btn => {
 });
 
 // Texel options
-document.getElementById('texel-normalize').addEventListener('change', e => {
+on('texel-normalize', 'change', e => {
   texelNormalizeGlobal = e.target.value === 'global';
   if (current3DMode === 'texel' || current2DOverlay === 'texel') {
     applyAnalysisToScene();
@@ -1970,13 +1957,13 @@ document.getElementById('texel-normalize').addEventListener('change', e => {
   }
   updateTexelSummary();
 });
-document.getElementById('texel-texsize').addEventListener('change', e => {
+on('texel-texsize', 'change', e => {
   texelTextureSize = parseInt(e.target.value);
   if (current3DMode === 'texel') updateTexelSummary();
 });
 
 // Overlap options
-document.getElementById('overlap-resolution').addEventListener('change', e => {
+on('overlap-resolution', 'change', e => {
   overlapResolution = parseInt(e.target.value);
   if (current3DMode === 'overlap' || current2DOverlay === 'overlap') {
     runAnalysisIfNeeded(current3DMode);
@@ -2752,59 +2739,6 @@ async function buildUVLayoutCanvas(root, size = 1024, onProgress){
 // Store base 2D canvas for overlay redraws
 let uv2DBaseCanvas = null;
 
-document.getElementById('uv-mode-2d').addEventListener('click', async () => {
-  if(!currentRoot) return;
-  const section = document.getElementById('uv-2d-section');
-  const btn = document.getElementById('uv-mode-2d');
-  const showing = section.style.display !== 'none';
-  if(showing){
-    section.style.display = 'none';
-    btn.classList.remove('active');
-    document.getElementById('uv-2d-overlay-controls').style.display = 'none';
-    return;
-  }
-
-  const progressWrap = document.getElementById('uv-2d-progress-wrap');
-  const progressFill = document.getElementById('uv-2d-progress-fill');
-  const progressLabel = document.getElementById('uv-2d-progress-label');
-  const dest = document.getElementById('uv-2d-canvas');
-
-  section.style.display = 'block';
-  btn.classList.add('active');
-  document.getElementById('uv-2d-overlay-controls').style.display = 'block';
-  btn.disabled = true;
-  dest.style.display = 'none';
-  progressWrap.style.display = 'block';
-  progressFill.style.width = '0%';
-  progressLabel.textContent = 'Building UV layout… 0%';
-
-  try{
-    const src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
-      const p = Math.round(pct * 100);
-      progressFill.style.width = p + '%';
-      progressLabel.textContent = `Building UV layout… ${p}%`;
-    });
-    // Store base canvas for overlays
-    uv2DBaseCanvas = document.createElement('canvas');
-    uv2DBaseCanvas.width = src.width;
-    uv2DBaseCanvas.height = src.height;
-    uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
-
-    dest.width = src.width; dest.height = src.height;
-    dest.getContext('2d').drawImage(src, 0, 0);
-    dest.style.display = 'block';
-    progressWrap.style.display = 'none';
-    // Reset overlay to none
-    current2DOverlay = 'none';
-    document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b.dataset.overlay === 'none'));
-  }catch(err){
-    progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
-    progressFill.style.width = '0%';
-  }finally{
-    btn.disabled = false;
-  }
-});
-
 // 2D Overlay controls
 document.querySelectorAll('[data-overlay]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -3098,13 +3032,21 @@ document.getElementById('uv-2d-download').addEventListener('click', () => {
   }, 'image/png');
 });
 
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-dropZone.addEventListener('click', () => fileInput.click());
+// New UI uses tool-import button and hidden file input
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.obj,.zip';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+on('tool-import', 'click', () => fileInput.click());
 fileInput.addEventListener('change', e => { if(e && e.target && e.target.files && e.target.files[0]) handleFile(e.target.files[0]); });
-['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
-['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
-dropZone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+// Also support drag-drop on viewport area
+on('viewport-area', 'dragenter', e => { e.preventDefault(); });
+on('viewport-area', 'dragover', e => { e.preventDefault(); });
+on('viewport-area', 'dragleave', e => { e.preventDefault(); });
+on('viewport-area', 'drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
 
 // ============================================================================
 // NEW UI LOGIC: Device Selection, Loading, Sidebars, Sheets, Settings, Camera
@@ -3263,7 +3205,7 @@ function mirrorOptionsToSheet() {
   const dst = document.getElementById('sheet-options-content');
   dst.innerHTML = src.innerHTML;
   // Re-bind any interactive elements in options
-  bindOptionsPanel(dst);
+  bindModeOptions(current3DMode);
 }
 
 // Camera mode toggle
@@ -4334,11 +4276,6 @@ function updateViewportHint() {
   hint.textContent = hints[device] || hints.desktop;
 }
 
-// Mode buttons in left sidebar (View Options group) - exclude 2d which has special handling
-document.querySelectorAll('.tool-btn[data-mode]:not([data-mode="2d"])').forEach(btn => {
-  btn.addEventListener('click', () => set3DMode(btn.dataset.mode));
-});
-
 // 2D UV Map modal handler
 document.getElementById('tool-2d').addEventListener('click', openUV2DModal);
 document.getElementById('btn-close-uv2d-modal').addEventListener('click', closeUV2DModal);
@@ -4691,9 +4628,6 @@ document.querySelectorAll('.tool-group-header').forEach(header => {
   });
 });
 
-// File import button
-document.getElementById('tool-import').addEventListener('click', () => fileInput.click());
-
 // Export buttons
 document.getElementById('tool-export-obj').addEventListener('click', exportOBJ);
 document.getElementById('tool-export-png').addEventListener('click', () => {
@@ -4833,19 +4767,6 @@ function exportOBJWithUVs(root) {
 
   return output;
 }
-
-// Status function update for new status boxes (extends original st function)
-const originalSt = st;
-st = function(msg, kind) {
-  originalSt(msg, kind);
-  // Also update viewport status if it exists
-  const vpBox = document.getElementById('uv-status-viewport');
-  if (vpBox) {
-    vpBox.className = 'status-box ' + kind;
-    const span = vpBox.querySelector('span');
-    if (span) span.textContent = msg;
-  }
-};
 
 // Initialize device flow on load
 initDeviceFlow();
