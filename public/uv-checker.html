@@ -1455,6 +1455,24 @@ function isBrave() {
   return false;
 }
 
+// requestRender() is called from many tools. The animate loop already renders every frame,
+// so this just forces one extra render and must never throw.
+function requestRender() {
+  if (renderer && scene && camera) renderer.render(scene, camera);
+}
+
+// Hoisted to module level so panel handlers and tools outside initScene() can call it.
+function updateCheckerTexture() {
+  if (checkerTexture) checkerTexture.dispose();
+  checkerTexture = new THREE.CanvasTexture(createCheckerCanvas(checkerOptions));
+  checkerTexture.wrapS = checkerTexture.wrapT = THREE.RepeatWrapping;
+  checkerTexture.generateMipmaps = true;
+  checkerTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  checkerTexture.magFilter = THREE.LinearFilter;
+  if (renderer) checkerTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  if (THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
+}
+
 function initScene(){
   const canvas = document.getElementById('uv-canvas');
   const wrap = canvas.parentElement;
@@ -1699,17 +1717,6 @@ function initScene(){
     if (current3DMode === 'checker') updateCheckerTexture();
     if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
     requestRender();
-  }
-
-  function updateCheckerTexture() {
-    if (checkerTexture) checkerTexture.dispose();
-    checkerTexture = new THREE.CanvasTexture(createCheckerCanvas(checkerOptions));
-    checkerTexture.wrapS = checkerTexture.wrapT = THREE.RepeatWrapping;
-    checkerTexture.generateMipmaps = true;
-    checkerTexture.minFilter = THREE.LinearMipmapLinearFilter;
-    checkerTexture.magFilter = THREE.LinearFilter;
-    checkerTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    if (THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
   }
 
   updateCheckerTexture();
