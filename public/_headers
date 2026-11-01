@@ -8,6 +8,15 @@
 /uv-checker
   Content-Type: text/html; charset=utf-8
 
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+
 /*.js
   Content-Type: application/javascript; charset=utf-8
 

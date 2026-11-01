@@ -1,0 +1,120 @@
+# 3DRBXMT (3DRBX-MT)
+
+> 3DRBXMT is a free, open-source, browser-based tool that downloads Roblox avatars, catalog items, bundles, 3D models and other assets and converts them into formats used by 3D creators (OBJ+MTL, GLTF/GLB, FBX). Its name stands for "The Next Gen 3D Roblox Model Migration Tools". It is built for 3D artists and game developers who want to move Roblox models into Blender, Unreal Engine, Unity, Maya, Cinema 4D and the mobile apps Nomad Sculpt and Prisma 3D. It is an unofficial tool and is not affiliated with or endorsed by Roblox Corporation.
+
+- Website: https://getrbx3d.qzz.io
+- UV Editor (UV Checker): https://getrbx3d.qzz.io/uv-checker
+- Source code: https://github.com/SharkyA7/Roblox-downloader-backend
+- Author: https://github.com/SharkyA7
+- Community (Discord): https://discord.gg/FwPPMgMapT
+- Privacy Policy: https://getrbx3d.qzz.io/privacy
+- Terms: https://getrbx3d.qzz.io/terms
+- License: MIT, with one attribution carve-out for a small originally-ported technique (see CREDITS.md in the repository)
+
+## What it is and who it is for
+
+Use it when you want a real, editable 3D copy of a Roblox avatar or catalog item (real mesh plus UV texture PNG) instead of a flat screenshot. It runs in a normal web browser, with nothing to install. It is designed with phone and tablet users in mind, because its outputs target mobile 3D sculpting apps (Nomad Sculpt, Prisma 3D) as well as desktop software (Blender, Unreal Engine, Unity, Maya, Cinema 4D).
+
+The interface text is a mix of Indonesian and English.
+
+## Features
+
+### Avatar download (by username or user ID)
+- Downloads the avatar's real mesh and UV texture PNG directly from the Roblox CDN.
+- Output formats: OBJ + MTL (ZIP, for Blender, Maya, Cinema 4D) and GLTF/GLB (for game engines and AR/VR).
+- Body type conversion R6 <-> R15: merges the 15 R15 parts into 6 R6 parts (Head, Torso, Left/Right Arm, Left/Right Leg), or converts the other way. Useful for engines that only support R6.
+- A simple block-model OBJ export is available.
+- Lists the catalog items an avatar is currently wearing.
+
+### Catalog item and bundle download
+- Accepts a catalog asset ID or link (roblox.com/catalog/ID). Bundles (roblox.com/bundles/ID) are also supported, and an ID that is not a plain asset resolves to its component assets.
+- Mesh is converted from the Roblox format to OBJ+MTL with texture, or to GLTF 2.0 with embedded buffer, or to FBX (static mesh plus texture, for Blender, Unity, Unreal; no skeleton or animation).
+- Animation items: exports skeleton and keyframe data (not a mesh) for import into Blender or other 3D apps as animation.
+- Layered Clothing items: also exports the inner and outer cage meshes, used for fitting clothing in Blender.
+- Raw 2D image download for image-type items (Decal, Shirt, Pants, Background and so on).
+- Marketplace search and browsing inside the tool, with sorting (relevance, favorites, price low to high, price high to low).
+
+### Packed Catalog
+- Combine many catalog items or bundles into a single ZIP. Each item is placed in its own folder with OBJ+MTL+texture. GLTF is not used in packs.
+- Add items one ID or link per line, in bulk, or add everything a user is currently wearing in one step.
+
+### Custom Catalog Avatar
+- Build a custom set of items, save it, and get a share code.
+- Visibility can be private (only you) or public (anyone with the code).
+- Load a catalog by its code and download it, import items from a Packed Catalog, or search the marketplace to add items.
+
+### 2D assets
+- Decal, Image, Face, GUI, Texture and Background assets as PNG (these are 2D images, not meshes).
+- Fonts as a ZIP containing a manifest and every .ttf/.otf file per weight and style.
+- Video as a .ts file (not .mp4), which plays in VLC.
+- Packed 2D Assets: many images into one ZIP.
+
+### Audio
+- Audio download with asset info, from a roblox.com/library/ID link. The site asks users to confirm they own the audio or have permission, because audio may be copyrighted.
+
+### 3D model assets (create.roblox.com Creator Store models)
+- Fetch and analyze a model by asset ID or Creator Store link.
+- Download the original RBXM file (opens in Roblox Studio).
+- Convert RBXM to GLB (up to 500 parts; Union/CSG supported).
+- OBJ + texture ZIP alternative for when GLB textures do not show in Nomad Sculpt or Prisma 3D.
+- This section can be switched off temporarily by the site owner; if it shows "Not available", try again later.
+
+### Studio Materials (beta / experimental)
+- Roblox Studio material texture sets, based on the community Roblox-Materials project by MaximumADHD (https://github.com/MaximumADHD/Roblox-Materials).
+- The site warns that generating all 9 maps at once at high resolution can be slow, especially on phones with standard specs, and recommends 1K to 2K resolution.
+
+### Accounts, limits and API
+- Fully usable without logging in. Optional "Login with Roblox" gives a personal rate limit (instead of a shared one) and access to your own private assets. The site never stores your Roblox password or personal data; the login is handled on Roblox's side.
+- Users can create and manage API keys for programmatic access. Keys are scoped and rate-limited.
+
+## Supported Roblox mesh versions
+
+| Mesh version | Format | Status |
+|---|---|---|
+| 1.00 | ASCII | Supported |
+| 2.00 | Binary | Supported |
+| 3.00 | Binary + LOD | Supported |
+| 4.00 | Binary + skinning | Geometry only (skinning data is not exported) |
+| 5.00 | Binary + CSG/Union | Supported |
+| 6.00, 7.00, 8.00 | | Not supported yet |
+
+## UV Editor (UV Checker)
+
+A separate in-browser tool at /uv-checker for inspecting and editing the UV maps of imported models. It runs 100% locally in the browser: no server calls, no analytics, no trackers. It is under active development, so some tools may still be rough.
+
+- Import: OBJ or ZIP.
+- Analysis modes: Problem Finder (flipped, zero-area and outside-0-1 triangles), Texel Density (heatmap, global or per-mesh normalization), Overlap Detection, and a 2D UV Map view with overlays and background choices.
+- Checker texture preview in the 3D viewport with configurable grid, patterns (Rainbow, Numbered, black and white) and glyphs.
+- Editing tools, ported from the Blender add-on Mio3 UV: Straighten, Align, Relax, Unwrap, Pack, Organize.
+- Selection modes: vertex, edge, face, island (keys 1 to 4). Transform tools: select, move, rotate, scale (keys V, G, R, S).
+- Export: OBJ (with UVs and normals) and the 2D UV layout as PNG.
+- Camera: perspective (3D) and orthographic (2D) toggle.
+- Device picker with layouts for Desktop / PC, Laptop, Tablet / iPad and Mobile / iPhone. On tablet and mobile the side panels become bottom sheets.
+- Settings: layout width, colors (background, stroke, accent) and a Boost Mode for performance.
+- Needs a modern browser with WebGL (Chrome, Firefox, Safari, Edge). In Brave, turn off Shields for the site if WebGL fails.
+
+## Device and browser support
+
+- Works in a web browser on desktop, laptop, tablet and phone. No app install and no account needed.
+- Output files are meant to open in: Blender, Unreal Engine, Unity, Maya, Cinema 4D, Roblox Studio (RBXM), Nomad Sculpt and Prisma 3D (mobile).
+- Heavy operations (large textures, many maps at once) can be slow on low-end phones; the site shows warnings and suggests lower resolutions.
+
+## Privacy and trust
+
+- No analytics or trackers. No Roblox password is ever requested or stored.
+- Only public Roblox APIs are used, unless the user chooses to log in.
+- The backend runs as a serverless function on Vercel, behind Cloudflare SSL/TLS.
+- The project is free and says it will stay free. Hosting is supported by optional tips.
+
+## Limits and responsible use
+
+- Downloaded meshes, textures and metadata remain the property of Roblox Corporation and/or the original asset creators. The tool grants no rights over that content beyond what Roblox itself allows.
+- Do not use the project to steal Roblox accounts. The author is not responsible for how downloaded content is used.
+- Skinning and animation are not exported with static mesh formats (OBJ, FBX). Mesh versions 6.00 to 8.00 are not supported yet.
+
+## Credits
+
+- Hash-to-CDN-URL technique originally learned from Faizdzn/rblxapi_backend (https://github.com/Faizdzn/rblxapi_backend); the project has since diverged substantially.
+- Mio3 UV (Blender add-on): reference for the UV editing tools.
+- Three.js (WebGL rendering) and JSZip (ZIP handling) in the UV Editor.
+- MaximumADHD/Roblox-Materials for Studio Materials.
