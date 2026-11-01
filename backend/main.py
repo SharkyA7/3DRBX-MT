@@ -2957,7 +2957,7 @@ def frontend():
     p = os.path.join(base,"index.html")
     # s-maxage=30: Vercel's CDN reuses the page for 30s, so most visits never run the
     # function or the Supabase maintenance lookup. A maintenance toggle shows within ~30s.
-    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html","Cache-Control":"public, s-maxage=30"}
+    if os.path.exists(p): return open(p).read(),200,{"Content-Type":"text/html","Cache-Control":"public, s-maxage=300"}
     return "<h1>Roblox Downloader</h1>"
 
 @app.get("/debug/maintenance")
