@@ -21,3 +21,4 @@ target/
 **/target/
 Cargo.lock
 .vercel
+mio3_uv/
