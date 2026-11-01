@@ -37,21 +37,21 @@
       "short_name": "UV Editor",
       "description": "Open the UV Editor for inspecting and editing UV maps",
       "url": "/uv-checker",
-      "icons": [{ "src": "/icons/3D VIEWER.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Catalog Browser",
       "short_name": "Catalog",
       "description": "Browse and download Roblox catalog items",
       "url": "/",
-      "icons": [{ "src": "/icons/CATALOG.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Avatar Downloader",
       "short_name": "Avatar",
       "description": "Download Roblox avatars as 3D models",
       "url": "/",
-      "icons": [{ "src": "/icons/AVATAR.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "screenshots": [

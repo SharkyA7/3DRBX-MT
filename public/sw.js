@@ -17,6 +17,8 @@ const STATIC_ASSETS = [
   '/terms.html',
   '/favicon.png',
   '/manifest.json',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
   '/robots.txt',
   '/sitemap.xml',
   '/llms.txt',
