@@ -1,0 +1,74 @@
+{
+  "name": "3DRBXMT — 3D Roblox Model Migration Tools",
+  "short_name": "3DRBXMT",
+  "description": "Free, open-source browser tool to download Roblox avatars, catalog items and 3D models as OBJ, GLTF/GLB or FBX. Works on desktop and phone. For Blender, Unreal, Unity, Nomad Sculpt and Prisma 3D.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#001619",
+  "theme_color": "#50E8F4",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "id",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/3DRBXMT BANNER.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["utilities", "graphics", "developer"],
+  "shortcuts": [
+    {
+      "name": "UV Editor",
+      "short_name": "UV Editor",
+      "description": "Open the UV Editor for inspecting and editing UV maps",
+      "url": "/uv-checker",
+      "icons": [{ "src": "/icons/3D VIEWER.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Catalog Browser",
+      "short_name": "Catalog",
+      "description": "Browse and download Roblox catalog items",
+      "url": "/",
+      "icons": [{ "src": "/icons/CATALOG.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Avatar Downloader",
+      "short_name": "Avatar",
+      "description": "Download Roblox avatars as 3D models",
+      "url": "/",
+      "icons": [{ "src": "/icons/AVATAR.svg", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/3DRBXMT BANNER.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "3DRBXMT Home Page"
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

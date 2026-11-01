@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>3DRBXMT — UV Map Checker</title>
 <meta name="description" content="Upload a 3D model (.obj, or the OBJ+MTL+texture .zip downloaded from this tool) and inspect its UV layout with a checkerboard overlay right in the browser.">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#50E8F4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="3DRBXMT UV Editor">
+<link rel="apple-touch-icon" href="/icons/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -4894,6 +4900,17 @@ function exportOBJWithUVs(root) {
 // Initialize device flow on load
 initDeviceFlow();
 // initScene() is called by showApp() after device selection/loading
+</script>
+
+<script>
+// Service Worker Registration for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('[PWA] Service Worker registered:', reg.scope))
+      .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
+  });
+}
 </script>
 </body>
 </html>
