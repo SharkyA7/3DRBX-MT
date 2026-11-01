@@ -22,6 +22,18 @@
       "use": "@vercel/static"
     },
     {
+      "src": "robots.txt",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "sitemap.xml",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "llms.txt",
+      "use": "@vercel/static"
+    },
+    {
       "src": "maintenance.html",
       "use": "@vercel/static"
     },
