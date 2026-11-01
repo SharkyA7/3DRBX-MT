@@ -3969,11 +3969,11 @@ function applyUnwrapUV() {
   requestRender();
 }
 
-// Pack UV Islands: Simple bin packing for selected islands
+// Pack UV Islands: MaxRects bin packing for optimal UV space utilization
 function applyPackUV() {
   if (!currentRoot) return;
 
-  st('⚙ Packing UV islands…', 'loading');
+  st('⚙ Packing UV islands (MaxRects)…', 'loading');
 
   const islands = getAllIslands();
   if (islands.length === 0) {
@@ -3981,18 +3981,14 @@ function applyPackUV() {
     return;
   }
 
-  // Simple grid packing
-  const padding = 0.01;
-  const gridCols = Math.ceil(Math.sqrt(islands.length));
-  let col = 0, row = 0;
-  let maxHeight = 0;
+  const padding = 0.005;
 
+  // Compute island bounds and areas for sorting (largest first = better packing)
+  const islandData = [];
   for (const isl of islands) {
     const data = getUVData(isl.mesh);
     if (!data) continue;
     const { uvAttr, idx } = data;
-
-    // Compute island bounds
     let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
     for (const vi of isl.vertices) {
       const u = uvAttr.getX(vi);
@@ -4004,33 +4000,128 @@ function applyPackUV() {
     }
     const w = maxU - minU;
     const h = maxV - minV;
-    maxHeight = Math.max(maxHeight, h);
+    if (w <= 0 || h <= 0) continue;
+    islandData.push({ isl, w, h, minU, minV, area: w * h });
+  }
+  if (islandData.length === 0) {
+    st('✗ No valid islands to pack', 'err');
+    return;
+  }
 
-    // Calculate offset to move island to grid position
-    const targetU = col * (1 / gridCols);
-    const targetV = row * (1 / gridCols);
-    const offsetU = targetU - minU + padding;
-    const offsetV = targetV - minV + padding;
+  // Sort by area descending (largest first)
+  islandData.sort((a, b) => b.area - a.area);
+
+  // MaxRects bin packer
+  const freeRects = [{ x: 0, y: 0, w: 1, h: 1 }];
+  const placed = [];
+
+  function splitFreeRect(freeRect, placedRect) {
+    const result = [];
+    // No overlap
+    if (placedRect.x >= freeRect.x + freeRect.w ||
+        placedRect.x + placedRect.w <= freeRect.x ||
+        placedRect.y >= freeRect.y + freeRect.h ||
+        placedRect.y + placedRect.h <= freeRect.y) {
+      return [freeRect];
+    }
+    // Split into up to 4 rectangles
+    if (placedRect.x > freeRect.x) {
+      result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
+    }
+    if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
+      result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
+    }
+    if (placedRect.y > freeRect.y) {
+      result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
+    }
+    if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
+      result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
+    }
+    return result;
+  }
+
+  function pruneFreeList(freeRects) {
+    const result = [];
+    for (let i = 0; i < freeRects.length; i++) {
+      let contained = false;
+      for (let j = 0; j < freeRects.length; j++) {
+        if (i !== j &&
+            freeRects[i].x >= freeRects[j].x &&
+            freeRects[i].y >= freeRects[j].y &&
+            freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
+            freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
+          contained = true;
+          break;
+        }
+      }
+      if (!contained) result.push(freeRects[i]);
+    }
+    return result;
+  }
+
+  function findPositionForNewRect(w, h) {
+    let bestRect = null, bestScore = Infinity, bestIdx = -1;
+    for (let i = 0; i < freeRects.length; i++) {
+      const r = freeRects[i];
+      if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
+        // Short Side Fit heuristic
+        const score = Math.min(r.w - w, r.h - h);
+        if (score < bestScore) {
+          bestScore = score;
+          bestRect = r;
+          bestIdx = i;
+        }
+      }
+    }
+    return { rect: bestRect, idx: bestIdx };
+  }
+
+  for (const id of islandData) {
+    const pw = id.w + padding * 2;
+    const ph = id.h + padding * 2;
+    const pos = findPositionForNewRect(pw, ph);
+    if (!pos.rect) {
+      st('⚠ Ran out of UV space — some islands not packed', 'err');
+      break;
+    }
+    const placedRect = {
+      x: pos.rect.x + padding,
+      y: pos.rect.y + padding,
+      w: id.w,
+      h: id.h
+    };
+    placed.push({ isl: id.isl, rect: placedRect, minU: id.minU, minV: id.minV });
+
+    // Split the free rect
+    const newFree = [];
+    for (const fr of freeRects) {
+      newFree.push(...splitFreeRect(fr, { x: pos.rect.x, y: pos.rect.y, w: pw, h: ph }));
+    }
+    freeRects.length = 0;
+    freeRects.push(...pruneFreeList(newFree));
+  }
+
+  // Apply positions
+  for (const p of placed) {
+    const data = getUVData(p.isl.mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+    const offsetU = p.rect.x - p.minU;
+    const offsetV = p.rect.y - p.minV;
 
     uvAttr.array = uvAttr.array.slice();
-    for (const vi of isl.vertices) {
+    for (const vi of p.isl.vertices) {
       uvAttr.setX(vi, uvAttr.getX(vi) + offsetU);
       uvAttr.setY(vi, uvAttr.getY(vi) + offsetV);
     }
     uvAttr.needsUpdate = true;
-
-    col++;
-    if (col >= gridCols) {
-      col = 0;
-      row++;
-    }
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
   if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
   islandCache = null;
 
-  st(`✓ Packed ${islands.length} UV islands`, 'ok');
+  st(`✓ Packed ${placed.length} UV islands (MaxRects)`, 'ok');
   requestRender();
 }
 
