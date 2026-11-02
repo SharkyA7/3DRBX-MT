@@ -6270,12 +6270,33 @@ document.addEventListener('DOMContentLoaded', checkMaintenanceStatus);
     updateProgress();
   }
 })();
-// Register Service Worker for PWA
+// Register Service Worker for PWA with update notification
 if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    console.log('[PWA] New version detected, reloading...');
+    location.reload();
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('[SW] Registered:', reg.scope))
-      .catch(err => console.warn('[SW] Registration failed:', err));
+      .then(reg => {
+        console.log('[PWA] Service Worker registered:', reg.scope);
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              if (confirm('New version available. Reload to update?')) {
+                location.reload();
+              }
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
   });
 }
 </script>

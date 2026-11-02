@@ -3232,6 +3232,37 @@ if (isStandalone()) {
   document.documentElement.classList.add('standalone');
 }
 
+// PWA update notification
+function registerSWUpdatePrompt() {
+  if (!('serviceWorker' in navigator)) return;
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    console.log('[PWA] New version detected, reloading...');
+    location.reload();
+  });
+
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version ready, prompt user
+          if (confirm('New version available. Reload to update?')) {
+            location.reload();
+          }
+        }
+      });
+    });
+  });
+}
+
+// Register update prompt after DOM ready
+document.addEventListener('DOMContentLoaded', registerSWUpdatePrompt);
+
 function showApp() {
   document.getElementById('app-root').style.display = 'flex';
   initScene().catch(err => {
