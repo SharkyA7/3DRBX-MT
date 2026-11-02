@@ -1494,7 +1494,7 @@ function updateCheckerTexture() {
   checkerTexture.generateMipmaps = true;
   checkerTexture.minFilter = THREE.LinearMipmapLinearFilter;
   checkerTexture.magFilter = THREE.LinearFilter;
-  if (renderer) checkerTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  if (renderer && renderer.isWebGLRenderer) checkerTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   if (THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
 }
 
@@ -1560,7 +1560,9 @@ function initScene(){
       initScene().catch(err => console.error('[UV Checker] Re-init failed:', err));
     }, false);
 
-    renderer.getContext().getExtension('WEBGL_lose_context');
+    if (renderer.isWebGLRenderer) {
+      renderer.getContext().getExtension('WEBGL_lose_context');
+    }
   }
 
   const size = wrap.clientWidth;
