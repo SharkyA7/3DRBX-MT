@@ -1528,6 +1528,14 @@ function initScene(){
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  // Touch config for mobile
+  controls.enableRotate = true;
+  controls.enablePan = true;
+  controls.enableZoom = true;
+  controls.touches = {
+    ONE: THREE.TOUCH.ROTATE,
+    TWO: THREE.TOUCH.DOLLY_PAN
+  };
 
   // Gizmo interaction state
   let gizmoDragState = null; // { axis: 'x'|'y'|'z', mode: 'translate'|'rotate'|'scale', startPoint, startMouse }
@@ -1653,9 +1661,36 @@ function initScene(){
     endTransform();
   }
 
+  // Unified pointer handlers (mouse + touch)
+  function getClientXY(e) {
+    return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+                     : { x: e.clientX, y: e.clientY };
+  }
+
+  function handleGizmoPointerDown(e) {
+    const { x, y } = getClientXY(e);
+    const me = { ...e, clientX: x, clientY: y, button: 0 };
+    handleGizmoMouseDown(me);
+  }
+
+  function handleGizmoPointerMove(e) {
+    if (!gizmoDragState) return;
+    const { x, y } = getClientXY(e);
+    const me = { ...e, clientX: x, clientY: y };
+    handleGizmoMouseMove(me);
+  }
+
+  function handleGizmoPointerUp(e) {
+    handleGizmoMouseUp(e);
+  }
+
   canvas.addEventListener('mousedown', handleGizmoMouseDown);
+  canvas.addEventListener('touchstart', handleGizmoPointerDown, { passive: false });
   window.addEventListener('mousemove', handleGizmoMouseMove);
+  window.addEventListener('touchmove', handleGizmoPointerMove, { passive: false });
   window.addEventListener('mouseup', handleGizmoMouseUp);
+  window.addEventListener('touchend', handleGizmoPointerUp);
+  window.addEventListener('touchcancel', handleGizmoPointerUp);
 
   function applyGizmoScale(axis, factor) {
     if (!currentRoot || !transformSnapshot) return;
