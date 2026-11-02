@@ -6,7 +6,6 @@
   "display": "standalone",
   "background_color": "#001619",
   "theme_color": "#50E8F4",
-  "orientation": "portrait-primary",
   "scope": "/",
   "lang": "id",
   "dir": "ltr",
