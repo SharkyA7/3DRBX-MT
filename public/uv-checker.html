@@ -304,6 +304,140 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   .top-bar-center{display:none;}
 }
 
+/* PWA Update Toast */
+.pwa-update-toast {
+  position: fixed;
+  top: calc(12px + var(--safe-top));
+  left: calc(12px + var(--safe-left));
+  right: calc(12px + var(--safe-right));
+  z-index: 10000;
+  transform: translateY(-120%);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.3s;
+}
+.pwa-update-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.pwa-update-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 0 1px rgba(80,232,244,.1);
+}
+.pwa-update-icon { font-size: 20px; }
+.pwa-update-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pwa-update-text strong { font-family: var(--font-ui); font-size: 13px; color: var(--white); }
+.pwa-update-text span { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+.pwa-update-actions { display: flex; gap: 8px; margin-left: 8px; }
+.pwa-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.pwa-btn-primary { background: var(--accent); color: #000; border-color: var(--accent); }
+.pwa-btn-primary:hover { background: #00EEFF; box-shadow: 0 0 16px rgba(80,232,244,.4); }
+.pwa-btn-secondary { background: transparent; color: var(--white); border-color: var(--border2); }
+.pwa-btn-secondary:hover { background: var(--s3); border-color: var(--accent); }
+
+/* PWA Progress Modal */
+.pwa-progress-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+  padding: 20px;
+}
+.pwa-progress-modal.show {
+  opacity: 1;
+  visibility: visible;
+}
+.pwa-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.85);
+  backdrop-filter: blur(4px);
+}
+.pwa-modal-box {
+  position: relative;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 28px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 48px rgba(0,0,0,.4), 0 0 0 1px rgba(80,232,244,.1);
+  transform: scale(0.95);
+  transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);
+}
+.pwa-progress-modal.show .pwa-modal-box {
+  transform: scale(1);
+}
+.pwa-modal-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.pwa-modal-box h3 {
+  font-family: var(--font-px);
+  font-size: clamp(12px, 2.5vw, 16px);
+  color: var(--accent);
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+.pwa-modal-box #pwa-modal-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.pwa-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--s2);
+  overflow: hidden;
+  border: 1px solid var(--border2);
+  margin-bottom: 8px;
+}
+.pwa-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.12s linear;
+  box-shadow: 0 0 8px rgba(80,232,244,.5);
+}
+.pwa-modal-percent {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.pwa-reload-btn {
+  background: var(--green) !important;
+  color: #000 !important;
+}
+.pwa-reload-btn:hover { background: #00E6A0 !important; box-shadow: 0 0 16px rgba(0,255,179,.4); }
+
 /* Mobile: compact, full-height sheets */
 @media (max-width:599px){
   .left-sidebar,.right-sidebar{display:none;}
@@ -3234,11 +3368,14 @@ if (isStandalone()) {
   document.documentElement.classList.add('standalone');
 }
 
-// PWA update notification
+// PWA update notification with proper UI flow
 function registerSWUpdatePrompt() {
   if (!('serviceWorker' in navigator)) return;
 
   let refreshing = false;
+  let updateToast = null;
+  let progressModal = null;
+
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing) return;
     refreshing = true;
@@ -3252,14 +3389,131 @@ function registerSWUpdatePrompt() {
       if (!newWorker) return;
       newWorker.addEventListener('statechange', () => {
         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          // New version ready, prompt user
-          if (confirm('New version available. Reload to update?')) {
-            location.reload();
-          }
+          showUpdateToast(reg, newWorker);
         }
       });
     });
   });
+
+  function showUpdateToast(reg, newWorker) {
+    // Remove existing toast
+    if (updateToast) updateToast.remove();
+
+    updateToast = document.createElement('div');
+    updateToast.className = 'pwa-update-toast';
+    updateToast.innerHTML = `
+      <div class="pwa-update-content">
+        <div class="pwa-update-icon">🔄</div>
+        <div class="pwa-update-text">
+          <strong>Update available</strong>
+          <span>A new version of 3DRBXMT is ready</span>
+        </div>
+        <div class="pwa-update-actions">
+          <button class="pwa-btn pwa-btn-secondary" id="pwa-update-later">Later</button>
+          <button class="pwa-btn pwa-btn-primary" id="pwa-update-now">Update</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(updateToast);
+
+    // Trigger animation
+    requestAnimationFrame(() => updateToast.classList.add('show'));
+
+    document.getElementById('pwa-update-now').addEventListener('click', () => {
+      updateToast.classList.remove('show');
+      setTimeout(() => updateToast.remove(), 300);
+      showProgressModal(reg, newWorker);
+    });
+
+    document.getElementById('pwa-update-later').addEventListener('click', () => {
+      updateToast.classList.remove('show');
+      setTimeout(() => updateToast.remove(), 300);
+    });
+  }
+
+  function showProgressModal(reg, newWorker) {
+    progressModal = document.createElement('div');
+    progressModal.className = 'pwa-progress-modal';
+    progressModal.innerHTML = `
+      <div class="pwa-modal-backdrop"></div>
+      <div class="pwa-modal-box">
+        <div class="pwa-modal-spinner"></div>
+        <h3 id="pwa-modal-title">Fetching update...</h3>
+        <p id="pwa-modal-subtitle">Preparing to download</p>
+        <div class="pwa-progress-track">
+          <div class="pwa-progress-fill" id="pwa-progress-fill"></div>
+        </div>
+        <p id="pwa-modal-percent" class="pwa-modal-percent">0%</p>
+      </div>
+    `;
+    document.body.appendChild(progressModal);
+    requestAnimationFrame(() => progressModal.classList.add('show'));
+
+    // Simulate fetch/download progress (real SW doesn't expose byte progress)
+    let progress = 0;
+    const phases = [
+      { label: 'Fetching update...', max: 30, speed: 3 },
+      { label: 'Downloading...', max: 85, speed: 5 },
+      { label: 'Finalizing...', max: 100, speed: 2 }
+    ];
+    let phaseIdx = 0;
+
+    function animateProgress() {
+      if (phaseIdx >= phases.length) return;
+      const phase = phases[phaseIdx];
+      const interval = setInterval(() => {
+        progress = Math.min(progress + phase.speed, phase.max);
+        updateProgressUI(progress, phase.label);
+        if (progress >= phase.max) {
+          clearInterval(interval);
+          phaseIdx++;
+          animateProgress();
+        }
+      }, 100);
+    }
+
+    function updateProgressUI(pct, label) {
+      const fill = document.getElementById('pwa-progress-fill');
+      const percent = document.getElementById('pwa-modal-percent');
+      const title = document.getElementById('pwa-modal-title');
+      if (fill) fill.style.width = pct + '%';
+      if (percent) percent.textContent = Math.round(pct) + '%';
+      if (title) title.textContent = label;
+    }
+
+    animateProgress();
+
+    // When SW is ready (already installed), wait for animation then show reload button
+    newWorker.addEventListener('statechange', () => {
+      if (newWorker.state === 'installed') {
+        setTimeout(() => {
+          const title = document.getElementById('pwa-modal-title');
+          const subtitle = document.getElementById('pwa-modal-subtitle');
+          const fill = document.getElementById('pwa-progress-fill');
+          const percent = document.getElementById('pwa-modal-percent');
+          if (title) title.textContent = 'Ready to update';
+          if (subtitle) subtitle.textContent = 'Click to reload and apply';
+          if (fill) fill.style.width = '100%';
+          if (percent) percent.textContent = '100%';
+
+          // Add reload button
+          const modalBox = progressModal.querySelector('.pwa-modal-box');
+          if (modalBox) {
+            const btn = document.createElement('button');
+            btn.className = 'pwa-btn pwa-btn-primary pwa-reload-btn';
+            btn.textContent = 'Reload & Restart';
+            btn.style.marginTop = '16px';
+            btn.style.width = '100%';
+            btn.addEventListener('click', () => {
+              refreshing = true;
+              location.reload();
+            });
+            modalBox.appendChild(btn);
+          }
+        }, 500);
+      }
+    });
+  }
 }
 
 // Register update prompt after DOM ready
