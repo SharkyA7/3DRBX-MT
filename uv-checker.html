@@ -1482,6 +1482,34 @@ function updateCheckerTexture() {
   if (THREE.SRGBColorSpace) checkerTexture.colorSpace = THREE.SRGBColorSpace;
 }
 
+async function initRenderer(canvas) {
+  // Try WebGPU first (progressive enhancement)
+  if (navigator.gpu) {
+    try {
+      const { WebGPURenderer } = await import('three/addons/renderers/webgpu/WebGPURenderer.js');
+      const webgpuRenderer = new WebGPURenderer({ canvas, antialias: true });
+      await webgpuRenderer.init();
+      console.log('[UV Checker] Using WebGPU renderer');
+      return webgpuRenderer;
+    } catch (e) {
+      console.warn('[UV Checker] WebGPU init failed, falling back to WebGL:', e);
+    }
+  }
+
+  // WebGL2 / WebGL1 fallback
+  const gl2 = canvas.getContext('webgl2', { antialias: true, alpha: true, failIfMajorPerformanceCaveat: false });
+  if (gl2) {
+    return new THREE.WebGLRenderer({ canvas, context: gl2, antialias: true });
+  }
+
+  const gl1 = canvas.getContext('webgl', { antialias: true, alpha: true, failIfMajorPerformanceCaveat: false });
+  if (gl1) {
+    return new THREE.WebGLRenderer({ canvas, context: gl1, antialias: true });
+  }
+
+  throw new Error('No WebGPU/WebGL context available');
+}
+
 function initScene(){
   const canvas = document.getElementById('uv-canvas');
   const wrap = canvas.parentElement;
@@ -1492,31 +1520,33 @@ function initScene(){
   camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
 
   try{
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, failIfMajorPerformanceCaveat: false });
+    renderer = await initRenderer(canvas);
   }catch(err){
     const braveMsg = 'This tool runs 100% locally — zero trackers, no server calls. If using Brave, try clicking the shield icon (top-right) → "Shields down" for this site, then reload.';
     const msg = isBrave()
-      ? 'WebGL failed to initialize. ' + braveMsg + ' If Shields is already off, check: hardware acceleration (on), GPU drivers, or try a different browser.'
-      : 'WebGL initialization failed. ' + braveMsg + ' Also check: browser privacy extensions, hardware acceleration (on), or try a different browser.';
+      ? 'GPU renderer failed to initialize. ' + braveMsg + ' If Shields is already off, check: hardware acceleration (on), GPU drivers, or try a different browser.'
+      : 'GPU initialization failed. ' + braveMsg + ' Also check: browser privacy extensions, hardware acceleration (on), or try a different browser.';
     st(msg, 'err');
     return;
   }
 
-  // WebGL context loss recovery
-  canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    console.error('[UV Checker] WebGL context lost');
-    st('✗ WebGL context lost — GPU memory exhausted or driver crash. Try a smaller file or reload.', 'err');
-  }, false);
+  // Context loss recovery (WebGL only; WebGPU handles differently)
+  if (renderer.isWebGLRenderer) {
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.error('[UV Checker] WebGL context lost');
+      st('✗ GPU context lost — GPU memory exhausted or driver crash. Try a smaller file or reload.', 'err');
+    }, false);
 
-  canvas.addEventListener('webglcontextrestored', () => {
-    console.log('[UV Checker] WebGL context restored — reinitializing');
-    st('⚠ WebGL restored — please reload the file', 'loading');
-    initScene(); // re-init renderer
-  }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      console.log('[UV Checker] WebGL context restored — reinitializing');
+      st('⚠ GPU restored — please reload the file', 'loading');
+      initScene().catch(err => console.error('[UV Checker] Re-init failed:', err));
+    }, false);
 
-  // Renderer error handling
-  renderer.getContext().getExtension('WEBGL_lose_context'); // ensure extension exists
+    renderer.getContext().getExtension('WEBGL_lose_context');
+  }
+
   const size = wrap.clientWidth;
   renderer.setSize(size, size);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -3176,7 +3206,9 @@ function animateLoadingBar() {
 
 function showApp() {
   document.getElementById('app-root').style.display = 'flex';
-  initScene();
+  initScene().catch(err => {
+    console.error('[UV Checker] initScene failed:', err);
+  });
 }
 
 function initDeviceFlow() {
