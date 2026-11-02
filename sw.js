@@ -1,9 +1,9 @@
 // 3DRBXMT Service Worker
 // Handles offline caching for static assets while keeping API routes dynamic
 
-const CACHE_NAME = '3drbxmt-v2';
-const STATIC_CACHE_NAME = '3drbxmt-static-v2';
-const API_CACHE_NAME = '3drbxmt-api-v2';
+const CACHE_NAME = '3drbxmt-v3';
+const STATIC_CACHE_NAME = '3drbxmt-static-v3';
+const API_CACHE_NAME = '3drbxmt-api-v3';
 
 // Files to cache immediately on install
 const STATIC_ASSETS = [
