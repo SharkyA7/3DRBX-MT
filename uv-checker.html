@@ -3640,7 +3640,7 @@ function applyUVTool(tool) {
   } else if (tool === 'unwrap') {
     applyUnwrapUV();
   } else if (tool === 'pack') {
-    applyPackUV();
+    try { applyPackUV(); } catch (e) { st('✗ Pack failed: ' + e.message, 'err'); console.error(e); }
   } else if (tool === 'organize') {
     applyOrganizeUV();
   } else {
@@ -4104,10 +4104,11 @@ function applyUnwrapUV() {
 }
 
 // Pack UV Islands: MaxRects bin packing for optimal UV space utilization
-function applyPackUV() {
+async function applyPackUV() {
   if (!currentRoot) return;
 
   st('⚙ Packing UV islands (MaxRects)…', 'loading');
+  try {
 
   const islands = getAllIslands();
   if (islands.length === 0) {
@@ -4257,6 +4258,9 @@ function applyPackUV() {
 
   st(`✓ Packed ${placed.length} UV islands (MaxRects)`, 'ok');
   requestRender();
+} catch (e) {
+  st('✗ Pack failed: ' + e.message, 'err');
+  console.error('[UV Checker] Pack error:', e);
 }
 
 // Organize / Unfoldify: Layout islands in a grid with uniform scale
