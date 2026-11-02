@@ -3760,11 +3760,16 @@ const toolButtons = [
 
 function handleToolClick(tool) {
   activeTool = tool;
+  // Sync gizmoMode with transform tool
+  if (tool === 'move') gizmoMode = 'translate';
+  else if (tool === 'rotate') gizmoMode = 'rotate';
+  else if (tool === 'scale') gizmoMode = 'scale';
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tool === tool);
   });
   updateRightSidebarForTool(tool);
   updateViewportHint();
+  updateSelectionGizmo();
 }
 
 function updateRightSidebarForTool(tool) {
