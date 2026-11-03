@@ -1387,8 +1387,8 @@ function invertSelection() {
 function createSelectionGizmo() {
   if (selectionGizmo) {
     scene.remove(selectionGizmo);
-    selectionGizmo.geometry.dispose();
-    selectionGizmo.material.dispose();
+    selectionGizmo.geometry?.dispose();
+    selectionGizmo.material?.dispose();
   }
 
   // Calculate selection bounds in 3D space
