@@ -2989,8 +2989,12 @@ document.querySelectorAll('[data-bg]').forEach(btn => {
   });
 });
 
-function draw2DOverlay() {
+// draw2DOverlayNow() does the actual drawing. draw2DOverlay() below coalesces calls via RAF.
+let draw2DChunkState = null; // { triangles, mode, paths, index, startTime }
+
+function draw2DOverlayNow() {
   const dest = document.getElementById('uv-2d-canvas');
+  if (!dest) return;
   const ctx = dest.getContext('2d');
   const size = dest.width;
 
@@ -3022,27 +3026,94 @@ function draw2DOverlay() {
 
   const { allTriangles, medianDensity, meshResults } = analysisResults;
 
-  if (current2DOverlay === 'problems') {
-    // Draw problem triangles filled
-    ctx.globalAlpha = 0.6;
-    for (const tri of allTriangles) {
-      let show = false, fillStyle;
-      if (tri.flipped && problemFilters.flipped) { fillStyle = '#FF4466'; show = true; }
-      else if (tri.zeroArea && problemFilters.zeroArea) { fillStyle = '#FFD166'; show = true; }
-      else if (tri.outside && problemFilters.outside) { fillStyle = '#50E8F4'; show = true; }
-      if (!show) continue;
+  // High triangle count: chunk overlay drawing across frames (>150k triangles)
+  const triCount = allTriangles.length;
+  const CHUNK_THRESHOLD = 150000;
+  const CHUNK_SIZE = 50000; // triangles per frame
 
-      ctx.fillStyle = fillStyle;
-      ctx.beginPath();
-      ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-      ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-      ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-      ctx.closePath();
-      ctx.fill();
+  if (triCount > CHUNK_THRESHOLD && (current2DOverlay === 'problems' || current2DOverlay === 'texel' || current2DOverlay === 'overlap')) {
+    if (!draw2DChunkState || draw2DChunkState.mode !== current2DOverlay) {
+      // Initialize chunking state
+      draw2DChunkState = {
+        triangles: allTriangles,
+        mode: current2DOverlay,
+        index: 0,
+        startTime: performance.now(),
+        paths: {}
+      };
+      st(`Rendering 2D overlay (${triCount} triangles)…`, 'info');
     }
+
+    // Process one chunk
+    const chunkEnd = Math.min(draw2DChunkState.index + CHUNK_SIZE, triCount);
+    draw2DChunk(chunkEnd, ctx, size, medianDensity);
+    draw2DChunkState.index = chunkEnd;
+
+    // Draw drag selection box (always drawn)
+    if (dragBox) {
+      ctx.strokeStyle = '#50E8F4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.strokeRect(dragBox.x1, dragBox.y1, dragBox.x2 - dragBox.x1, dragBox.y2 - dragBox.y1);
+      ctx.setLineDash([]);
+    }
+
+    // Draw selection highlights
+    if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
+      draw2DSelectionHighlights(ctx, size);
+    }
+
+    if (draw2DChunkState.index < triCount) {
+      // Schedule next chunk
+      requestAnimationFrame(() => {
+        try { draw2DOverlayNow(); } catch (err) { draw2DChunkState = null; throw err; }
+      });
+      return;
+    } else {
+      // Done chunking
+      const elapsed = (performance.now() - draw2DChunkState.startTime).toFixed(0);
+      st(`2D overlay ready (${triCount} triangles, ${elapsed}ms)`, 'ok');
+      draw2DChunkState = null;
+      return;
+    }
+  } else {
+    // Not chunking - reset state if it was set
+    draw2DChunkState = null;
+  }
+
+  // Normal (non-chunked) drawing path
+  if (current2DOverlay === 'problems') {
+    // Draw problem triangles filled — batched via Path2D per problem type
+    ctx.globalAlpha = 0.6;
+    const paths = {
+      flipped: new Path2D(),
+      zeroArea: new Path2D(),
+      outside: new Path2D()
+    };
+    for (const tri of allTriangles) {
+      if (tri.flipped && problemFilters.flipped) {
+        paths.flipped.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.flipped.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.flipped.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.flipped.closePath();
+      } else if (tri.zeroArea && problemFilters.zeroArea) {
+        paths.zeroArea.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.zeroArea.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.zeroArea.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.zeroArea.closePath();
+      } else if (tri.outside && problemFilters.outside) {
+        paths.outside.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.outside.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.outside.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.outside.closePath();
+      }
+    }
+    if (problemFilters.flipped) { ctx.fillStyle = '#FF4466'; ctx.fill(paths.flipped); }
+    if (problemFilters.zeroArea) { ctx.fillStyle = '#FFD166'; ctx.fill(paths.zeroArea); }
+    if (problemFilters.outside) { ctx.fillStyle = '#50E8F4'; ctx.fill(paths.outside); }
     ctx.globalAlpha = 1;
   } else if (current2DOverlay === 'texel') {
-    // Draw texel density heatmap
+    // Draw texel density heatmap — batched via ~32 color buckets
     ctx.globalAlpha = 0.7;
 
     // Group triangles by mesh for per-mesh normalization
@@ -3052,34 +3123,41 @@ function draw2DOverlay() {
       trianglesByMesh[tri.meshIndex].push(tri);
     }
 
+    const bucketPaths = new Map(); // bucketKey -> Path2D
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
       const refDensity = texelNormalizeGlobal ? medianDensity : computeMedianDensity(tris);
       for (const tri of tris) {
         const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
         const [r, g, b] = colorForRatio(ratio);
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.beginPath();
-        ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-        ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-        ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-        ctx.closePath();
-        ctx.fill();
+        // Quantize to ~32 buckets (4 steps per channel, roughly)
+        const bucketKey = `${Math.round(r/64)*64},${Math.round(g/64)*64},${Math.round(b/64)*64}`;
+        let path = bucketPaths.get(bucketKey);
+        if (!path) { path = new Path2D(); bucketPaths.set(bucketKey, path); }
+        path.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        path.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        path.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        path.closePath();
       }
+    }
+    for (const [bucketKey, path] of bucketPaths) {
+      const [r, g, b] = bucketKey.split(',').map(Number);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fill(path);
     }
     ctx.globalAlpha = 1;
   } else if (current2DOverlay === 'overlap') {
-    // Draw overlap triangles in red
+    // Draw overlap triangles in red — batched via single Path2D
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = '#FF4466';
+    const path = new Path2D();
     for (const tri of allTriangles) {
       if (!tri.overlap) continue;
-      ctx.beginPath();
-      ctx.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-      ctx.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-      ctx.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-      ctx.closePath();
-      ctx.fill();
+      path.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+      path.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+      path.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+      path.closePath();
     }
+    ctx.fill(path);
     ctx.globalAlpha = 1;
   }
 
@@ -3096,6 +3174,111 @@ function draw2DOverlay() {
   if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
     draw2DSelectionHighlights(ctx, size);
   }
+}
+
+// Helper: draw a chunk of triangles for the current overlay mode
+function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
+  if (!draw2DChunkState) return;
+  const { triangles, mode, index, paths } = draw2DChunkState;
+
+  if (mode === 'problems') {
+    ctx.globalAlpha = 0.6;
+    // Initialize paths if first chunk
+    if (!paths.flipped) {
+      paths.flipped = new Path2D();
+      paths.zeroArea = new Path2D();
+      paths.outside = new Path2D();
+    }
+    for (let i = index; i < chunkEnd; i++) {
+      const tri = triangles[i];
+      if (tri.flipped && problemFilters.flipped) {
+        paths.flipped.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.flipped.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.flipped.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.flipped.closePath();
+      } else if (tri.zeroArea && problemFilters.zeroArea) {
+        paths.zeroArea.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.zeroArea.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.zeroArea.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.zeroArea.closePath();
+      } else if (tri.outside && problemFilters.outside) {
+        paths.outside.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        paths.outside.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        paths.outside.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        paths.outside.closePath();
+      }
+    }
+    if (problemFilters.flipped) { ctx.fillStyle = '#FF4466'; ctx.fill(paths.flipped); }
+    if (problemFilters.zeroArea) { ctx.fillStyle = '#FFD166'; ctx.fill(paths.zeroArea); }
+    if (problemFilters.outside) { ctx.fillStyle = '#50E8F4'; ctx.fill(paths.outside); }
+    ctx.globalAlpha = 1;
+  } else if (mode === 'texel') {
+    ctx.globalAlpha = 0.7;
+
+    // Group by mesh for this chunk
+    const trianglesByMesh = {};
+    for (let i = index; i < chunkEnd; i++) {
+      const tri = triangles[i];
+      if (!trianglesByMesh[tri.meshIndex]) trianglesByMesh[tri.meshIndex] = [];
+      trianglesByMesh[tri.meshIndex].push(tri);
+    }
+
+    // Initialize bucketPaths if first chunk
+    if (!paths.bucketPaths) paths.bucketPaths = new Map();
+    const bucketPaths = paths.bucketPaths;
+
+    for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
+      const refDensity = texelNormalizeGlobal ? medianDensity : computeMedianDensity(tris);
+      for (const tri of tris) {
+        const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
+        const [r, g, b] = colorForRatio(ratio);
+        const bucketKey = `${Math.round(r/64)*64},${Math.round(g/64)*64},${Math.round(b/64)*64}`;
+        let path = bucketPaths.get(bucketKey);
+        if (!path) { path = new Path2D(); bucketPaths.set(bucketKey, path); }
+        path.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        path.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        path.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        path.closePath();
+      }
+    }
+    for (const [bucketKey, path] of bucketPaths) {
+      const [r, g, b] = bucketKey.split(',').map(Number);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fill(path);
+    }
+    ctx.globalAlpha = 1;
+  } else if (mode === 'overlap') {
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#FF4466';
+    if (!paths.overlap) paths.overlap = new Path2D();
+    const path = paths.overlap;
+    for (let i = index; i < chunkEnd; i++) {
+      const tri = triangles[i];
+      if (!tri.overlap) continue;
+      path.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+      path.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+      path.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+      path.closePath();
+    }
+    ctx.fill(path);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Coalesced draw: schedules a single RAF frame
+let draw2DOverlayScheduled = false;
+function draw2DOverlay() {
+  if (draw2DOverlayScheduled) return;
+  draw2DOverlayScheduled = true;
+  requestAnimationFrame(() => {
+    draw2DOverlayScheduled = false;
+    try {
+      draw2DOverlayNow();
+    } catch (err) {
+      st('✗ 2D map error: ' + err.message, 'err');
+      console.error('[UV Checker] 2D overlay failed:', err);
+    }
+  });
 }
 
 // Draw selection highlights on 2D UV canvas
@@ -4829,13 +5012,18 @@ async function buildUV2DInModal() {
 
 // Overlay & background handlers registered once at module init (lines 3022-3051)
 
-// Bind mouse events for UV selection on 2D canvas
+// Bind pointer events for UV selection on 2D canvas (touch + mouse + pen)
 function bindUV2DSelectionEvents(canvas) {
   // Remove existing listeners
   canvas.onmousedown = null;
   canvas.onmousemove = null;
   canvas.onmouseup = null;
   canvas.oncontextmenu = null;
+  canvas.onpointerdown = null;
+  canvas.onpointermove = null;
+  canvas.onpointerup = null;
+  canvas.onpointercancel = null;
+  canvas.onlostpointercapture = null;
 
   let isDragging = false;
   let dragStart = { x: 0, y: 0 };
@@ -4843,7 +5031,7 @@ function bindUV2DSelectionEvents(canvas) {
   dragBox = null;
   const multiSelect = () => document.getElementById('opt-multi-select')?.checked;
 
-  function getUVFromMouse(e) {
+  function getUVFromPointer(e) {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -4852,11 +5040,14 @@ function bindUV2DSelectionEvents(canvas) {
     return { u, v, x, y };
   }
 
-  canvas.onmousedown = (e) => {
+  canvas.onpointerdown = (e) => {
     if (performance.now() - uv2dOpenedAt < 600) return; // ghost tap right after opening
-    if (e.button === 2) return; // Right click handled separately
-    const { u, v, x, y } = getUVFromMouse(e);
+    if (e.button === 2) return; // Right click handled separately via oncontextmenu
+    const { u, v, x, y } = getUVFromPointer(e);
     lastMouseUV = { u, v };
+
+    // Set pointer capture so we get move/up even if pointer leaves canvas
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
 
     if (e.shiftKey && activeTool === 'select') {
       // Box selection
@@ -4881,8 +5072,8 @@ function bindUV2DSelectionEvents(canvas) {
     }
   };
 
-  canvas.onmousemove = (e) => {
-    const { u, v, x, y } = getUVFromMouse(e);
+  canvas.onpointermove = (e) => {
+    const { u, v, x, y } = getUVFromPointer(e);
     lastMouseUV = { u, v };
 
     if (isDragging && dragBox) {
@@ -4900,7 +5091,7 @@ function bindUV2DSelectionEvents(canvas) {
     }
   };
 
-  canvas.onmouseup = (e) => {
+  canvas.onpointerup = (e) => {
     if (isDragging && dragBox) {
       // Complete box selection
       const rect = canvas.getBoundingClientRect();
@@ -4920,8 +5111,25 @@ function bindUV2DSelectionEvents(canvas) {
       endTransform();
       isTransforming = false;
     }
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
   };
 
+  canvas.onpointercancel = (e) => {
+    isDragging = false;
+    dragBox = null;
+    isTransforming = false;
+    canvas.style.cursor = 'default';
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
+  };
+
+  canvas.onlostpointercapture = (e) => {
+    isDragging = false;
+    dragBox = null;
+    isTransforming = false;
+    canvas.style.cursor = 'default';
+  };
+
+  // Keep oncontextmenu for right-click context menu
   canvas.oncontextmenu = (e) => {
     e.preventDefault();
     // Context menu for selection options
