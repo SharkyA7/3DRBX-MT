@@ -1902,6 +1902,167 @@ async function initScene(){
   window.addEventListener('touchend', handleGizmoPointerUp);
   window.addEventListener('touchcancel', handleGizmoPointerUp);
 
+  // 3D model selection handling (for select tool)
+  const modelRaycaster = new THREE.Raycaster();
+  const modelMouse = new THREE.Vector2();
+  let modelPointerDown = false;
+  let modelPointerStart = { x: 0, y: 0 };
+
+  function handleModelPointerDown(e) {
+    // Only handle left click for select tool
+    if (activeTool !== 'select') return;
+    if (e.button !== 0 && e.type !== 'touchstart') return;
+
+    // Check if clicking on gizmo first
+    if (gizmoVisible && ['move', 'rotate', 'scale'].includes(activeTool)) {
+      const gizmoIntersects = getGizmoIntersections(e.clientX, e.clientY);
+      if (gizmoIntersects.length > 0) return; // Let gizmo handler deal with it
+    }
+
+    modelPointerDown = true;
+    const rect = canvas.getBoundingClientRect();
+    modelPointerStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function handleModelPointerUp(e) {
+    if (!modelPointerDown) return;
+    if (e.button !== 0 && e.type !== 'touchend' && e.type !== 'touchcancel') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Check if it was a click (not a drag)
+    const dx = x - modelPointerStart.x;
+    const dy = y - modelPointerStart.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 10) {
+      // It's a click - do selection
+      modelMouse.x = (x / rect.width) * 2 - 1;
+      modelMouse.y = -(y / rect.height) * 2 + 1;
+      modelRaycaster.setFromCamera(modelMouse, camera);
+
+      const meshes = [];
+      currentRoot?.traverse(child => {
+        if (child.isMesh) meshes.push(child);
+      });
+
+      const intersects = modelRaycaster.intersectObjects(meshes, true);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const mesh = hit.object;
+        const face = hit.face;
+        const uv = hit.uv;
+
+        if (mesh && face && uv) {
+          const data = getUVData(mesh);
+          if (data) {
+            const { uvAttr, idx } = data;
+            // Find the vertex indices for this face
+            const faceIndex = hit.faceIndex;
+            const i0 = faceIndex * 3, i1 = faceIndex * 3 + 1, i2 = faceIndex * 3 + 2;
+            const v0 = idx ? idx.getX(i0) : i0;
+            const v1 = idx ? idx.getX(i1) : i1;
+            const v2 = idx ? idx.getX(i2) : i2;
+
+            // Determine what was hit based on selection mode
+            if (selectionMode === 'vertex') {
+              // Find closest vertex to UV hit point
+              const verts = [
+                { idx: v0, u: uvAttr.getX(v0), v: uvAttr.getY(v0) },
+                { idx: v1, u: uvAttr.getX(v1), v: uvAttr.getY(v1) },
+                { idx: v2, u: uvAttr.getX(v2), v: uvAttr.getY(v2) }
+              ];
+              let bestVert = null, bestDist = Infinity;
+              for (const vert of verts) {
+                const du = vert.u - uv.x;
+                const dv = vert.v - uv.y;
+                const d = du * du + dv * dv;
+                if (d < bestDist) { bestDist = d; bestVert = vert; }
+              }
+              if (bestVert) {
+                const key = `${mesh.uuid}:${bestVert.idx}`;
+                const multiSelect = document.getElementById('opt-multi-select')?.checked;
+                if (!multiSelect) clearSelection();
+                if (selection.vertices.has(key)) selection.vertices.delete(key);
+                else selection.vertices.add(key);
+              }
+            } else if (selectionMode === 'face') {
+              const key = `${mesh.uuid}:${faceIndex}`;
+              const multiSelect = document.getElementById('opt-multi-select')?.checked;
+              if (!multiSelect) clearSelection();
+              if (selection.faces.has(key)) selection.faces.delete(key);
+              else selection.faces.add(key);
+            } else if (selectionMode === 'edge') {
+              // Find closest edge
+              const edges = [[v0, v1], [v1, v2], [v2, v0]];
+              const uvs = [
+                { u: uvAttr.getX(v0), v: uvAttr.getY(v0) },
+                { u: uvAttr.getX(v1), v: uvAttr.getY(v1) },
+                { u: uvAttr.getX(v2), v: uvAttr.getY(v2) }
+              ];
+              let bestEdge = null, bestDist = Infinity;
+              for (let ei = 0; ei < 3; ei++) {
+                const [va, vb] = edges[ei];
+                const uva = uvs[ei];
+                const uvb = uvs[(ei + 1) % 3];
+                const dist = pointToLineDist(uv.x, uv.y, uva.u, uva.v, uvb.u, uvb.v);
+                if (dist < bestDist) { bestDist = dist; bestEdge = [va, vb]; }
+              }
+              if (bestEdge) {
+                const key = `${mesh.uuid}:${bestEdge.sort().join(':')}`;
+                const multiSelect = document.getElementById('opt-multi-select')?.checked;
+                if (!multiSelect) clearSelection();
+                if (selection.edges.has(key)) selection.edges.delete(key);
+                else selection.edges.add(key);
+              }
+            } else if (selectionMode === 'island') {
+              const key = `${mesh.uuid}:${v0}`;
+              const multiSelect = document.getElementById('opt-multi-select')?.checked;
+              if (!multiSelect) clearSelection();
+              // Expand to island
+              const island = findIslandForVertex(mesh, v0);
+              if (island) {
+                for (const vi of island.vertices) {
+                  selection.vertices.add(`${mesh.uuid}:${vi}`);
+                }
+                selection.islands.add(island.id);
+              }
+            }
+            updateSelectionGizmo();
+            updateSelectionStatus();
+            requestRender();
+            // Update 2D UV map if open
+            if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+              draw2DOverlay();
+            }
+          }
+        }
+      } else {
+        // Clicked empty space - clear selection if not multi-select
+        const multiSelect = document.getElementById('opt-multi-select')?.checked;
+        if (!multiSelect) {
+          clearSelection();
+          updateSelectionGizmo();
+          updateSelectionStatus();
+          requestRender();
+          if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+            draw2DOverlay();
+          }
+        }
+      }
+    }
+
+    modelPointerDown = false;
+  }
+
+  canvas.addEventListener('mousedown', handleModelPointerDown);
+  canvas.addEventListener('touchstart', handleModelPointerDown, { passive: true });
+  window.addEventListener('mouseup', handleModelPointerUp);
+  window.addEventListener('touchend', handleModelPointerUp);
+  window.addEventListener('touchcancel', handleModelPointerUp);
+
   function applyGizmoScale(axis, factor) {
     if (!currentRoot || !transformSnapshot) return;
     currentRoot.traverse(child => {
@@ -3041,12 +3202,24 @@ function draw2DOverlayNow() {
         startTime: performance.now(),
         paths: {}
       };
+      // Precompute mesh median densities for texel mode (needed for correct chunked rendering)
+      const meshMedianDensities = {};
+      if (current2DOverlay === 'texel' && !texelNormalizeGlobal) {
+        const trianglesByMesh = {};
+        for (const tri of allTriangles) {
+          if (!trianglesByMesh[tri.meshIndex]) trianglesByMesh[tri.meshIndex] = [];
+          trianglesByMesh[tri.meshIndex].push(tri);
+        }
+        for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
+          meshMedianDensities[meshIdx] = computeMedianDensity(tris);
+        }
+      }
       st(`Rendering 2D overlay (${triCount} triangles)…`, 'info');
     }
 
     // Process one chunk
     const chunkEnd = Math.min(draw2DChunkState.index + CHUNK_SIZE, triCount);
-    draw2DChunk(chunkEnd, ctx, size, medianDensity);
+    draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities);
     draw2DChunkState.index = chunkEnd;
 
     // Draw drag selection box (always drawn)
@@ -3177,7 +3350,7 @@ function draw2DOverlayNow() {
 }
 
 // Helper: draw a chunk of triangles for the current overlay mode
-function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
+function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
   if (!draw2DChunkState) return;
   const { triangles, mode, index, paths } = draw2DChunkState;
 
@@ -3228,7 +3401,8 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
     const bucketPaths = paths.bucketPaths;
 
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
-      const refDensity = texelNormalizeGlobal ? medianDensity : computeMedianDensity(tris);
+      // Use precomputed mesh median density, not chunk's triangles
+      const refDensity = texelNormalizeGlobal ? medianDensity : (meshMedianDensities[meshIdx] ?? computeMedianDensity(tris));
       for (const tri of tris) {
         const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
         const [r, g, b] = colorForRatio(ratio);
