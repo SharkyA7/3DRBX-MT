@@ -834,6 +834,33 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// Watchdog: if the UV Editor module never starts (blocked/failed CDN import, bad cache), show a recovery screen instead of a blank page.
+(function(){
+  function resetAndReload(){
+    var jobs = [];
+    if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }));
+    if (window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }));
+    Promise.all(jobs).catch(function(){}).then(function(){ location.reload(); });
+  }
+  function show(msg){
+    if (document.getElementById('uv-recovery')) return;
+    var d = document.createElement('div');
+    d.id = 'uv-recovery';
+    d.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:#001619;color:#50E8F4;font:14px/1.5 monospace;text-align:center';
+    d.innerHTML = '<div style="font-size:16px">UV Editor failed to load</div><div style="opacity:.8;max-width:420px"></div>';
+    d.children[1].textContent = msg;
+    var b = document.createElement('button');
+    b.textContent = 'Reset cache & reload';
+    b.style.cssText = 'padding:12px 20px;border:1px solid #50E8F4;background:transparent;color:#50E8F4;font:inherit;cursor:pointer';
+    b.onclick = resetAndReload;
+    d.appendChild(b);
+    (document.body || document.documentElement).appendChild(d);
+  }
+  window.__uvShowRecovery = show;
+  setTimeout(function(){ if (!window.__uvBooted) show('The editor scripts did not start (a library may have failed to download or an outdated cache was served).'); }, 10000);
+})();
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -848,6 +875,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
+window.__uvBooted = true; // all module imports resolved
 
 // Safe event listener helper - guards against missing elements
 const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
@@ -1660,7 +1688,7 @@ async function initRenderer(canvas) {
   throw new Error('No WebGPU/WebGL context available');
 }
 
-function initScene(){
+async function initScene(){
   const canvas = document.getElementById('uv-canvas');
   const wrap = canvas.parentElement;
 
@@ -3377,9 +3405,9 @@ function registerSWUpdatePrompt() {
   let progressModal = null;
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
+    // Only reload when the user tapped "Update" (never automatically mid-session)
+    if (refreshing || !window.__pwaUserApprovedUpdate) return;
     refreshing = true;
-    console.log('[PWA] New version detected, reloading...');
     location.reload();
   });
 
@@ -3422,6 +3450,7 @@ function registerSWUpdatePrompt() {
     document.getElementById('pwa-update-now').addEventListener('click', () => {
       updateToast.classList.remove('show');
       setTimeout(() => updateToast.remove(), 300);
+      window.__pwaUserApprovedUpdate = true;
       showProgressModal(reg, newWorker);
     });
 
@@ -3483,6 +3512,13 @@ function registerSWUpdatePrompt() {
 
     animateProgress();
 
+    // New worker is already installed and waiting: tell it to take over, then controllerchange reloads once.
+    setTimeout(() => {
+      const w = reg.waiting || newWorker;
+      try { w.postMessage('skipWaiting'); } catch (e) { location.reload(); }
+      setTimeout(() => { if (!refreshing) { refreshing = true; location.reload(); } }, 5000); // safety net
+    }, 1200);
+
     // When SW is ready (already installed), wait for animation then show reload button
     newWorker.addEventListener('statechange', () => {
       if (newWorker.state === 'installed') {
@@ -3523,6 +3559,7 @@ function showApp() {
   document.getElementById('app-root').style.display = 'flex';
   initScene().catch(err => {
     console.error('[UV Checker] initScene failed:', err);
+    if (window.__uvShowRecovery) window.__uvShowRecovery('Scene init failed: ' + (err && err.message ? err.message : err));
   });
 }
 
@@ -4521,6 +4558,7 @@ async function applyPackUV() {
   st('✗ Pack failed: ' + e.message, 'err');
   console.error('[UV Checker] Pack error:', e);
 }
+}
 
 // Organize / Unfoldify: Layout islands in a grid with uniform scale
 function applyOrganizeUV() {
@@ -5293,15 +5331,5 @@ initDeviceFlow();
 // initScene() is called by showApp() after device selection/loading
 </script>
 
-<script>
-// Service Worker Registration for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('[PWA] Service Worker registered:', reg.scope))
-      .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
-  });
-}
-</script>
 </body>
 </html>

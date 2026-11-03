@@ -1,0 +1,12 @@
+3DRBXMT PWA / UV Editor blank-page fix
+Copy these files into the repo root (same paths), commit once, push.
+
+1. uv-checker.html  -> TWO syntax errors fixed: (a) `initScene()` used await without async, (b) `applyPackUV()` was missing its closing brace. Either one kills the whole module = blank page + dead buttons.
+                      Also: removed duplicate SW registration, no auto-reload on controllerchange (only after user taps Update),
+                      recovery screen with "Reset cache & reload" if the editor does not start within 10s.
+2. index.html       -> same update-flow fix (no forced reload, Update button now really activates the new worker).
+3. sw.js            -> v4: HTML network-first, per-file precache, no skipWaiting on install, CDN failures not cached, API not intercepted.
+4. manifest.json    -> unchanged, only copied into public/ to keep it in sync.
+5. public/*         -> synced copies of the four files above (Cloudflare deploys public/).
+6. check-scripts.js + CLAUDE.md (new) -> checker that fails when any inline script has a syntax error or public/ is out of sync;
+                      CLAUDE.md makes Claude Code run it before finishing/committing.
