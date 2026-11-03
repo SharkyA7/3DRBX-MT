@@ -6411,9 +6411,9 @@ if ('serviceWorker' in navigator) {
   let progressModal = null;
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
+    // Only reload when the user tapped "Update" (never automatically mid-session)
+    if (refreshing || !window.__pwaUserApprovedUpdate) return;
     refreshing = true;
-    console.log('[PWA] New version detected, reloading...');
     location.reload();
   });
 
@@ -6458,6 +6458,7 @@ if ('serviceWorker' in navigator) {
     document.getElementById('pwa-update-now').addEventListener('click', () => {
       updateToast.classList.remove('show');
       setTimeout(() => updateToast.remove(), 300);
+      window.__pwaUserApprovedUpdate = true;
       showProgressModal(reg, newWorker);
     });
 
@@ -6517,6 +6518,13 @@ if ('serviceWorker' in navigator) {
     }
 
     animateProgress();
+
+    // New worker is already installed and waiting: tell it to take over, then controllerchange reloads once.
+    setTimeout(() => {
+      const w = reg.waiting || newWorker;
+      try { w.postMessage('skipWaiting'); } catch (e) { location.reload(); }
+      setTimeout(() => { if (!refreshing) { refreshing = true; location.reload(); } }, 5000); // safety net
+    }, 1200);
 
     newWorker.addEventListener('statechange', () => {
       if (newWorker.state === 'installed') {
