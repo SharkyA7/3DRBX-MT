@@ -2714,9 +2714,9 @@ function applyAnalysisToScene() {
 }
 
 function computeMedianDensity(triangles) {
-  const weighted = triangles.filter(t => t.area3D > 0 && t.texelDensity > 0)
+  const weighted = triangles.filter(t => t.area3D > 0 && t.texelDensity > 0 && isFinite(t.texelDensity))
     .map(t => ({ d: t.texelDensity, w: t.area3D }));
-  if (weighted.length === 0) return 0;
+  if (weighted.length === 0) return 1; // Return 1 instead of 0 to avoid division by zero
   weighted.sort((a, b) => a.d - b.d);
   let half = weighted.reduce((s, v) => s + v.w, 0) * 0.5;
   let sum = 0;
@@ -3187,13 +3187,21 @@ function draw2DOverlayNow() {
 
   const { allTriangles, medianDensity, meshResults } = analysisResults;
 
+  // Guard against missing/invalid analysis results
+  if (!allTriangles || !Array.isArray(allTriangles) || allTriangles.length === 0) return;
+
   // High triangle count: chunk overlay drawing across frames (>150k triangles)
   const triCount = allTriangles.length;
   const CHUNK_THRESHOLD = 150000;
   const CHUNK_SIZE = 50000; // triangles per frame
 
+  // Reset chunk state if overlay mode changed or no analysis results
+  if (draw2DChunkState && (draw2DChunkState.mode !== current2DOverlay || !analysisResults)) {
+    draw2DChunkState = null;
+  }
+
   if (triCount > CHUNK_THRESHOLD && (current2DOverlay === 'problems' || current2DOverlay === 'texel' || current2DOverlay === 'overlap')) {
-    if (!draw2DChunkState || draw2DChunkState.mode !== current2DOverlay) {
+    if (!draw2DChunkState) {
       // Initialize chunking state
       draw2DChunkState = {
         triangles: allTriangles,
@@ -3299,8 +3307,9 @@ function draw2DOverlayNow() {
     const bucketPaths = new Map(); // bucketKey -> Path2D
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
       const refDensity = texelNormalizeGlobal ? medianDensity : computeMedianDensity(tris);
+      const safeRefDensity = refDensity > 0 ? refDensity : 1;
       for (const tri of tris) {
-        const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
+        const ratio = safeRefDensity > 0 ? tri.texelDensity / safeRefDensity : 1;
         const [r, g, b] = colorForRatio(ratio);
         // Quantize to ~32 buckets (4 steps per channel, roughly)
         const bucketKey = `${Math.round(r/64)*64},${Math.round(g/64)*64},${Math.round(b/64)*64}`;
@@ -3403,8 +3412,9 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
       // Use precomputed mesh median density, not chunk's triangles
       const refDensity = texelNormalizeGlobal ? medianDensity : (meshMedianDensities[meshIdx] ?? computeMedianDensity(tris));
+      const safeRefDensity = refDensity > 0 ? refDensity : 1;
       for (const tri of tris) {
-        const ratio = refDensity > 0 ? tri.texelDensity / refDensity : 1;
+        const ratio = safeRefDensity > 0 ? tri.texelDensity / safeRefDensity : 1;
         const [r, g, b] = colorForRatio(ratio);
         const bucketKey = `${Math.round(r/64)*64},${Math.round(g/64)*64},${Math.round(b/64)*64}`;
         let path = bucketPaths.get(bucketKey);
@@ -4701,12 +4711,21 @@ async function applyPackUV() {
 
   st('⚙ Packing UV islands (MaxRects)…', 'loading');
   try {
+    // Validate we have valid UV data before proceeding
+    let hasValidUV = false;
+    currentRoot.traverse(child => {
+      if (child.isMesh && child.geometry.attributes?.uv) hasValidUV = true;
+    });
+    if (!hasValidUV) {
+      st('✗ No UV data found on meshes', 'err');
+      return;
+    }
 
-  const islands = getAllIslands();
-  if (islands.length === 0) {
-    st('✗ No UV islands found', 'err');
-    return;
-  }
+    const islands = getAllIslands();
+    if (islands.length === 0) {
+      st('✗ No UV islands found', 'err');
+      return;
+    }
 
   const padding = 0.005;
 
