@@ -1119,7 +1119,9 @@ function detectUVIslands(mesh) {
   const data = getUVData(mesh);
   if (!data) return [];
   const { uvAttr, idx } = data;
+  if (!uvAttr || !isFinite(uvAttr.count)) return [];
   const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+  if (!isFinite(triCount) || triCount <= 0) return [];
 
   // Build adjacency: vertex -> connected vertices via edges
   const adj = new Map();
@@ -2261,8 +2263,14 @@ async function handleFile(file){
         setTimeout(() => { if(!done){ done = true; resolve(); } }, 8000); // don't hang forever if a texture never loads
       });
     }else{
-      root = new OBJLoader().parse(objText);
+      try {
+        root = new OBJLoader().parse(objText);
+      } catch (parseErr) {
+        throw new Error('Failed to parse OBJ: ' + parseErr.message);
+      }
     }
+
+    if (!root) throw new Error('OBJ parse returned null');
 
     let meshCount = 0, uvlessCount = 0;
     root.traverse(child => {
@@ -2837,24 +2845,21 @@ function triangleArea3D(ax, ay, az, bx, by, bz, cx, cy, cz) {
 }
 
 function analyzeMeshUV(geometry) {
-  const uvAttr = geometry.attributes.uv;
-  const posAttr = geometry.attributes.position;
-  const idx = geometry.index;
-  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+    const uvAttr = geometry.attributes?.uv;
+    const posAttr = geometry.attributes?.position;
+    const idx = geometry.index;
+    if (!uvAttr) return { flipped: 0, zeroArea: 0, outside01: 0, noUV: true, udimTiles: new Set(), triangles: [] };
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+    if (!isFinite(triCount) || triCount <= 0) return { flipped: 0, zeroArea: 0, outside01: 0, noUV: true, udimTiles: new Set(), triangles: [] };
 
-  const results = {
-    flipped: 0,
-    zeroArea: 0,
-    outside01: 0,
-    noUV: false,
-    udimTiles: new Set(),
-    triangles: [] // per-triangle data for heatmaps/overlap
-  };
-
-  if (!uvAttr) {
-    results.noUV = true;
-    return results;
-  }
+    const results = {
+      flipped: 0,
+      zeroArea: 0,
+      outside01: 0,
+      noUV: false,
+      udimTiles: new Set(),
+      triangles: []
+    };
 
   const getUV = i => {
     const vi = idx ? idx.getX(i) : i;
@@ -2931,6 +2936,9 @@ function rasterizeUVTriangles(triangles, resolution = 1024) {
   // Rasterize triangles for tile (0,0) only (u,v in [0,1))
   // Top-left fill rule: sample at pixel centers (x+0.5, y+0.5)
   // UV origin is bottom-left, canvas is top-left -> flip V
+  if (!triangles || !Array.isArray(triangles) || triangles.length === 0) {
+    return { buffer: new Uint16Array(resolution * resolution), triOverlaps: new Uint8Array(0), overlapPixels: 0, coveredPixels: 0, overlapPct: 0, resolution };
+  }
   const buffer = new Uint16Array(resolution * resolution);
   const triOverlaps = new Uint8Array(triangles.length); // 1 if triangle touches overlap
 
@@ -3058,16 +3066,22 @@ function rgbToHex(r, g, b) {
 }
 
 async function buildUVLayoutCanvas(root, size = 1024, onProgress){
+  if (!root) throw new Error('No root object provided');
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas 2D context');
   // Transparent base - no background fill, no grid
   // Background and grid are applied dynamically in draw2DOverlay() and download
 
   const meshes = [];
-  root.traverse(child => {
-    if(child.isMesh && child.geometry.attributes && child.geometry.attributes.uv) meshes.push(child);
-  });
+  try {
+    root.traverse(child => {
+      if(child.isMesh && child.geometry.attributes?.uv) meshes.push(child);
+    });
+  } catch (e) {
+    throw new Error('Scene traversal failed: ' + e.message);
+  }
 
   if(meshes.length === 0){
     ctx.fillStyle = '#FF4466';
@@ -3157,6 +3171,7 @@ function draw2DOverlayNow() {
   const dest = document.getElementById('uv-2d-canvas');
   if (!dest) return;
   const ctx = dest.getContext('2d');
+  if (!ctx) return;
   const size = dest.width;
 
   // Apply background
@@ -3191,12 +3206,12 @@ function draw2DOverlayNow() {
   if (!allTriangles || !Array.isArray(allTriangles) || allTriangles.length === 0) return;
 
   // High triangle count: chunk overlay drawing across frames (>150k triangles)
-  const triCount = allTriangles.length;
+  const triCount = allTriangles ? allTriangles.length : 0;
   const CHUNK_THRESHOLD = 150000;
   const CHUNK_SIZE = 50000; // triangles per frame
 
   // Reset chunk state if overlay mode changed or no analysis results
-  if (draw2DChunkState && (draw2DChunkState.mode !== current2DOverlay || !analysisResults)) {
+  if (draw2DChunkState && (draw2DChunkState.mode !== current2DOverlay || !analysisResults || !allTriangles || allTriangles.length === 0)) {
     draw2DChunkState = null;
   }
 
@@ -3361,7 +3376,9 @@ function draw2DOverlayNow() {
 // Helper: draw a chunk of triangles for the current overlay mode
 function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
   if (!draw2DChunkState) return;
+  if (!ctx) return;
   const { triangles, mode, index, paths } = draw2DChunkState;
+  if (!triangles || !Array.isArray(triangles) || index >= triangles.length) return;
 
   if (mode === 'problems') {
     ctx.globalAlpha = 0.6;
@@ -4713,16 +4730,28 @@ async function applyPackUV() {
   try {
     // Validate we have valid UV data before proceeding
     let hasValidUV = false;
-    currentRoot.traverse(child => {
-      if (child.isMesh && child.geometry.attributes?.uv) hasValidUV = true;
-    });
+    try {
+      currentRoot.traverse(child => {
+        if (child.isMesh && child.geometry.attributes?.uv) hasValidUV = true;
+      });
+    } catch (e) {
+      st('✗ Scene traversal error: ' + e.message, 'err');
+      return;
+    }
     if (!hasValidUV) {
       st('✗ No UV data found on meshes', 'err');
       return;
     }
 
-    const islands = getAllIslands();
-    if (islands.length === 0) {
+    let islands;
+    try {
+      islands = getAllIslands();
+    } catch (e) {
+      st('✗ Island detection failed: ' + e.message, 'err');
+      console.error('[UV Checker] getAllIslands error:', e);
+      return;
+    }
+    if (!islands || islands.length === 0) {
       st('✗ No UV islands found', 'err');
       return;
     }
@@ -4732,22 +4761,29 @@ async function applyPackUV() {
   // Compute island bounds and areas for sorting (largest first = better packing)
   const islandData = [];
   for (const isl of islands) {
-    const data = getUVData(isl.mesh);
-    if (!data) continue;
-    const { uvAttr, idx } = data;
-    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-    for (const vi of isl.vertices) {
-      const u = uvAttr.getX(vi);
-      const v = uvAttr.getY(vi);
-      minU = Math.min(minU, u);
-      maxU = Math.max(maxU, u);
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
+    try {
+      const data = getUVData(isl.mesh);
+      if (!data) continue;
+      const { uvAttr, idx } = data;
+      if (!uvAttr) continue;
+      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+      for (const vi of isl.vertices) {
+        const u = uvAttr.getX(vi);
+        const v = uvAttr.getY(vi);
+        if (!isFinite(u) || !isFinite(v)) continue;
+        minU = Math.min(minU, u);
+        maxU = Math.max(maxU, u);
+        minV = Math.min(minV, v);
+        maxV = Math.max(maxV, v);
+      }
+      const w = maxU - minU;
+      const h = maxV - minV;
+      if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) continue;
+      islandData.push({ isl, w, h, minU, minV, area: w * h });
+    } catch (e) {
+      console.warn('[UV Checker] Skipping invalid island:', e);
+      continue;
     }
-    const w = maxU - minU;
-    const h = maxV - minV;
-    if (w <= 0 || h <= 0) continue;
-    islandData.push({ isl, w, h, minU, minV, area: w * h });
   }
   if (islandData.length === 0) {
     st('✗ No valid islands to pack', 'err');
@@ -4849,18 +4885,27 @@ async function applyPackUV() {
 
   // Apply positions
   for (const p of placed) {
-    const data = getUVData(p.isl.mesh);
-    if (!data) continue;
-    const { uvAttr, idx } = data;
-    const offsetU = p.rect.x - p.minU;
-    const offsetV = p.rect.y - p.minV;
+    try {
+      const data = getUVData(p.isl.mesh);
+      if (!data) continue;
+      const { uvAttr, idx } = data;
+      if (!uvAttr || !uvAttr.array) continue;
+      const offsetU = p.rect.x - p.minU;
+      const offsetV = p.rect.y - p.minV;
 
-    uvAttr.array = uvAttr.array.slice();
-    for (const vi of p.isl.vertices) {
-      uvAttr.setX(vi, uvAttr.getX(vi) + offsetU);
-      uvAttr.setY(vi, uvAttr.getY(vi) + offsetV);
+      uvAttr.array = uvAttr.array.slice();
+      for (const vi of p.isl.vertices) {
+        const u = uvAttr.getX(vi);
+        const v = uvAttr.getY(vi);
+        if (!isFinite(u) || !isFinite(v)) continue;
+        uvAttr.setX(vi, u + offsetU);
+        uvAttr.setY(vi, v + offsetV);
+      }
+      uvAttr.needsUpdate = true;
+    } catch (e) {
+      console.warn('[UV Checker] Failed to apply position to island:', e);
+      continue;
     }
-    uvAttr.needsUpdate = true;
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
@@ -5160,13 +5205,24 @@ async function buildUV2DInModal() {
   const progressFill = document.getElementById('uv-2d-progress-fill');
   const progressLabel = document.getElementById('uv-2d-progress-label');
   const dest = document.getElementById('uv-2d-canvas');
-
   const overlayControls = document.getElementById('uv-2d-overlay-controls');
+
+  if (!progressWrap || !progressFill || !progressLabel || !dest || !overlayControls) {
+    console.error('[UV Checker] Missing DOM elements for 2D UV modal');
+    return;
+  }
+
   overlayControls.style.display = 'none';
   dest.style.display = 'none';
   progressWrap.style.display = 'block';
   progressFill.style.width = '0%';
   progressLabel.textContent = 'Building UV layout… 0%';
+
+  if (!currentRoot) {
+    progressLabel.textContent = '✗ No model loaded';
+    progressFill.style.width = '0%';
+    return;
+  }
 
   try {
     const src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
