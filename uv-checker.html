@@ -4232,7 +4232,7 @@ function applyUVTool(tool) {
   } else if (tool === 'unwrap') {
     applyUnwrapUV();
   } else if (tool === 'pack') {
-    try { applyPackUV(); } catch (e) { st('✗ Pack failed: ' + e.message, 'err'); console.error(e); }
+    applyPackUV();
   } else if (tool === 'organize') {
     applyOrganizeUV();
   } else {
