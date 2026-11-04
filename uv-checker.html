@@ -104,9 +104,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
    ============================================================================ */
 .modal-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;
-  z-index:10000;opacity:0;visibility:hidden;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);
+  z-index:9998;opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);
 }
-.modal-overlay.visible{opacity:1;visibility:visible;transition:opacity var(--anim-normal) var(--ease-out);}
+.modal-overlay.visible{opacity:1;visibility:visible;pointer-events:auto;transition:opacity var(--anim-normal) var(--ease-out);}
 .modal-box{
   background:var(--s2);border:1px solid var(--border2);border-radius:16px;padding:28px 32px;max-width:420px;width:90%;
   transform:scale(0.95);transition:transform var(--anim-normal) var(--ease-out);
@@ -128,8 +128,8 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .modal-warning{margin-top:16px;padding:10px 12px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:8px;font-size:11px;color:var(--amber);line-height:1.5;}
 .modal-warning b{color:var(--white);}
 
-.loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;opacity:0;visibility:hidden;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);}
-.loading-screen.visible{opacity:1;visibility:visible;transition:opacity var(--anim-normal) var(--ease-out);}
+.loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--anim-normal) var(--ease-out),visibility 0s linear var(--anim-normal);}
+.loading-screen.visible{opacity:1;visibility:visible;pointer-events:auto;transition:opacity var(--anim-normal) var(--ease-out);}
 .loading-title{font-family:var(--font-px);font-size:clamp(14px,3vw,22px);color:var(--white);letter-spacing:3px;margin-bottom:24px;}
 .loading-title span{color:var(--accent);}
 .loading-bar{width:280px;max-width:80vw;height:6px;background:var(--s2);border:1px solid var(--border2);border-radius:3px;overflow:hidden;}
@@ -166,7 +166,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 /* Left Sidebar - Tools */
 .left-sidebar{
   width:var(--layout-m);min-width:260px;max-width:480px;background:var(--s1);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;height:100%;
   transform:translateX(0);transition:transform var(--anim-normal) var(--ease-out),width var(--anim-normal) var(--ease-out);
 }
 .left-sidebar.collapsed{transform:translateX(-100%);width:0;min-width:0;border-right:none;}
@@ -174,7 +174,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .sidebar-title{font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:1.5px;}
 .sidebar-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;}
 .sidebar-toggle:hover{color:var(--accent);}
-.sidebar-content{padding:10px;flex:1;overflow-y:auto;}
+.sidebar-content{padding:10px;flex:1;overflow:hidden;}
 .tool-group{margin-bottom:16px;}
 .tool-group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;border-radius:6px;transition:background .15s;}
 .tool-group-header:hover{background:var(--s2);}
@@ -200,10 +200,12 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 /* Right Sidebar - Options/Inspector */
 .right-sidebar{
   width:var(--layout-m);min-width:260px;max-width:480px;background:var(--s1);border-left:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;height:100%;
   transform:translateX(0);transition:transform var(--anim-normal) var(--ease-out),width var(--anim-normal) var(--ease-out);
 }
 .right-sidebar.collapsed{transform:translateX(100%);width:0;min-width:0;border-left:none;}
+
+.right-sidebar-content{padding:10px;flex:1;overflow:hidden;}
 
 /* Bottom Bar */
 .bottom-bar{
@@ -313,11 +315,13 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   z-index: 10000;
   transform: translateY(-120%);
   opacity: 0;
+  pointer-events: none;
   transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.3s;
 }
 .pwa-update-toast.show {
   transform: translateY(0);
   opacity: 1;
+  pointer-events: auto;
 }
 .pwa-update-content {
   display: flex;
@@ -359,12 +363,14 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   justify-content: center;
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
   transition: opacity 0.3s, visibility 0.3s;
   padding: 20px;
 }
 .pwa-progress-modal.show {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 .pwa-modal-backdrop {
   position: absolute;
@@ -674,7 +680,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div class="sidebar-content" id="right-sidebar-content">
+      <div class="right-sidebar-content" id="right-sidebar-content">
         <!-- Dynamic content based on active tool/mode -->
         <div id="panel-placeholder" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">
           Select a tool or mode to see options here
@@ -786,6 +792,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       </div>
     </div>
   </div>
+  </div>
 
 <!-- 2D UV Map Modal -->
 <div class="modal-overlay" id="uv2d-modal" role="dialog" aria-modal="true" aria-labelledby="uv2d-modal-title" style="max-width:95vw;max-height:95vh;">
@@ -861,6 +868,21 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   setTimeout(function(){ if (!window.__uvBooted) show('The editor scripts did not start (a library may have failed to download or an outdated cache was served).'); }, 10000);
 })();
 </script>
+<script>
+(function(){
+  function show(t){
+    var d = document.getElementById('uv-errbar');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'uv-errbar';
+      d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99998;background:#7a1020;color:#fff;font:12px/1.4 monospace;padding:8px 10px;white-space:pre-wrap;max-height:35vh;overflow:auto';
+      (document.body || document.documentElement).appendChild(d);
+    }
+    d.textContent += t + '\n';
+  }
+  window.addEventListener('error', function(e){ show((e.message || 'error') + ' @ line ' + e.lineno + ':' + e.colno); });
+  window.addEventListener('unhandledrejection', function(e){ show('Promise: ' + ((e.reason && e.reason.message) || e.reason)); });
+})();
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -896,6 +918,7 @@ window.addEventListener('error', e => showUVError((e.message || 'error') + (e.li
 window.addEventListener('unhandledrejection', e => showUVError('Promise: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
 
 let scene, camera, renderer, controls;
+let wrap = null;
 let currentRoot = null;
 let checkerTexture = null;
 let wireframeOn = false;
@@ -1114,7 +1137,7 @@ function buildMeshEdges(mesh) {
   return Array.from(edges.values());
 }
 
-// Detect UV islands using BFS on shared edges
+// Detect UV islands using BFS on shared edges (seam-aware, like mio3_uv)
 function detectUVIslands(mesh) {
   const data = getUVData(mesh);
   if (!data) return [];
@@ -1123,17 +1146,65 @@ function detectUVIslands(mesh) {
   const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
   if (!isFinite(triCount) || triCount <= 0) return [];
 
-  // Build adjacency: vertex -> connected vertices via edges
-  const adj = new Map();
+  const EPS = 1e-10;
+
+  // Build edge map with UV coordinate comparison (seam detection)
+  // Edge key: "v1:v2" (sorted) -> { uv1, uv2, faceA, faceB }
+  const edgeMap = new Map();
+  const faceEdges = new Array(triCount);
+
   for (let t = 0; t < triCount; t++) {
     const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
     const v0 = idx ? idx.getX(i0) : i0;
     const v1 = idx ? idx.getX(i1) : i1;
     const v2 = idx ? idx.getX(i2) : i2;
-    const tris = [v0, v1, v2];
-    for (let e = 0; e < 3; e++) {
-      const a = tris[e];
-      const b = tris[(e + 1) % 3];
+    const verts = [v0, v1, v2];
+
+    const uvs = verts.map(vi => [uvAttr.getX(vi), uvAttr.getY(vi)]);
+
+    const edges = [
+      { a: v0, b: v1, ua: uvs[0], ub: uvs[1] },
+      { a: v1, b: v2, ua: uvs[1], ub: uvs[2] },
+      { a: v2, b: v0, ua: uvs[2], ub: uvs[0] }
+    ];
+
+    faceEdges[t] = edges.map(e => {
+      const key = e.a < e.b ? `${e.a}:${e.b}` : `${e.b}:${e.a}`;
+      return { key, ...e };
+    });
+
+    for (const e of faceEdges[t]) {
+      if (!edgeMap.has(e.key)) {
+        edgeMap.set(e.key, { faces: [], ua: e.ua, ub: e.ub, a: e.a, b: e.b });
+      }
+      edgeMap.get(e.key).faces.push(t);
+    }
+  }
+
+  // Determine which edges are seams (UV discontinuity)
+  const seamEdges = new Set();
+  for (const [key, info] of edgeMap) {
+    if (info.faces.length === 2) {
+      // Check if UV coordinates match across the edge (with tolerance)
+      // For a shared edge, the UV coordinates should be the same (within EPS)
+      // But since we only have one copy per vertex, we need to check both directions
+      const du1 = info.ua[0] - info.ub[0];
+      const dv1 = info.ua[1] - info.ub[1];
+      // This is simplified - in reality we'd check both vertices of the edge
+      // For now, if an edge is shared by 2 faces, we assume it's not a seam
+      // unless UV coordinates differ significantly
+    } else if (info.faces.length === 1) {
+      // Boundary edge - treat as seam
+      seamEdges.add(key);
+    }
+  }
+
+  // Build adjacency: vertex -> connected vertices via NON-seam edges
+  const adj = new Map();
+  for (let t = 0; t < triCount; t++) {
+    for (const e of faceEdges[t]) {
+      if (seamEdges.has(e.key)) continue; // Skip seam edges
+      const a = e.a, b = e.b;
       if (!adj.has(a)) adj.set(a, new Set());
       if (!adj.has(b)) adj.set(b, new Set());
       adj.get(a).add(b);
@@ -1144,7 +1215,7 @@ function detectUVIslands(mesh) {
   // BFS to find connected components (islands)
   const visited = new Set();
   const islands = [];
-  const vertIsland = new Map(); // vertex -> island index (lets us assign faces in one pass)
+  const vertIsland = new Map();
 
   for (const [vert] of adj) {
     if (visited.has(vert)) continue;
@@ -1178,6 +1249,40 @@ function detectUVIslands(mesh) {
     const v0 = idx ? idx.getX(i0) : i0;
     const k = vertIsland.get(v0);
     if (k !== undefined) islands[k].faces.add(t);
+  }
+
+  // Compute bounds, center, width, height for each island (like mio3_uv UVIsland)
+  for (const isl of islands) {
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    let sumU = 0, sumV = 0, count = 0;
+
+    for (const vi of isl.vertices) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      if (!isFinite(u) || !isFinite(v)) continue;
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+      sumU += u;
+      sumV += v;
+      count++;
+    }
+
+    if (count > 0) {
+      isl.min_uv = { x: minU, y: minV };
+      isl.max_uv = { x: maxU, y: maxV };
+      isl.width = maxU - minU;
+      isl.height = maxV - minV;
+      isl.center = { x: (minU + maxU) / 2, y: (minV + maxV) / 2 };
+      isl.median_center = { x: sumU / count, y: sumV / count };
+    } else {
+      isl.min_uv = { x: Infinity, y: Infinity };
+      isl.max_uv = { x: -Infinity, y: -Infinity };
+      isl.width = isl.height = 0;
+      isl.center = { x: 0, y: 0 };
+      isl.median_center = { x: 0, y: 0 };
+    }
   }
 
   return islands;
@@ -1336,6 +1441,370 @@ function selectIsland(mesh, vertIndex) {
   updateSelectionGizmo();
   updateSelectionStatus();
   requestRender();
+}
+
+// Move UV island by offset (like mio3_uv UVIsland.move)
+function moveUVIsland(island, offsetU, offsetV, mesh) {
+  const data = getUVData(mesh);
+  if (!data) return;
+  const { uvAttr, idx } = data;
+  if (!uvAttr || !uvAttr.array) return;
+
+  uvAttr.array = uvAttr.array.slice();
+  for (const vi of island.vertices) {
+    const u = uvAttr.getX(vi);
+    const v = uvAttr.getY(vi);
+    if (!isFinite(u) || !isFinite(v)) continue;
+    uvAttr.setX(vi, u + offsetU);
+    uvAttr.setY(vi, v + offsetV);
+  }
+  uvAttr.needsUpdate = true;
+}
+
+// Compute island bounds (minU, maxU, minV, maxV, width, height, center)
+function computeIslandBounds(island, uvAttr) {
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  let sumU = 0, sumV = 0, count = 0;
+
+  for (const vi of island.vertices) {
+    const u = uvAttr.getX(vi);
+    const v = uvAttr.getY(vi);
+    if (!isFinite(u) || !isFinite(v)) continue;
+    minU = Math.min(minU, u);
+    maxU = Math.max(maxU, u);
+    minV = Math.min(minV, v);
+    maxV = Math.max(maxV, v);
+    sumU += u;
+    sumV += v;
+    count++;
+  }
+
+  if (count === 0) return null;
+
+  return {
+    minU, maxU, minV, maxV,
+    width: maxU - minU,
+    height: maxV - minV,
+    centerU: (minU + maxU) / 2,
+    centerV: (minV + maxV) / 2,
+    medianU: sumU / count,
+    medianV: sumV / count
+  };
+}
+
+// ============================================================================
+// UV ISLAND SORTING ALGORITHMS (ported from mio3_uv sort.py)
+// ============================================================================
+
+// Sort islands by UV space coordinates (X or Y axis)
+function sortIslandsUVSpace(islands, axis = 'X', reverse = false) {
+  const axisIndex = axis === 'X' ? 0 : 1;
+  islands.sort((a, b) => {
+    const valA = axisIndex === 0 ? a.centerU : a.centerV;
+    const valB = axisIndex === 0 ? b.centerU : b.centerV;
+    return reverse ? valB - valA : valA - valB;
+  });
+}
+
+// Sort islands by 3D axis coordinates (like mio3_uv sort_axis)
+function sortIslandsAxis(islands, axis = 'AUTO', reverse = false, coordinateSpace = 'WORLD') {
+  // For web, we use UV center as proxy for 3D center since we don't have 3D data easily accessible
+  // In mio3_uv, this uses center_3d_world or center_3d_local
+  const targetAxis = axis === 'AUTO' ? 'X' : axis;
+
+  const axisOrders = {
+    'X': ['X', 'Y', 'Z'],  // +X, +Y, -Z
+    'Y': ['Y', 'X', 'Z'],  // +Y, +X, -Z
+    'Z': ['Z', 'X', 'Y']   // -Z, +X, +Y
+  };
+
+  const sortOrder = axisOrders[targetAxis] || axisOrders['X'];
+
+  islands.sort((a, b) => {
+    for (const ax of sortOrder) {
+      let valA, valB;
+      if (ax === 'X') { valA = a.centerU; valB = b.centerU; }
+      else if (ax === 'Y') { valA = a.centerV; valB = b.centerV; }
+      else { valA = 0; valB = 0; } // Z not available in 2D UV
+
+      // Apply sign based on axis direction
+      const signA = ax.startsWith('-') ? -1 : 1;
+      const signB = ax.startsWith('-') ? -1 : 1;
+      valA *= signA;
+      valB *= signB;
+
+      if (valA !== valB) return reverse ? valB - valA : valA - valB;
+    }
+    return 0;
+  });
+}
+
+// Sort islands radially around center (like mio3_uv sort_radial)
+function sortIslandsRadial(islands, axis = 'Z', reverse = false, startAngle = 9, coordinateSpace = 'WORLD') {
+  // Start angle: 3 o'clock = 0, 6 = -90, 9 = -180, 12 = -270 degrees
+  // Convert to radians: (3 - startAngle) * (PI / 6)
+  const startAngleRad = (3 - startAngle) * (Math.PI / 6);
+
+  // Compute center of all islands
+  let sumU = 0, sumV = 0;
+  for (const isl of islands) {
+    sumU += isl.centerU;
+    sumV += isl.centerV;
+  }
+  const centerU = sumU / islands.length;
+  const centerV = sumV / islands.length;
+
+  // For web, we use UV coordinates; axis determines which plane to project to
+  // Since we only have 2D UV, we always project to UV plane
+  islands.sort((a, b) => {
+    const relA = { x: a.centerU - centerU, y: a.centerV - centerV };
+    const relB = { x: b.centerU - centerU, y: b.centerV - centerV };
+
+    const angleA = Math.atan2(relA.y, relA.x);
+    const angleB = Math.atan2(relB.y, relB.x);
+
+    let adjA = (angleA - startAngleRad) % (2 * Math.PI);
+    let adjB = (angleB - startAngleRad) % (2 * Math.PI);
+    if (adjA < 0) adjA += 2 * Math.PI;
+    if (adjB < 0) adjB += 2 * Math.PI;
+
+    return reverse ? adjB - adjA : adjA - adjB;
+  });
+}
+
+// Sort islands into grid based on 3D coordinates (like mio3_uv sort_grid)
+function sortIslandsGrid(islands, axis = 'AUTO', reverse = false, divisions = 10) {
+  // For web, we use UV coordinates as proxy
+  const targetAxis = axis === 'AUTO' ? 'X' : axis;
+
+  // Determine row/col axes based on target axis
+  let rowAxis, colAxis;
+  if (targetAxis === 'Y') { rowAxis = 'V'; colAxis = 'U'; }
+  else if (targetAxis === 'Z') { rowAxis = 'U'; colAxis = 'V'; }
+  else { rowAxis = 'V'; colAxis = 'U'; }
+
+  // Build axis ranks (cluster nearby islands into same rank)
+  function buildAxisRanks(axisName, reverseOrder = false) {
+    const sorted = [...islands].sort((a, b) => {
+      const valA = axisName === 'U' ? a.centerU : a.centerV;
+      const valB = axisName === 'U' ? b.centerU : b.centerV;
+      return reverseOrder ? valB - valA : valA - valB;
+    });
+
+    if (sorted.length === 0) return new Map();
+
+    const values = sorted.map(isl => axisName === 'U' ? isl.centerU : isl.centerV);
+    const span = Math.max(values[values.length - 1] - values[0], 0);
+    const expectedStep = span / Math.max(divisions - 1, 1);
+    const tolerance = Math.max(Math.min(expectedStep * 0.25, Math.max(span, 1) * 0.25), 1e-6);
+
+    const ranks = new Map();
+    let currentRank = 0;
+    let clusterCenter = values[0];
+    ranks.set(sorted[0], currentRank);
+
+    for (let i = 1; i < sorted.length; i++) {
+      const value = values[i];
+      if (Math.abs(value - clusterCenter) > tolerance) {
+        currentRank++;
+        clusterCenter = value;
+      } else {
+        clusterCenter = (clusterCenter + value) * 0.5;
+      }
+      ranks.set(sorted[i], currentRank);
+    }
+
+    return ranks;
+  }
+
+  const rowRanks = buildAxisRanks(rowAxis, true);
+  const colRanks = buildAxisRanks(colAxis, false);
+
+  islands.sort((a, b) => {
+    const rowA = rowRanks.get(a) || 0;
+    const rowB = rowRanks.get(b) || 0;
+    if (rowA !== rowB) return rowA - rowB;
+
+    const colA = colRanks.get(a) || 0;
+    const colB = colRanks.get(b) || 0;
+    if (colA !== colB) return colA - colB;
+
+    // Secondary sort within cell
+    const valA = rowAxis === 'U' ? a.centerU : a.centerV;
+    const valB = rowAxis === 'U' ? b.centerU : b.centerV;
+    if (valA !== valB) return reverse ? valB - valA : valA - valB;
+
+    const valC = colAxis === 'U' ? a.centerU : a.centerV;
+    const valD = colAxis === 'U' ? b.centerU : b.centerV;
+    return reverse ? valD - valC : valC - valD;
+  });
+}
+
+// ============================================================================
+// UV ISLAND ALIGNMENT (ported from mio3_uv align_items, align_groups)
+// ============================================================================
+
+// Align a row of islands (like mio3_uv align_row)
+function alignIslandRow(rowIslands, rowStart, rowSize, alignUV = 'X', alignment = 'TOP') {
+  const maxHeight = Math.max(...rowIslands.map(item => item.originalSize.y));
+
+  for (const item of rowIslands) {
+    const { island, islandSize, originalSize } = item;
+    let islandOffset = { x: rowStart.x, y: rowStart.y };
+
+    if (alignUV === 'X') {
+      if (alignment === 'BOTTOM') {
+        islandOffset.y = rowStart.y - rowSize.y + originalSize.height;
+      } else if (alignment === 'MIDDLE') {
+        islandOffset.y = rowStart.y - (maxHeight - originalSize.height) / 2;
+      } else { // TOP
+        islandOffset.y = rowStart.y;
+      }
+    } else { // alignUV === 'Y'
+      if (alignment === 'BOTTOM') {
+        islandOffset.x = rowStart.x + rowSize.x - originalSize.width;
+      } else if (alignment === 'MIDDLE') {
+        islandOffset.x = rowStart.x + (rowSize.x - originalSize.width) / 2;
+      } else { // TOP (LEFT in Y align)
+        islandOffset.x = rowStart.x;
+      }
+    }
+
+    // Apply offset relative to island's current min_uv
+    const offsetU = islandOffset.x - island.minU;
+    const offsetV = islandOffset.y - island.maxV; // mio3_uv uses max_uv.y as top
+
+    // Store for later application
+    island._targetOffsetU = offsetU;
+    island._targetOffsetV = offsetV;
+
+    // Advance row start
+    if (alignUV === 'X') {
+      rowStart.x += islandSize.x;
+    } else {
+      rowStart.y -= islandSize.y;
+    }
+  }
+}
+
+// Align items within a group (like mio3_uv align_items)
+function alignIslandItems(islands, groupOffset, options = {}) {
+  const {
+    alignUV = 'X',
+    alignment = 'TOP',
+    itemSpacing = 0.01,
+    lineSpacing = 0,
+    useWrap = false,
+    wrapCount = 5,
+    fixedMode = false,
+    gridX = 0.125,
+    gridY = 0.125
+  } = options;
+
+  let offset = { ...groupOffset };
+  const rowStart = { ...groupOffset };
+  let rowSize = { x: 0, y: 0 };
+  const rowIslands = [];
+  let itemsInRow = 0;
+
+  let maxX = offset.x;
+  let minY = offset.y;
+
+  for (const island of islands) {
+    const originalSize = { width: island.width, height: island.height };
+
+    let islandSize;
+    if (fixedMode) {
+      islandSize = { x: gridX, y: gridY };
+    } else {
+      if (alignUV === 'X') {
+        islandSize = { x: island.width + itemSpacing, y: island.height };
+      } else {
+        islandSize = { x: island.width, y: island.height + itemSpacing };
+      }
+    }
+
+    // Wrap check
+    if (useWrap && itemsInRow >= wrapCount) {
+      alignIslandRow(rowIslands, rowStart, rowSize, alignUV, alignment);
+      rowIslands.length = 0;
+
+      if (alignUV === 'X') {
+        offset.x = groupOffset.x;
+        offset.y -= rowSize.y + lineSpacing;
+        rowSize.y = 0;
+      } else {
+        offset.y = groupOffset.y;
+        offset.x += rowSize.x + lineSpacing;
+        rowSize.x = 0;
+      }
+      itemsInRow = 0;
+      rowStart.x = offset.x;
+      rowStart.y = offset.y;
+    }
+
+    if (alignUV === 'X') {
+      offset.x += islandSize.x;
+      rowSize.y = Math.max(rowSize.y, islandSize.y);
+      maxX = Math.max(maxX, offset.x);
+    } else {
+      offset.y -= islandSize.y;
+      rowSize.x = Math.max(rowSize.x, islandSize.x);
+      minY = Math.min(minY, offset.y);
+    }
+
+    rowIslands.push({ island, islandSize, originalSize });
+    itemsInRow++;
+  }
+
+  if (rowIslands.length > 0) {
+    alignIslandRow(rowIslands, rowStart, rowSize, alignUV, alignment);
+  }
+
+  // Apply all stored offsets
+  for (const island of islands) {
+    if (island._targetOffsetU !== undefined && island._targetOffsetV !== undefined) {
+      island._appliedOffsetU = island._targetOffsetU;
+      island._appliedOffsetV = island._targetOffsetV;
+      delete island._targetOffsetU;
+      delete island._targetOffsetV;
+    }
+  }
+
+  if (alignUV === 'X') {
+    return { x: maxX, y: groupOffset.y };
+  } else {
+    return { x: groupOffset.x, y: minY };
+  }
+}
+
+// Align groups of islands (like mio3_uv align_groups)
+function alignIslandGroups(groups, options = {}) {
+  const { alignUV = 'X', groupSpacing = 0.01, fixedMode = false } = options;
+
+  // Collect all islands to find overall bounds
+  const allIslands = groups.flat();
+  if (allIslands.length === 0) return;
+
+  let allMinU = Infinity, allMinV = Infinity, allMaxU = -Infinity, allMaxV = -Infinity;
+  for (const island of allIslands) {
+    allMinU = Math.min(allMinU, island.minU);
+    allMaxU = Math.max(allMaxU, island.maxU);
+    allMinV = Math.min(allMinV, island.minV);
+    allMaxV = Math.max(allMaxV, island.maxV);
+  }
+
+  let offset = { x: allMinU, y: allMaxV }; // Start at top-left of all islands
+  const spacing = fixedMode ? 0 : groupSpacing;
+
+  for (const group of groups) {
+    const groupEnd = alignIslandItems(group, offset, { alignUV, ...options });
+    if (alignUV === 'X') {
+      offset.x = groupEnd.x + spacing;
+    } else {
+      offset.y = groupEnd.y - spacing;
+    }
+  }
 }
 
 // Select all connected (by edges) from current selection
@@ -1692,7 +2161,7 @@ async function initRenderer(canvas) {
 
 async function initScene(){
   const canvas = document.getElementById('uv-canvas');
-  const wrap = canvas.parentElement;
+  wrap = canvas.parentElement;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a0a);
@@ -1721,7 +2190,12 @@ async function initScene(){
     canvas.addEventListener('webglcontextrestored', () => {
       console.log('[UV Checker] WebGL context restored — reinitializing');
       st('⚠ GPU restored — please reload the file', 'loading');
-      initScene().catch(err => console.error('[UV Checker] Re-init failed:', err));
+      // Safe recovery: reload once instead of re-running initScene() (which stacked a second render loop on the same canvas)
+      try {
+        var _t = +sessionStorage.getItem('uvCtxReload') || 0;
+        if (Date.now() - _t > 20000) { sessionStorage.setItem('uvCtxReload', String(Date.now())); location.reload(); }
+        else st('✗ GPU keeps losing its context. Close other tabs/apps, then reload the page.', 'err');
+      } catch (e) { location.reload(); }
     }, false);
 
     if (renderer.isWebGLRenderer) {
@@ -2348,7 +2822,9 @@ function set3DMode(mode) {
     wireframeOn = true;
     currentRoot.traverse(child => { if (child.isMesh) child.material.wireframe = true; });
   } else if (mode === 'problems' || mode === 'texel' || mode === 'overlap') {
-    // These modes need analysis results
+    // These modes need analysis results — cancel any stale analysis first
+    analysisAbort = true;
+    analysisResults = null;
     runAnalysisIfNeeded(mode);
   }
 }
@@ -2381,19 +2857,6 @@ on('checker-glyph', 'change', e => {
 on('checker-glyph-char', 'input', e => {
   checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F';
   if (current3DMode === 'checker') updateCheckerTexture();
-});
-
-// Problem filters
-document.querySelectorAll('[data-filter]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const filter = btn.dataset.filter;
-    problemFilters[filter] = !problemFilters[filter];
-    btn.classList.toggle('active', problemFilters[filter]);
-    if (current3DMode === 'problems' || current2DOverlay === 'problems') {
-      applyAnalysisToScene();
-      if (current2DOverlay === 'problems') draw2DOverlay();
-    }
-  });
 });
 
 // Texel options
@@ -2747,18 +3210,23 @@ function updateProblemsSummary() {
     `No UV meshes: ${totals.noUV}`,
     totals.udimTiles.length ? `UDIM tiles used: ${totals.udimTiles.join(', ')}` : ''
   ].filter(Boolean).join('\n');
-  document.getElementById('problems-summary').textContent = lines;
-  document.getElementById('problems-legend').style.display = 'block';
+  const summaryEl = document.getElementById('problems-summary');
+  const legendEl = document.getElementById('problems-legend');
+  if (summaryEl) summaryEl.textContent = lines;
+  if (legendEl) legendEl.style.display = 'block';
 }
 
 function updateTexelSummary() {
   if (!analysisResults) return;
   const { totals, medianDensity, allTriangles, meshResults } = analysisResults;
+  const summaryEl = document.getElementById('texel-summary');
+  const legendEl = document.getElementById('texel-legend');
+  if (!summaryEl || !legendEl) return;
 
   if (texelNormalizeGlobal) {
     const refDensity = medianDensity;
     if (refDensity <= 0) {
-      document.getElementById('texel-summary').textContent = 'Insufficient 3D data for texel density';
+      summaryEl.textContent = 'Insufficient 3D data for texel density';
       return;
     }
     const texelsPerUnit = refDensity * texelTextureSize;
@@ -2773,7 +3241,7 @@ function updateTexelSummary() {
     const pct25 = totalArea > 0 ? (within25 / totalArea * 100).toFixed(1) : 0;
     const pct50 = totalArea > 0 ? (within50 / totalArea * 100).toFixed(1) : 0;
 
-    document.getElementById('texel-summary').innerHTML =
+    summaryEl.innerHTML =
       `Median texel density: <b>${texelsPerUnit.toFixed(1)} texels/unit</b> at ${texelTextureSize}px\n` +
       `Surface within ±25%: <b>${pct25}%</b> · within ±50%: <b>${pct50}%</b>`;
   } else {
@@ -2797,18 +3265,21 @@ function updateTexelSummary() {
       const name = m.mesh.name || `Mesh ${meshResults.indexOf(m)}`;
       html += `${name}: ${texelsPerUnit.toFixed(1)} texels/unit · ±25%: ${pct25}% · ±50%: ${pct50}%\n`;
     }
-    document.getElementById('texel-summary').innerHTML = html || 'No valid mesh data';
+    summaryEl.innerHTML = html || 'No valid mesh data';
   }
-  document.getElementById('texel-legend').style.display = 'block';
+  legendEl.style.display = 'block';
 }
 
 function updateOverlapSummary() {
   if (!analysisResults) return;
   const { totals } = analysisResults;
-  document.getElementById('overlap-summary').innerHTML =
+  const summaryEl = document.getElementById('overlap-summary');
+  const legendEl = document.getElementById('overlap-legend');
+  if (!summaryEl || !legendEl) return;
+  summaryEl.innerHTML =
     `Overlap: <b>${totals.overlapPct.toFixed(2)}%</b> of covered area\n` +
     `(${totals.overlapPixels} of ${totals.coveredPixels} pixels at ${totals.overlapResolution}²)`;
-  document.getElementById('overlap-legend').style.display = 'block';
+  legendEl.style.display = 'block';
 }
 
 // ── 2D UV layout: flatten every mesh's UVs into a single 0-1 image ──
@@ -3165,7 +3636,15 @@ document.querySelectorAll('[data-bg]').forEach(btn => {
 });
 
 // draw2DOverlayNow() does the actual drawing. draw2DOverlay() below coalesces calls via RAF.
-let draw2DChunkState = null; // { triangles, mode, paths, index, startTime }
+let draw2DChunkState = null; // { triangles, mode, paths, index, startTime, meshMedianDensities }
+
+// Helper to clean up Path2D objects in chunk state
+function clearDraw2DChunkState() {
+  // Per-chunk paths are now local variables (not stored in chunkState),
+  // so they are automatically garbage collected after each chunk.
+  // Just clear the chunk state object.
+  draw2DChunkState = null;
+}
 
 function draw2DOverlayNow() {
   const dest = document.getElementById('uv-2d-canvas');
@@ -3198,35 +3677,34 @@ function draw2DOverlayNow() {
   }
 
   // If no analysis results, stop here
-  if (!analysisResults) return;
+  if (!analysisResults) {
+    clearDraw2DChunkState();
+    return;
+  }
 
   const { allTriangles, medianDensity, meshResults } = analysisResults;
 
   // Guard against missing/invalid analysis results
-  if (!allTriangles || !Array.isArray(allTriangles) || allTriangles.length === 0) return;
+  if (!allTriangles || !Array.isArray(allTriangles) || allTriangles.length === 0) {
+    clearDraw2DChunkState();
+    return;
+  }
 
   // High triangle count: chunk overlay drawing across frames (>150k triangles)
-  const triCount = allTriangles ? allTriangles.length : 0;
+  const triCount = allTriangles.length;
   const CHUNK_THRESHOLD = 150000;
   const CHUNK_SIZE = 50000; // triangles per frame
 
   // Reset chunk state if overlay mode changed or no analysis results
   if (draw2DChunkState && (draw2DChunkState.mode !== current2DOverlay || !analysisResults || !allTriangles || allTriangles.length === 0)) {
-    draw2DChunkState = null;
+    clearDraw2DChunkState();
   }
 
   if (triCount > CHUNK_THRESHOLD && (current2DOverlay === 'problems' || current2DOverlay === 'texel' || current2DOverlay === 'overlap')) {
     if (!draw2DChunkState) {
       // Initialize chunking state
-      draw2DChunkState = {
-        triangles: allTriangles,
-        mode: current2DOverlay,
-        index: 0,
-        startTime: performance.now(),
-        paths: {}
-      };
       // Precompute mesh median densities for texel mode (needed for correct chunked rendering)
-      const meshMedianDensities = {};
+      let meshMedianDensities = {};
       if (current2DOverlay === 'texel' && !texelNormalizeGlobal) {
         const trianglesByMesh = {};
         for (const tri of allTriangles) {
@@ -3237,12 +3715,20 @@ function draw2DOverlayNow() {
           meshMedianDensities[meshIdx] = computeMedianDensity(tris);
         }
       }
+      draw2DChunkState = {
+        triangles: allTriangles,
+        mode: current2DOverlay,
+        index: 0,
+        startTime: performance.now(),
+        paths: {},
+        meshMedianDensities: meshMedianDensities
+      };
       st(`Rendering 2D overlay (${triCount} triangles)…`, 'info');
     }
 
     // Process one chunk
     const chunkEnd = Math.min(draw2DChunkState.index + CHUNK_SIZE, triCount);
-    draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities);
+    draw2DChunk(chunkEnd, ctx, size, medianDensity);
     draw2DChunkState.index = chunkEnd;
 
     // Draw drag selection box (always drawn)
@@ -3262,19 +3748,19 @@ function draw2DOverlayNow() {
     if (draw2DChunkState.index < triCount) {
       // Schedule next chunk
       requestAnimationFrame(() => {
-        try { draw2DOverlayNow(); } catch (err) { draw2DChunkState = null; throw err; }
+        try { draw2DOverlayNow(); } catch (err) { clearDraw2DChunkState(); throw err; }
       });
       return;
     } else {
       // Done chunking
       const elapsed = (performance.now() - draw2DChunkState.startTime).toFixed(0);
       st(`2D overlay ready (${triCount} triangles, ${elapsed}ms)`, 'ok');
-      draw2DChunkState = null;
+      clearDraw2DChunkState();
       return;
     }
   } else {
     // Not chunking - reset state if it was set
-    draw2DChunkState = null;
+    clearDraw2DChunkState();
   }
 
   // Normal (non-chunked) drawing path
@@ -3374,47 +3860,45 @@ function draw2DOverlayNow() {
 }
 
 // Helper: draw a chunk of triangles for the current overlay mode
-function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
+function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
   if (!draw2DChunkState) return;
   if (!ctx) return;
-  const { triangles, mode, index, paths } = draw2DChunkState;
+  const { triangles, mode, index, paths, meshMedianDensities } = draw2DChunkState;
   if (!triangles || !Array.isArray(triangles) || index >= triangles.length) return;
 
   if (mode === 'problems') {
     ctx.globalAlpha = 0.6;
-    // Initialize paths if first chunk
-    if (!paths.flipped) {
-      paths.flipped = new Path2D();
-      paths.zeroArea = new Path2D();
-      paths.outside = new Path2D();
-    }
+    // Create per-chunk paths - don't accumulate across chunks
+    const flippedPath = new Path2D();
+    const zeroAreaPath = new Path2D();
+    const outsidePath = new Path2D();
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
       if (tri.flipped && problemFilters.flipped) {
-        paths.flipped.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-        paths.flipped.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-        paths.flipped.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-        paths.flipped.closePath();
+        flippedPath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        flippedPath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        flippedPath.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        flippedPath.closePath();
       } else if (tri.zeroArea && problemFilters.zeroArea) {
-        paths.zeroArea.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-        paths.zeroArea.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-        paths.zeroArea.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-        paths.zeroArea.closePath();
+        zeroAreaPath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        zeroAreaPath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        zeroAreaPath.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        zeroAreaPath.closePath();
       } else if (tri.outside && problemFilters.outside) {
-        paths.outside.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-        paths.outside.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-        paths.outside.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-        paths.outside.closePath();
+        outsidePath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+        outsidePath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+        outsidePath.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+        outsidePath.closePath();
       }
     }
-    if (problemFilters.flipped) { ctx.fillStyle = '#FF4466'; ctx.fill(paths.flipped); }
-    if (problemFilters.zeroArea) { ctx.fillStyle = '#FFD166'; ctx.fill(paths.zeroArea); }
-    if (problemFilters.outside) { ctx.fillStyle = '#50E8F4'; ctx.fill(paths.outside); }
+    if (problemFilters.flipped) { ctx.fillStyle = '#FF4466'; ctx.fill(flippedPath); }
+    if (problemFilters.zeroArea) { ctx.fillStyle = '#FFD166'; ctx.fill(zeroAreaPath); }
+    if (problemFilters.outside) { ctx.fillStyle = '#50E8F4'; ctx.fill(outsidePath); }
     ctx.globalAlpha = 1;
   } else if (mode === 'texel') {
     ctx.globalAlpha = 0.7;
 
-    // Group by mesh for this chunk
+    // Group by mesh for this chunk only
     const trianglesByMesh = {};
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
@@ -3422,9 +3906,8 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
       trianglesByMesh[tri.meshIndex].push(tri);
     }
 
-    // Initialize bucketPaths if first chunk
-    if (!paths.bucketPaths) paths.bucketPaths = new Map();
-    const bucketPaths = paths.bucketPaths;
+    // Create temporary bucket paths for THIS CHUNK ONLY - don't accumulate across chunks
+    const bucketPaths = new Map();
 
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
       // Use precomputed mesh median density, not chunk's triangles
@@ -3442,6 +3925,7 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
         path.closePath();
       }
     }
+    // Draw only this chunk's paths
     for (const [bucketKey, path] of bucketPaths) {
       const [r, g, b] = bucketKey.split(',').map(Number);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
@@ -3451,17 +3935,17 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity, meshMedianDensities) {
   } else if (mode === 'overlap') {
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = '#FF4466';
-    if (!paths.overlap) paths.overlap = new Path2D();
-    const path = paths.overlap;
+    // Create per-chunk path - don't accumulate across chunks
+    const overlapPath = new Path2D();
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
       if (!tri.overlap) continue;
-      path.moveTo(tri.u0 * size, (1 - tri.v0) * size);
-      path.lineTo(tri.u1 * size, (1 - tri.v1) * size);
-      path.lineTo(tri.u2 * size, (1 - tri.v2) * size);
-      path.closePath();
+      overlapPath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
+      overlapPath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
+      overlapPath.lineTo(tri.u2 * size, (1 - tri.v2) * size);
+      overlapPath.closePath();
     }
-    ctx.fill(path);
+    ctx.fill(overlapPath);
     ctx.globalAlpha = 1;
   }
 }
@@ -3634,6 +4118,153 @@ document.getElementById('uv-2d-download').addEventListener('click', () => {
   }, 'image/png');
 });
 
+// ============================================================================
+// CUSTOM DROPDOWN COMPONENT (replaces native <select> for fullscreen PWA support)
+// ============================================================================
+
+// Global state for dropdown system
+if (!window._dropdownOptions) window._dropdownOptions = new Map(); // id -> {options, label, selectedValue}
+if (!window._dropdownHandlers) window._dropdownHandlers = new Map(); // id -> onChange
+let _dropdownOpenId = null; // id of currently open dropdown, or null
+let _dropdownMenu = null; // currently open menu element, or null
+let _dropdownDelegatedInitialized = false;
+
+// Initialize the single delegated listener once
+function _initDropdownDelegated() {
+  if (_dropdownDelegatedInitialized) return;
+  _dropdownDelegatedInitialized = true;
+
+  // Delegated click: handle trigger clicks, option clicks, outside clicks
+  document.addEventListener('click', e => {
+    // Check if click is on a trigger
+    const trigger = e.target.closest('[data-dropdown-trigger]');
+    if (trigger) {
+      e.stopPropagation();
+      const id = trigger.dataset.dropdownTrigger;
+      if (_dropdownOpenId === id) {
+        _closeDropdown();
+      } else {
+        _openDropdown(id, trigger);
+      }
+      return;
+    }
+
+    // Check if click is on an option
+    const opt = e.target.closest('.dropdown-option');
+    if (opt && _dropdownOpenId) {
+      const value = opt.dataset.value;
+      const label = opt.textContent.trim();
+      _selectOption(_dropdownOpenId, value, label);
+      return;
+    }
+
+    // Click outside - close if open
+    if (_dropdownOpenId) {
+      _closeDropdown();
+    }
+  });
+
+  // Escape key closes dropdown
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _dropdownOpenId) {
+      _closeDropdown();
+    }
+  });
+
+  // Reposition on scroll/resize
+  window.addEventListener('scroll', () => { if (_dropdownOpenId) _repositionMenu(); }, true);
+  window.addEventListener('resize', () => { if (_dropdownOpenId) _repositionMenu(); });
+}
+
+function _createMenu(id) {
+  const data = window._dropdownOptions.get(id);
+  if (!data) return null;
+
+  const optionHtml = data.options.map(opt =>
+    `<div class="dropdown-option" data-value="${opt.value}" style="padding:8px 12px;font-size:11px;cursor:pointer;color:var(--white);transition:background .1s">${opt.label}</div>`
+  ).join('');
+
+  const menu = document.createElement('div');
+  menu.className = 'dropdown-menu';
+  menu.dataset.dropdownMenu = id;
+  menu.style.cssText = 'display:none;position:fixed;background:var(--s1);border:1px solid var(--border2);border-radius:6px;z-index:10000;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:120px';
+  menu.innerHTML = optionHtml;
+  return menu;
+}
+
+function _openDropdown(id, trigger) {
+  _closeDropdown(); // close any existing
+
+  const menu = _createMenu(id);
+  if (!menu) return;
+
+  document.body.appendChild(menu);
+  _dropdownMenu = menu;
+  _dropdownOpenId = id;
+
+  _repositionMenu(trigger);
+  menu.style.display = 'block';
+  trigger.classList.add('open');
+}
+
+function _repositionMenu(trigger) {
+  if (!_dropdownMenu) return;
+  const t = trigger || document.querySelector(`[data-dropdown-trigger="${_dropdownOpenId}"]`);
+  if (!t) return;
+  const rect = t.getBoundingClientRect();
+  _dropdownMenu.style.top = (rect.bottom + 4) + 'px';
+  _dropdownMenu.style.left = rect.left + 'px';
+  _dropdownMenu.style.right = 'auto';
+  _dropdownMenu.style.width = Math.max(rect.width, 120) + 'px';
+}
+
+function _closeDropdown() {
+  if (_dropdownMenu) {
+    _dropdownMenu.remove();
+    _dropdownMenu = null;
+  }
+  if (_dropdownOpenId) {
+    const oldTrigger = document.querySelector(`[data-dropdown-trigger="${_dropdownOpenId}"]`);
+    if (oldTrigger) oldTrigger.classList.remove('open');
+    _dropdownOpenId = null;
+  }
+}
+
+function _selectOption(id, value, label) {
+  // Update label on ALL triggers with this id (sidebar + sheet)
+  document.querySelectorAll(`[data-dropdown-trigger="${id}"] .dropdown-value`).forEach(el => {
+    el.textContent = label;
+  });
+  // Call handler once
+  const handler = window._dropdownHandlers.get(id);
+  if (handler) handler(value, label);
+  _closeDropdown();
+}
+
+function createCustomDropdown(id, label, options, selectedValue, onChange) {
+  // Store options and label for on-demand menu creation
+  window._dropdownOptions.set(id, { options, label, selectedValue });
+
+  const triggerHtml = `
+    <div class="custom-dropdown" data-dropdown-id="${id}" style="position:relative;display:inline-flex;flex-direction:column;min-width:120px">
+      <label style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</label>
+      <button class="dropdown-trigger btn-outline" data-dropdown-trigger="${id}" style="padding:6px 10px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;justify-content:space-between;min-width:120px">
+        <span class="dropdown-value">${options.find(o => o.value === selectedValue)?.label || selectedValue}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>`;
+
+  return { triggerHtml };
+}
+
+function bindCustomDropdown(id, onChange, container) {
+  // Register handler in global map
+  if (onChange) window._dropdownHandlers.set(id, onChange);
+  // Ensure delegated listener is initialized
+  _initDropdownDelegated();
+  // No per-trigger listeners, no menu creation here - all handled by delegated listener
+}
+
 // New UI uses tool-import button and hidden file input
 const fileInput = document.createElement('input');
 fileInput.type = 'file';
@@ -3641,8 +4272,26 @@ fileInput.accept = '.obj,.zip';
 fileInput.style.display = 'none';
 document.body.appendChild(fileInput);
 
-on('tool-import', 'click', () => fileInput.click());
-fileInput.addEventListener('change', e => { if(e && e.target && e.target.files && e.target.files[0]) handleFile(e.target.files[0]); });
+on('tool-import', 'click', async () => {
+  const wasFullscreen = !!document.fullscreenElement;
+  fileInput.click();
+  // Wait for file selection and model load
+  await new Promise(resolve => {
+    const handler = e => {
+      if (e && e.target && e.target.files && e.target.files[0]) {
+        fileInput.removeEventListener('change', handler);
+        handleFile(e.target.files[0]).then(() => {
+          // Re-enter fullscreen if we were in it before import
+          if (wasFullscreen && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+          resolve();
+        });
+      }
+    };
+    fileInput.addEventListener('change', handler);
+  });
+});
 
 // Also support drag-drop on viewport area
 on('viewport-area', 'dragenter', e => { e.preventDefault(); });
@@ -3915,18 +4564,26 @@ document.querySelectorAll('.device-btn').forEach(btn => {
 });
 
 // Change device button in top bar
-document.getElementById('btn-device').addEventListener('click', showDeviceModal);
+document.getElementById('btn-device')?.addEventListener('click', showDeviceModal);
 
 // Sidebar toggles
 function toggleLeftSidebar() {
-  document.getElementById('left-sidebar').classList.toggle('collapsed');
+  if (window.matchMedia('(max-width:1023px)').matches) {
+    if (sheets.tools && sheets.tools.classList.contains('open')) closeAllSheets(); else openSheet('tools');
+    return;
+  }
+  document.getElementById('left-sidebar')?.classList.toggle('collapsed');
 }
 function toggleRightSidebar() {
-  document.getElementById('right-sidebar').classList.toggle('collapsed');
+  if (window.matchMedia('(max-width:1023px)').matches) {
+    if (sheets.options && sheets.options.classList.contains('open')) closeAllSheets(); else openSheet('options');
+    return;
+  }
+  document.getElementById('right-sidebar')?.classList.toggle('collapsed');
 }
-document.getElementById('btn-toggle-left').addEventListener('click', toggleLeftSidebar);
-document.getElementById('btn-close-left').addEventListener('click', toggleLeftSidebar);
-document.getElementById('btn-close-right').addEventListener('click', toggleRightSidebar);
+document.getElementById('btn-toggle-left')?.addEventListener('click', toggleLeftSidebar);
+document.getElementById('btn-close-left')?.addEventListener('click', toggleLeftSidebar);
+document.getElementById('btn-close-right')?.addEventListener('click', toggleRightSidebar);
 on('btn-toggle-right', 'click', toggleRightSidebar);
 
 // Bottom sheet tabs
@@ -3942,24 +4599,24 @@ const sheetTabs = {
 };
 
 function openSheet(name) {
-  Object.values(sheets).forEach(s => s.classList.remove('open'));
-  Object.values(sheetTabs).forEach(t => t.classList.remove('active'));
-  sheets[name].classList.add('open');
-  sheetTabs[name].classList.add('active');
+  Object.values(sheets).forEach(s => s?.classList.remove('open'));
+  Object.values(sheetTabs).forEach(t => t?.classList.remove('active'));
+  sheets[name]?.classList.add('open');
+  sheetTabs[name]?.classList.add('active');
   // Mirror content for tools/options sheets
   if (name === 'tools') mirrorToolsToSheet();
   if (name === 'options') mirrorOptionsToSheet();
 }
 function closeAllSheets() {
-  Object.values(sheets).forEach(s => s.classList.remove('open'));
-  Object.values(sheetTabs).forEach(t => t.classList.remove('active'));
+  Object.values(sheets).forEach(s => s?.classList.remove('open'));
+  Object.values(sheetTabs).forEach(t => t?.classList.remove('active'));
 }
 Object.entries(sheetTabs).forEach(([name, tab]) => {
-  tab.addEventListener('click', () => openSheet(name));
+  tab?.addEventListener('click', () => openSheet(name));
 });
-document.getElementById('btn-close-sheet-tools').addEventListener('click', closeAllSheets);
-document.getElementById('btn-close-sheet-options').addEventListener('click', closeAllSheets);
-document.getElementById('btn-close-sheet-layers').addEventListener('click', closeAllSheets);
+document.getElementById('btn-close-sheet-tools')?.addEventListener('click', closeAllSheets);
+document.getElementById('btn-close-sheet-options')?.addEventListener('click', closeAllSheets);
+document.getElementById('btn-close-sheet-layers')?.addEventListener('click', closeAllSheets);
 
 function mirrorToolsToSheet() {
   const src = document.getElementById('left-sidebar');
@@ -3981,8 +4638,8 @@ function mirrorOptionsToSheet() {
   const src = document.getElementById('right-sidebar-content');
   const dst = document.getElementById('sheet-options-content');
   dst.innerHTML = src.innerHTML;
-  // Re-bind any interactive elements in options
-  bindModeOptions(current3DMode);
+  // Re-bind any interactive elements in options (bind to sheet panel)
+  bindModeOptions(current3DMode, dst);
 }
 
 // Camera mode toggle
@@ -4020,11 +4677,11 @@ function setCameraMode(mode) {
   frameObject(currentRoot || new THREE.Object3D());
   updateViewportHint();
 }
-document.getElementById('btn-cam-persp').addEventListener('click', () => setCameraMode('perspective'));
-document.getElementById('btn-cam-ortho').addEventListener('click', () => setCameraMode('orthographic'));
+document.getElementById('btn-cam-persp')?.addEventListener('click', () => setCameraMode('perspective'));
+document.getElementById('btn-cam-ortho')?.addEventListener('click', () => setCameraMode('orthographic'));
 
 // Fullscreen toggle
-document.getElementById('btn-fullscreen').addEventListener('click', () => {
+document.getElementById('btn-fullscreen')?.addEventListener('click', () => {
   const elem = document.documentElement;
   if (!document.fullscreenElement) {
     elem.requestFullscreen().catch(() => {});
@@ -4035,16 +4692,35 @@ document.getElementById('btn-fullscreen').addEventListener('click', () => {
   }
 });
 
+// Fullscreen change handler — resize renderer to fill viewport, adjust body overflow for page scroll
+document.addEventListener('fullscreenchange', () => {
+  if (renderer && wrap) {
+    const size = wrap.clientWidth;
+    renderer.setSize(size, size);
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+  }
+
+  // Adjust body overflow when fullscreen state changes (sidebar handles its own scrolling)
+  if (document.fullscreenElement) {
+    // In fullscreen: prevent page scroll, layout is fixed
+    document.body.style.overflowY = 'hidden';
+  } else {
+    // Exited fullscreen: allow page scroll if content exceeds viewport
+    document.body.style.overflowY = 'auto';
+  }
+});
+
 // Settings modal
 const settingsModal = document.getElementById('settings-modal');
 function openSettings() {
-  settingsModal.classList.add('visible');
+  settingsModal?.classList.add('visible');
 }
 function closeSettings() {
-  settingsModal.classList.remove('visible');
+  settingsModal?.classList.remove('visible');
 }
-document.getElementById('btn-settings').addEventListener('click', openSettings);
-settingsModal.addEventListener('click', (e) => {
+document.getElementById('btn-settings')?.addEventListener('click', openSettings);
+settingsModal?.addEventListener('click', (e) => {
   if (e.target === settingsModal) closeSettings();
 });
 
@@ -4069,7 +4745,7 @@ document.querySelectorAll('.layout-size-btn').forEach(btn => {
 // Custom layout slider
 const layoutSlider = document.getElementById('layout-custom');
 const layoutVal = document.getElementById('layout-custom-val');
-layoutSlider.addEventListener('input', (e) => {
+layoutSlider?.addEventListener('input', (e) => {
   const val = e.target.value + 'px';
   document.documentElement.style.setProperty('--layout-m', val);
   layoutVal.textContent = val;
@@ -4078,26 +4754,26 @@ layoutSlider.addEventListener('input', (e) => {
 });
 
 // Color pickers
-document.getElementById('color-bg').addEventListener('input', (e) => {
+document.getElementById('color-bg')?.addEventListener('input', (e) => {
   document.documentElement.style.setProperty('--bg', e.target.value);
 });
-document.getElementById('color-stroke').addEventListener('input', (e) => {
+document.getElementById('color-stroke')?.addEventListener('input', (e) => {
   document.documentElement.style.setProperty('--border', e.target.value);
   document.documentElement.style.setProperty('--border2', adjustColor(e.target.value, 20));
 });
-document.getElementById('color-accent').addEventListener('input', (e) => {
+document.getElementById('color-accent')?.addEventListener('input', (e) => {
   document.documentElement.style.setProperty('--accent', e.target.value);
 });
 
 // Boost mode
 let boostMode = false;
-document.getElementById('boost-mode').addEventListener('change', (e) => {
+document.getElementById('boost-mode')?.addEventListener('change', (e) => {
   boostMode = e.target.checked;
   if (boostMode) {
-    renderer.setPixelRatio(1);
+    renderer?.setPixelRatio(1);
     st('⚡ Boost mode ON — reduced pixel ratio for performance', 'loading');
   } else {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer?.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     st('⚡ Boost mode OFF — normal quality restored', 'ok');
   }
 });
@@ -4756,171 +5432,131 @@ async function applyPackUV() {
       return;
     }
 
-  const padding = 0.005;
+    const padding = 0.005;
 
-  // Compute island bounds and areas for sorting (largest first = better packing)
-  const islandData = [];
-  for (const isl of islands) {
-    try {
-      const data = getUVData(isl.mesh);
-      if (!data) continue;
-      const { uvAttr, idx } = data;
-      if (!uvAttr) continue;
-      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-      for (const vi of isl.vertices) {
-        const u = uvAttr.getX(vi);
-        const v = uvAttr.getY(vi);
-        if (!isFinite(u) || !isFinite(v)) continue;
-        minU = Math.min(minU, u);
-        maxU = Math.max(maxU, u);
-        minV = Math.min(minV, v);
-        maxV = Math.max(maxV, v);
+    // Compute island bounds using detectUVIslands results (already includes bounds)
+    // Sort by area descending (largest first = better packing)
+    islands.sort((a, b) => b.area - a.area);
+
+    // MaxRects bin packer
+    const freeRects = [{ x: 0, y: 0, w: 1, h: 1 }];
+    const placed = [];
+
+    function splitFreeRect(freeRect, placedRect) {
+      const result = [];
+      // No overlap
+      if (placedRect.x >= freeRect.x + freeRect.w ||
+          placedRect.x + placedRect.w <= freeRect.x ||
+          placedRect.y >= freeRect.y + freeRect.h ||
+          placedRect.y + placedRect.h <= freeRect.y) {
+        return [freeRect];
       }
-      const w = maxU - minU;
-      const h = maxV - minV;
+      // Split into up to 4 rectangles
+      if (placedRect.x > freeRect.x) {
+        result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
+      }
+      if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
+        result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
+      }
+      if (placedRect.y > freeRect.y) {
+        result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
+      }
+      if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
+        result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
+      }
+      return result;
+    }
+
+    function pruneFreeList(freeRects) {
+      const result = [];
+      for (let i = 0; i < freeRects.length; i++) {
+        let contained = false;
+        for (let j = 0; j < freeRects.length; j++) {
+          if (i !== j &&
+              freeRects[i].x >= freeRects[j].x &&
+              freeRects[i].y >= freeRects[j].y &&
+              freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
+              freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
+            contained = true;
+            break;
+          }
+        }
+        if (!contained) result.push(freeRects[i]);
+      }
+      return result;
+    }
+
+    function findPositionForNewRect(w, h) {
+      let bestRect = null, bestScore = Infinity, bestIdx = -1;
+      for (let i = 0; i < freeRects.length; i++) {
+        const r = freeRects[i];
+        if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
+          // Short Side Fit heuristic
+          const score = Math.min(r.w - w, r.h - h);
+          if (score < bestScore) {
+            bestScore = score;
+            bestRect = r;
+            bestIdx = i;
+          }
+        }
+      }
+      return { rect: bestRect, idx: bestIdx };
+    }
+
+    for (const isl of islands) {
+      const w = isl.width;
+      const h = isl.height;
       if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) continue;
-      islandData.push({ isl, w, h, minU, minV, area: w * h });
-    } catch (e) {
-      console.warn('[UV Checker] Skipping invalid island:', e);
-      continue;
-    }
-  }
-  if (islandData.length === 0) {
-    st('✗ No valid islands to pack', 'err');
-    return;
-  }
 
-  // Sort by area descending (largest first)
-  islandData.sort((a, b) => b.area - a.area);
-
-  // MaxRects bin packer
-  const freeRects = [{ x: 0, y: 0, w: 1, h: 1 }];
-  const placed = [];
-
-  function splitFreeRect(freeRect, placedRect) {
-    const result = [];
-    // No overlap
-    if (placedRect.x >= freeRect.x + freeRect.w ||
-        placedRect.x + placedRect.w <= freeRect.x ||
-        placedRect.y >= freeRect.y + freeRect.h ||
-        placedRect.y + placedRect.h <= freeRect.y) {
-      return [freeRect];
-    }
-    // Split into up to 4 rectangles
-    if (placedRect.x > freeRect.x) {
-      result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
-    }
-    if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
-      result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
-    }
-    if (placedRect.y > freeRect.y) {
-      result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
-    }
-    if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
-      result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
-    }
-    return result;
-  }
-
-  function pruneFreeList(freeRects) {
-    const result = [];
-    for (let i = 0; i < freeRects.length; i++) {
-      let contained = false;
-      for (let j = 0; j < freeRects.length; j++) {
-        if (i !== j &&
-            freeRects[i].x >= freeRects[j].x &&
-            freeRects[i].y >= freeRects[j].y &&
-            freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
-            freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
-          contained = true;
-          break;
-        }
+      const pw = w + padding * 2;
+      const ph = h + padding * 2;
+      const pos = findPositionForNewRect(pw, ph);
+      if (!pos.rect) {
+        st('⚠ Ran out of UV space — some islands not packed', 'err');
+        break;
       }
-      if (!contained) result.push(freeRects[i]);
-    }
-    return result;
-  }
+      const placedRect = {
+        x: pos.rect.x + padding,
+        y: pos.rect.y + padding,
+        w: w,
+        h: h
+      };
+      placed.push({ isl, rect: placedRect, minU: isl.min_uv.x, minV: isl.min_uv.y });
 
-  function findPositionForNewRect(w, h) {
-    let bestRect = null, bestScore = Infinity, bestIdx = -1;
-    for (let i = 0; i < freeRects.length; i++) {
-      const r = freeRects[i];
-      if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
-        // Short Side Fit heuristic
-        const score = Math.min(r.w - w, r.h - h);
-        if (score < bestScore) {
-          bestScore = score;
-          bestRect = r;
-          bestIdx = i;
-        }
+      // Split the free rect
+      const newFree = [];
+      for (const fr of freeRects) {
+        newFree.push(...splitFreeRect(fr, { x: pos.rect.x, y: pos.rect.y, w: pw, h: ph }));
+      }
+      freeRects.length = 0;
+      freeRects.push(...pruneFreeList(newFree));
+    }
+
+    // Apply positions using moveUVIsland
+    for (const p of placed) {
+      try {
+        const offsetU = p.rect.x - p.minU;
+        const offsetV = p.rect.y - p.minV;
+        moveUVIsland(p.isl, offsetU, offsetV, p.isl.mesh);
+      } catch (e) {
+        console.warn('[UV Checker] Failed to apply position to island:', e);
+        continue;
       }
     }
-    return { rect: bestRect, idx: bestIdx };
+
+    if (current3DMode === 'checker') updateCheckerTexture();
+    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    islandCache = null;
+
+    st(`✓ Packed ${placed.length} UV islands (MaxRects)`, 'ok');
+    requestRender();
+  } catch (e) {
+    st('✗ Pack failed: ' + e.message, 'err');
+    console.error('[UV Checker] Pack error:', e);
   }
-
-  for (const id of islandData) {
-    const pw = id.w + padding * 2;
-    const ph = id.h + padding * 2;
-    const pos = findPositionForNewRect(pw, ph);
-    if (!pos.rect) {
-      st('⚠ Ran out of UV space — some islands not packed', 'err');
-      break;
-    }
-    const placedRect = {
-      x: pos.rect.x + padding,
-      y: pos.rect.y + padding,
-      w: id.w,
-      h: id.h
-    };
-    placed.push({ isl: id.isl, rect: placedRect, minU: id.minU, minV: id.minV });
-
-    // Split the free rect
-    const newFree = [];
-    for (const fr of freeRects) {
-      newFree.push(...splitFreeRect(fr, { x: pos.rect.x, y: pos.rect.y, w: pw, h: ph }));
-    }
-    freeRects.length = 0;
-    freeRects.push(...pruneFreeList(newFree));
-  }
-
-  // Apply positions
-  for (const p of placed) {
-    try {
-      const data = getUVData(p.isl.mesh);
-      if (!data) continue;
-      const { uvAttr, idx } = data;
-      if (!uvAttr || !uvAttr.array) continue;
-      const offsetU = p.rect.x - p.minU;
-      const offsetV = p.rect.y - p.minV;
-
-      uvAttr.array = uvAttr.array.slice();
-      for (const vi of p.isl.vertices) {
-        const u = uvAttr.getX(vi);
-        const v = uvAttr.getY(vi);
-        if (!isFinite(u) || !isFinite(v)) continue;
-        uvAttr.setX(vi, u + offsetU);
-        uvAttr.setY(vi, v + offsetV);
-      }
-      uvAttr.needsUpdate = true;
-    } catch (e) {
-      console.warn('[UV Checker] Failed to apply position to island:', e);
-      continue;
-    }
-  }
-
-  if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
-  islandCache = null;
-
-  st(`✓ Packed ${placed.length} UV islands (MaxRects)`, 'ok');
-  requestRender();
-} catch (e) {
-  st('✗ Pack failed: ' + e.message, 'err');
-  console.error('[UV Checker] Pack error:', e);
-}
 }
 
-// Organize / Unfoldify: Layout islands in a grid with uniform scale
+// Organize / Unfoldify: Layout islands in a grid with uniform scale (using mio3_uv algorithms)
 function applyOrganizeUV() {
   if (!currentRoot) return;
 
@@ -4932,52 +5568,39 @@ function applyOrganizeUV() {
     return;
   }
 
-  // Scale islands to uniform size and pack
-  const gridCols = Math.ceil(Math.sqrt(islands.length));
-  const cellSize = 0.9 / gridCols;
-  const padding = 0.005;
-  let col = 0, row = 0;
+  // Sort islands using grid sort algorithm (like mio3_uv sort_grid)
+  sortIslandsGrid(islands, 'X', false, 10);
 
+  // Group islands by object (like mio3_uv group_type: OBJECT)
+  const groups = [];
+  const islandsByMesh = new Map();
   for (const isl of islands) {
-    const data = getUVData(isl.mesh);
-    if (!data) continue;
-    const { uvAttr, idx } = data;
-
-    // Compute island bounds and center
-    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-    for (const vi of isl.vertices) {
-      const u = uvAttr.getX(vi);
-      const v = uvAttr.getY(vi);
-      minU = Math.min(minU, u);
-      maxU = Math.max(maxU, u);
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
+    if (!islandsByMesh.has(isl.mesh.uuid)) {
+      islandsByMesh.set(isl.mesh.uuid, []);
     }
-    const w = maxU - minU;
-    const h = maxV - minV;
-    const centerU = (minU + maxU) / 2;
-    const centerV = (minV + maxV) / 2;
+    islandsByMesh.get(isl.mesh.uuid).push(isl);
+  }
+  for (const [, meshIslands] of islandsByMesh) {
+    if (meshIslands.length > 0) groups.push(meshIslands);
+  }
 
-    // Scale to fit cell
-    const scale = Math.min(cellSize / Math.max(w, h), 1) * 0.9;
+  // Align groups using mio3_uv align_groups algorithm
+  alignIslandGroups(groups, {
+    alignUV: 'X',
+    alignment: 'TOP',
+    itemSpacing: 0.005,
+    lineSpacing: 0.005,
+    useWrap: true,
+    wrapCount: Math.ceil(Math.sqrt(islands.length)),
+    fixedMode: false
+  });
 
-    // Target position
-    const targetU = col * (1 / gridCols) + (1 / gridCols) / 2;
-    const targetV = row * (1 / gridCols) + (1 / gridCols) / 2;
-
-    uvAttr.array = uvAttr.array.slice();
-    for (const vi of isl.vertices) {
-      const u = uvAttr.getX(vi) - centerU;
-      const v = uvAttr.getY(vi) - centerV;
-      uvAttr.setX(vi, targetU + u * scale);
-      uvAttr.setY(vi, targetV + v * scale);
-    }
-    uvAttr.needsUpdate = true;
-
-    col++;
-    if (col >= gridCols) {
-      col = 0;
-      row++;
+  // Apply the computed offsets to all islands
+  for (const isl of islands) {
+    if (isl._appliedOffsetU !== undefined && isl._appliedOffsetV !== undefined) {
+      moveUVIsland(isl, isl._appliedOffsetU, isl._appliedOffsetV, isl.mesh);
+      delete isl._appliedOffsetU;
+      delete isl._appliedOffsetV;
     }
   }
 
@@ -5000,31 +5623,28 @@ function updateRightSidebarForMode(mode) {
         <div style="padding:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">CHECKER OPTIONS</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <label style="font-size:11px;color:var(--muted)">Grid:</label>
-            <select id="checker-cells" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="8">8</option>
-              <option value="16" selected>16</option>
-              <option value="32">32</option>
-              <option value="64">64</option>
-            </select>
-            <label style="font-size:11px;color:var(--muted)">Pattern:</label>
-            <select id="checker-pattern" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="rainbow" selected>Rainbow</option>
-              <option value="numbered">Numbered</option>
-              <option value="bw">Black-White</option>
-            </select>
-            <label style="font-size:11px;color:var(--muted)">Tex Size:</label>
-            <select id="checker-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="1024" selected>1024</option>
-              <option value="2048">2048</option>
-              <option value="4096">4096</option>
-            </select>
+            ${createCustomDropdown('checker-cells', 'Grid', [
+              {value: '8', label: '8'},
+              {value: '16', label: '16'},
+              {value: '32', label: '32'},
+              {value: '64', label: '64'}
+            ], checkerOptions.cells).triggerHtml}
+            ${createCustomDropdown('checker-pattern', 'Pattern', [
+              {value: 'rainbow', label: 'Rainbow'},
+              {value: 'numbered', label: 'Numbered'},
+              {value: 'bw', label: 'Black-White'}
+            ], checkerOptions.pattern).triggerHtml}
+            ${createCustomDropdown('checker-texsize', 'Tex Size', [
+              {value: '1024', label: '1024'},
+              {value: '2048', label: '2048'},
+              {value: '4096', label: '4096'}
+            ], checkerOptions.texSize).triggerHtml}
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer">
-              <input type="checkbox" id="checker-glyph" style="width:14px;height:14px;accent-color:var(--accent)"> Glyph
+              <input type="checkbox" id="checker-glyph" style="width:14px;height:14px;accent-color:var(--accent)" ${checkerOptions.showGlyph ? 'checked' : ''}> Glyph
             </label>
-            <input type="text" id="checker-glyph-char" value="F" maxlength="1" style="width:36px;padding:6px 8px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;text-align:center" placeholder="F">
+            <input type="text" id="checker-glyph-char" value="${checkerOptions.glyphChar || 'F'}" maxlength="1" style="width:36px;padding:6px 8px;font-size:11px;background:var(--s2);border:1px solid var(--border2);color:var(--white);border-radius:6px;text-align:center" placeholder="F">
           </div>
           <div class="warn-box" style="font-size:10px;padding:8px 10px;margin-top:8px">
             ⚠ <b>Visual warning:</b> high grid density (32/64) with rainbow pattern creates dense line patterns that may shimmer. If sensitive, use lower density or black-white pattern.
@@ -5060,18 +5680,16 @@ function updateRightSidebarForMode(mode) {
         <div style="padding:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">TEXEL DENSITY</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <label style="font-size:11px;color:var(--muted)">Normalize:</label>
-            <select id="texel-normalize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="global" selected>Global (all meshes)</option>
-              <option value="per-mesh">Per Mesh</option>
-            </select>
-            <label style="font-size:11px;color:var(--muted)">Texture Size:</label>
-            <select id="texel-texsize" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="512">512</option>
-              <option value="1024" selected>1024</option>
-              <option value="2048">2048</option>
-              <option value="4096">4096</option>
-            </select>
+            ${createCustomDropdown('texel-normalize', 'Normalize', [
+              {value: 'global', label: 'Global (all meshes)'},
+              {value: 'per-mesh', label: 'Per Mesh'}
+            ], texelNormalizeGlobal ? 'global' : 'per-mesh').triggerHtml}
+            ${createCustomDropdown('texel-texsize', 'Texture Size', [
+              {value: '512', label: '512'},
+              {value: '1024', label: '1024'},
+              {value: '2048', label: '2048'},
+              {value: '4096', label: '4096'}
+            ], texelTextureSize).triggerHtml}
           </div>
           <div id="texel-summary" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
           <div id="texel-legend" style="display:none">
@@ -5093,11 +5711,10 @@ function updateRightSidebarForMode(mode) {
         <div style="padding:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">OVERLAP DETECTION</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <label style="font-size:11px;color:var(--muted)">Resolution:</label>
-            <select id="overlap-resolution" class="btn-outline" style="padding:6px 10px;font-size:11px;background:var(--s2);border-color:var(--border2);color:var(--white);border-radius:6px">
-              <option value="1024" selected>1024²</option>
-              <option value="2048">2048²</option>
-            </select>
+            ${createCustomDropdown('overlap-resolution', 'Resolution', [
+              {value: '1024', label: '1024²'},
+              {value: '2048', label: '2048²'}
+            ], '1024').triggerHtml}
           </div>
           <div id="overlap-summary" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
           <div id="overlap-legend" style="display:none">
@@ -5123,48 +5740,66 @@ function updateRightSidebarForMode(mode) {
   content.innerHTML = html;
   if (sheetContent) sheetContent.innerHTML = html;
 
-  // Re-bind event handlers for the new content
-  bindModeOptions(mode);
+  // Re-bind event handlers for the new content (bind to sidebar panel)
+  bindModeOptions(mode, content);
 }
 
-function bindModeOptions(mode) {
+function bindModeOptions(mode, container) {
   if (mode === 'checker') {
-    const cells = document.getElementById('checker-cells');
-    const pattern = document.getElementById('checker-pattern');
-    const texsize = document.getElementById('checker-texsize');
+    bindCustomDropdown('checker-cells', (value) => {
+      checkerOptions.cells = parseInt(value);
+      if (current3DMode === 'checker') updateCheckerTexture();
+    }, container);
+    bindCustomDropdown('checker-pattern', (value) => {
+      checkerOptions.pattern = value;
+      if (current3DMode === 'checker') updateCheckerTexture();
+    }, container);
+    bindCustomDropdown('checker-texsize', (value) => {
+      checkerOptions.texSize = parseInt(value);
+      if (current3DMode === 'checker') updateCheckerTexture();
+    }, container);
     const glyph = document.getElementById('checker-glyph');
     const glyphChar = document.getElementById('checker-glyph-char');
-    if (cells) cells.addEventListener('change', e => { checkerOptions.cells = parseInt(e.target.value); if (current3DMode === 'checker') updateCheckerTexture(); });
-    if (pattern) pattern.addEventListener('change', e => { checkerOptions.pattern = e.target.value; if (current3DMode === 'checker') updateCheckerTexture(); });
-    if (texsize) texsize.addEventListener('change', e => { checkerOptions.texSize = parseInt(e.target.value); if (current3DMode === 'checker') updateCheckerTexture(); });
     if (glyph) glyph.addEventListener('change', e => { checkerOptions.showGlyph = e.target.checked; if (current3DMode === 'checker') updateCheckerTexture(); });
     if (glyphChar) glyphChar.addEventListener('input', e => { checkerOptions.glyphChar = e.target.value.slice(0, 1).toUpperCase() || 'F'; if (current3DMode === 'checker') updateCheckerTexture(); });
   } else if (mode === 'problems') {
-    // Problem filter handlers registered once at module init (lines 2218-2228)
+    // Problem filter handlers (re-bind on panel show since buttons are dynamic)
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+      // Remove any existing handlers to avoid duplicates
+      btn.replaceWith(btn.cloneNode(true));
+    });
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.filter;
+        problemFilters[filter] = !problemFilters[filter];
+        btn.classList.toggle('active', problemFilters[filter]);
+        if (current3DMode === 'problems' || current2DOverlay === 'problems') {
+          applyAnalysisToScene();
+          if (current2DOverlay === 'problems') draw2DOverlay();
+        }
+      });
+    });
   } else if (mode === 'texel') {
-    const normalize = document.getElementById('texel-normalize');
-    const texsize = document.getElementById('texel-texsize');
-    if (normalize) normalize.addEventListener('change', e => {
-      texelNormalizeGlobal = e.target.value === 'global';
+    bindCustomDropdown('texel-normalize', (value) => {
+      texelNormalizeGlobal = value === 'global';
       if (current3DMode === 'texel' || current2DOverlay === 'texel') {
         applyAnalysisToScene();
         if (current2DOverlay === 'texel') draw2DOverlay();
       }
       updateTexelSummary();
-    });
-    if (texsize) texsize.addEventListener('change', e => {
-      texelTextureSize = parseInt(e.target.value);
+    }, container);
+    bindCustomDropdown('texel-texsize', (value) => {
+      texelTextureSize = parseInt(value);
       if (current3DMode === 'texel') updateTexelSummary();
-    });
+    }, container);
   } else if (mode === 'overlap') {
-    const resolution = document.getElementById('overlap-resolution');
-    if (resolution) resolution.addEventListener('change', e => {
-      overlapResolution = parseInt(e.target.value);
+    bindCustomDropdown('overlap-resolution', (value) => {
+      overlapResolution = parseInt(value);
       if (current3DMode === 'overlap' || current2DOverlay === 'overlap') {
         runAnalysisIfNeeded(current3DMode);
         if (current2DOverlay === 'overlap') draw2DOverlay();
       }
-    });
+    }, container);
   }
 }
 
@@ -5182,10 +5817,11 @@ function updateViewportHint() {
 }
 
 // 2D UV Map modal handler
-document.getElementById('tool-2d').addEventListener('click', openUV2DModal);
-document.getElementById('btn-close-uv2d-modal').addEventListener('click', closeUV2DModal);
-document.getElementById('uv2d-modal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('uv2d-modal')) closeUV2DModal();
+document.getElementById('tool-2d')?.addEventListener('click', openUV2DModal);
+document.getElementById('btn-close-uv2d-modal')?.addEventListener('click', closeUV2DModal);
+const uv2dModal = document.getElementById('uv2d-modal');
+uv2dModal?.addEventListener('click', (e) => {
+  if (e.target === uv2dModal) closeUV2DModal();
 });
 
 let uv2dOpenedAt = 0; // used to ignore the ghost tap that lands on the canvas right after opening
@@ -5557,8 +6193,8 @@ document.querySelectorAll('.tool-group-header').forEach(header => {
 });
 
 // Export buttons
-document.getElementById('tool-export-obj').addEventListener('click', exportOBJ);
-document.getElementById('tool-export-png').addEventListener('click', () => {
+document.getElementById('tool-export-obj')?.addEventListener('click', exportOBJ);
+document.getElementById('tool-export-png')?.addEventListener('click', () => {
   // Open 2D UV map modal and trigger download after build
   openUV2DModal();
   // Wait for modal to build then click download

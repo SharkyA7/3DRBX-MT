@@ -5,7 +5,7 @@
 // - API routes: not intercepted at all
 // - Does NOT skipWaiting on install: the page asks for it after the user taps "Update"
 
-const VERSION = 'v4';
+const VERSION = 'v8';
 const STATIC_CACHE = '3drbxmt-static-' + VERSION;
 const CDN_CACHE = '3drbxmt-cdn-v1'; // CDN URLs are version-pinned, so this one can persist across releases
 

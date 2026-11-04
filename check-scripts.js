@@ -8,11 +8,65 @@ const { spawnSync } = require('child_process');
 
 const PAGES = ['index.html', 'uv-checker.html', 'beta.html', 'flipbook.html', 'maintenance.html', 'privacy.html', 'terms.html'];
 const SYNCED = ['index.html', 'uv-checker.html', 'sw.js', 'manifest.json'];
+const MODALS = ['settings-modal', 'uv2d-modal', 'sheet-tools', 'sheet-options', 'sheet-layers'];
 let failed = 0;
+
+// Check modal/sheet elements exist and no divs left unclosed
+// Only runs on uv-checker.html since other pages don't have these elements
+function checkMarkup(html, filename) {
+  if (filename !== 'uv-checker.html') return;
+
+  // Only check markup before <script type="importmap">
+  const importMapIndex = html.indexOf('<script type="importmap">');
+  const markup = importMapIndex > -1 ? html.slice(0, importMapIndex) : html;
+
+  // Parse div nesting
+  const stack = [];
+  const foundModals = new Set();
+  const divOpenRegex = /<div\b[^>]*>/gi;
+  const divCloseRegex = /<\/div>/gi;
+
+  let match;
+  while ((match = divOpenRegex.exec(markup)) !== null) {
+    const tag = match[0];
+    const modalMatch = tag.match(/id="(settings-modal|uv2d-modal|sheet-tools|sheet-options|sheet-layers)"/);
+    if (modalMatch) foundModals.add(modalMatch[1]);
+    stack.push({ tag: 'div', modal: modalMatch ? modalMatch[1] : null });
+  }
+
+  while ((match = divCloseRegex.exec(markup)) !== null) {
+    if (stack.length > 0) stack.pop();
+    else {
+      failed++;
+      console.error(`FAIL ${filename}: stray </div> at position ${match.index}`);
+    }
+  }
+
+  // Check all 5 modals exist
+  for (const m of MODALS) {
+    if (!foundModals.has(m)) {
+      failed++;
+      console.error(`FAIL ${filename}: #${m} not found in markup`);
+    }
+  }
+
+  // Check unclosed divs
+  if (stack.length > 0) {
+    failed++;
+    console.error(`FAIL ${filename}: ${stack.length} unclosed <div> tag(s) at end of markup`);
+    for (const item of stack.slice(-3)) {
+      console.error(`  Last unclosed: <div${item.modal ? ' id="' + item.modal + '"' : ''}>`);
+    }
+  }
+}
 
 for (const page of PAGES) {
   if (!fs.existsSync(page)) continue;
   const html = fs.readFileSync(page, 'utf8');
+
+  // Markup structure check
+  checkMarkup(html, page);
+
   const re = /<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
   let m, i = 0;
   while ((m = re.exec(html))) {
