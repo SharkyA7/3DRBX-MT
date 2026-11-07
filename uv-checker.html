@@ -3814,6 +3814,121 @@ ToolRegistry.registerTool('2d', {
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>'
 });
 
+// ============================================================================
+// PHASE 7: UV UTILITIES (View section)
+// ============================================================================
+
+// --- Padding Overlay (visualize padding between islands) ---
+function paddingOverlayTool(sel, params, meshData) {
+  const padding = params.padding ?? 0.005;
+  const showNumbers = params.showNumbers ?? true;
+
+  st(`⚙ Padding Overlay: ${padding} UV`, 'loading');
+
+  // This is a view toggle - the actual rendering happens in buildUV2DInModal
+  // by reading this global state
+  window.paddingOverlayState = {
+    enabled: true,
+    padding,
+    showNumbers
+  };
+
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+    buildUV2DInModal();
+  }
+
+  st(`✓ Padding Overlay active (padding: ${padding})`, 'ok');
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('padding-overlay', {
+  fn: paddingOverlayTool,
+  params: [
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'showNumbers', type: 'checkbox', label: 'Show padding values', default: true }
+  ],
+  description: 'Visualize padding gaps between UV islands in 2D view',
+  section: 'view',
+  tooltip: 'Padding Overlay',
+  label: 'Padding Overlay',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="6" y="6" width="12" height="12" rx="1"/><text x="12" y="16" text-anchor="middle" font-size="8" fill="currentColor">↔</text></svg>'
+});
+
+// --- Exposure Adjustment (adjust checker texture brightness/contrast) ---
+function exposureAdjustmentTool(sel, params, meshData) {
+  const brightness = params.brightness ?? 0;
+  const contrast = params.contrast ?? 1;
+  const gamma = params.gamma ?? 1;
+
+  st(`⚙ Adjusting exposure…`, 'loading');
+
+  window.checkerExposureState = {
+    brightness: THREE.MathUtils.clamp(brightness, -1, 1),
+    contrast: THREE.MathUtils.clamp(contrast, 0.1, 3),
+    gamma: THREE.MathUtils.clamp(gamma, 0.1, 3)
+  };
+
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  st(`✓ Exposure adjusted (B: ${brightness.toFixed(2)}, C: ${contrast.toFixed(2)}, G: ${gamma.toFixed(2)})`, 'ok');
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('exposure-adjustment', {
+  fn: exposureAdjustmentTool,
+  params: [
+    { name: 'brightness', type: 'number', label: 'Brightness', min: -1, max: 1, step: 0.01, default: 0 },
+    { name: 'contrast', type: 'number', label: 'Contrast', min: 0.1, max: 3, step: 0.01, default: 1 },
+    { name: 'gamma', type: 'number', label: 'Gamma', min: 0.1, max: 3, step: 0.01, default: 1 }
+  ],
+  description: 'Adjust checker texture brightness, contrast, and gamma',
+  section: 'view',
+  tooltip: 'Exposure Adjustment',
+  label: 'Exposure',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+});
+
+// --- Checker Options (configure checker pattern) ---
+function checkerOptionsTool(sel, params, meshData) {
+  const gridSize = params.gridSize ?? 16;
+  const colorA = params.colorA ?? '#cccccc';
+  const colorB = params.colorB ?? '#ffffff';
+  const showGrid = params.showGrid ?? true;
+
+  st(`⚙ Updating checker options…`, 'loading');
+
+  window.checkerOptionsState = {
+    gridSize: Math.max(1, Math.floor(gridSize)),
+    colorA,
+    colorB,
+    showGrid
+  };
+
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  st(`✓ Checker updated (grid: ${gridSize}, colors: ${colorA}/${colorB})`, 'ok');
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('checker-options', {
+  fn: checkerOptionsTool,
+  params: [
+    { name: 'gridSize', type: 'number', label: 'Grid Size (texels)', min: 1, max: 128, step: 1, default: 16 },
+    { name: 'colorA', type: 'color', label: 'Color A', default: '#cccccc' },
+    { name: 'colorB', type: 'color', label: 'Color B', default: '#ffffff' },
+    { name: 'showGrid', type: 'checkbox', label: 'Show grid lines', default: true }
+  ],
+  description: 'Configure checker pattern size, colors, and grid lines',
+  section: 'view',
+  tooltip: 'Checker Options',
+  label: 'Checker Options',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>'
+});
+
 // --- File Operations ---
 ToolRegistry.registerTool('import', {
   fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by handleToolClick
@@ -3841,6 +3956,124 @@ ToolRegistry.registerTool('export-png', {
   tooltip: 'Export UV PNG',
   label: 'Export UV PNG',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+});
+
+// --- UV to Mesh Export (export UV layout as 3D mesh for debugging) ---
+function uvToMeshExportTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const height = params.height ?? 0.01;
+  const includeEdges = params.includeEdges ?? true;
+
+  st('⚙ Exporting UV as mesh…', 'loading');
+
+  const exportMeshes = [];
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    const islands = getAllIslands().filter(i => i.mesh === child);
+    if (islands.length === 0) return;
+
+    for (const isl of islands) {
+      // Create geometry for this island's UV layout
+      const geom = new THREE.BufferGeometry();
+      const positions = [];
+      const uvs = [];
+      const indices = [];
+
+      let vertOffset = 0;
+
+      for (const f of isl.faces) {
+        const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+
+        const u0 = uvAttr.getX(v0), v0uv = uvAttr.getY(v0);
+        const u1 = uvAttr.getX(v1), v1uv = uvAttr.getY(v1);
+        const u2 = uvAttr.getX(v2), v2uv = uvAttr.getY(v2);
+
+        // Use UV as XY, Z = height
+        positions.push(u0, v0uv, height);
+        positions.push(u1, v1uv, height);
+        positions.push(u2, v2uv, height);
+
+        uvs.push(u0, v0uv);
+        uvs.push(u1, v1uv);
+        uvs.push(u2, v2uv);
+
+        indices.push(vertOffset, vertOffset + 1, vertOffset + 2);
+        vertOffset += 3;
+      }
+
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5),
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.8
+      });
+
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.name = `UV_Island_${isl.id}`;
+      exportMeshes.push(mesh);
+      scene.add(mesh);
+    }
+  });
+
+  if (exportMeshes.length > 0) {
+    // Create export group
+    const exportGroup = new THREE.Group();
+    exportGroup.name = 'UV_Export_Group';
+    for (const m of exportMeshes) {
+      exportGroup.add(m);
+    }
+    scene.add(exportGroup);
+
+    // Optionally export as OBJ
+    if (params.exportOBJ) {
+      // Trigger OBJ export for the UV meshes
+      setTimeout(() => {
+        const exporter = new THREE.OBJExporter();
+        const objStr = exporter.parse(exportGroup);
+        const blob = new Blob([objStr], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'uv-layout.obj';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
+    st(`✓ UV mesh exported (${exportMeshes.length} islands)`, 'ok');
+  } else {
+    st('✗ No UV islands to export', 'err');
+  }
+
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('uv-to-mesh-export', {
+  fn: uvToMeshExportTool,
+  params: [
+    { name: 'height', type: 'number', label: 'Mesh Height', min: 0.001, max: 0.1, step: 0.001, default: 0.01, unit: 'units' },
+    { name: 'includeEdges', type: 'checkbox', label: 'Include edge outlines', default: true },
+    { name: 'exportOBJ', type: 'checkbox', label: 'Also download OBJ file', default: false }
+  ],
+  description: 'Export UV layout as 3D mesh for visualization/debugging',
+  section: 'file',
+  tooltip: 'UV to Mesh Export',
+  label: 'UV to Mesh',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
 });
 
 // ============================================================================
