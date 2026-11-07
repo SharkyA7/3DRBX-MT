@@ -90,6 +90,29 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .btn.active{background:var(--green);box-shadow:0 0 16px rgba(0,255,179,.35);}
 .btn-outline.active{background:rgba(80,232,244,.12);border-color:var(--accent);color:var(--accent);}
 
+/* PWA-only tool lock styling */
+.tool-btn.pwa-locked {
+  background: var(--border2) !important;
+  color: var(--muted) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  opacity: 0.6;
+  position: relative;
+}
+.tool-btn.pwa-locked:hover {
+  background: var(--border2) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.tool-btn.pwa-locked::after {
+  content: '🔒';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
 .progress-track{width:100%;height:8px;border-radius:4px;background:var(--s2);overflow:hidden;border:1px solid var(--border2);}
 .progress-fill{height:100%;width:0%;background:var(--accent);transition:width .12s linear;box-shadow:0 0 8px rgba(80,232,244,.5);}
 
@@ -98,6 +121,29 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 
 .warn-box{margin-top:14px;padding:12px 14px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.35);border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--amber);line-height:1.6;}
 .warn-box b{color:var(--white);}
+
+/* ============================================================================
+   PARAMETER PANEL (Phase 0)
+   ============================================================================ */
+.param-panel{padding:8px 0;}
+.param-title{font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:1px;margin-bottom:12px;}
+.param-fields{display:flex;flex-direction:column;gap:12px;max-height:50vh;overflow:auto;}
+.param-field{display:flex;flex-direction:column;gap:6px;}
+.param-field label{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+.param-field input[type="range"]{flex:1;accent-color:var(--accent);}
+.param-field select, .param-field input[type="number"]{
+  background:var(--s1);border:1px solid var(--border2);border-radius:6px;
+  color:var(--white);font-family:var(--font-mono);font-size:12px;padding:8px 10px;
+}
+.param-field select:focus, .param-field input[type="number"]:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 8px rgba(80,232,244,.2);
+}
+.param-value{font-family:var(--font-mono);font-size:11px;color:var(--accent);text-align:right;}
+.param-checkbox{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.param-checkbox input{accent-color:var(--accent);width:16px;height:16px;}
+.param-checkbox span{font-family:var(--font-ui);font-size:12px;color:var(--white);}
+.param-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);}
+.param-actions .btn{padding:10px 16px;font-size:11px;}
 
 /* ============================================================================
    MODALS: Device Picker & Loading Screen
@@ -523,6 +569,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       <button class="top-bar-btn" id="btn-fullscreen" title="Fullscreen" aria-label="Toggle fullscreen">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>
       </button>
+      <button class="top-bar-btn" id="btn-import-gltf" title="Import GLB/GLTF" aria-label="Import GLB/GLTF model">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </button>
       <button class="top-bar-btn" id="btn-settings" title="Settings" aria-label="Open settings">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       </button>
@@ -588,17 +637,25 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/></svg>
               Relax
             </button>
-            <button class="tool-btn" id="tool-unwrap" data-tool="unwrap" title="Unwrap">
+            <button class="tool-btn" id="tool-unwrap" data-tool="unwrap" data-pwa-only title="Unwrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
               Unwrap
             </button>
-            <button class="tool-btn" id="tool-pack" data-tool="pack" title="Pack Islands">
+            <button class="tool-btn" id="tool-pack" data-tool="pack" data-pwa-only title="Pack Islands">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
               Pack
             </button>
-            <button class="tool-btn" id="tool-organize" data-tool="organize" title="Organize / Unfoldify">
+            <button class="tool-btn" id="tool-organize" data-tool="organize" data-pwa-only title="Organize / Unfoldify">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
               Organize
+            </button>
+            <button class="tool-btn" id="tool-undo" title="Undo (Ctrl+Z)" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
+              Undo
+            </button>
+            <button class="tool-btn" id="tool-redo" title="Redo (Ctrl+Shift+Z)" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>
+              Redo
             </button>
           </div>
         </div>
@@ -840,6 +897,94 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   </div>
 </div>
 
+<!-- RBXM Import Modal -->
+<div class="modal-overlay" id="rbxm-import-modal" role="dialog" aria-modal="true" aria-labelledby="rbxm-import-modal-title">
+  <div class="modal-box settings-modal" style="max-width:480px;">
+    <h2 class="modal-title" id="rbxm-import-modal-title" data-i18n="rbxm.import.title">Import RBXM Model</h2>
+
+    <div class="settings-section">
+      <span class="settings-label" data-i18n="rbxm.import.options">Import Options</span>
+
+      <div class="rbxm-option-group">
+        <label class="rbxm-option">
+          <input type="radio" name="rbxm-import-mode" value="separate" checked>
+          <span class="rbxm-option-content">
+            <strong data-i18n="rbxm.import.separate">Separate OBJs</strong>
+            <span data-i18n="rbxm.import.separate.desc">Extract each MeshPart/Union as a separate OBJ file</span>
+          </span>
+        </label>
+        <label class="rbxm-option">
+          <input type="radio" name="rbxm-import-mode" value="merged">
+          <span class="rbxm-option-content">
+            <strong data-i18n="rbxm.import.merged">Merge into One OBJ</strong>
+            <span data-i18n="rbxm.import.merged.desc">Combine all parts into a single OBJ with proper positioning</span>
+          </span>
+        </label>
+      </div>
+
+      <label class="rbxm-option-checkbox">
+        <input type="checkbox" id="rbxm-include-textures" checked>
+        <span data-i18n="rbxm.import.textures">Include Textures</span>
+      </label>
+    </div>
+
+    <div id="rbxm-progress-wrap" style="display:none;margin-top:16px;">
+      <div class="progress-track"><div class="progress-fill" id="rbxm-progress-fill"></div></div>
+      <div class="hint" id="rbxm-progress-label" data-i18n="rbxm.import.progress">Uploading and converting… 0%</div>
+    </div>
+
+    <div id="rbxm-results-wrap" style="display:none;margin-top:16px;">
+      <h3 style="font-size:12px;margin-bottom:10px;color:var(--white);" data-i18n="rbxm.import.results">Extracted Meshes</h3>
+      <div id="rbxm-results-list" style="max-height:300px;overflow:auto;"></div>
+    </div>
+
+    <div id="rbxm-error-wrap" style="display:none;margin-top:16px;padding:12px;background:rgba(255,68,102,.1);border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:11px;"></div>
+
+    <div class="settings-row" style="margin-top:16px;justify-content:flex-end;">
+      <button class="btn-outline" id="btn-cancel-rbxm-import" data-i18n="cancel">Cancel</button>
+      <button class="btn" id="btn-start-rbxm-import" data-i18n="rbxm.import.start">Start Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- GLB/GLTF Import Modal -->
+<div class="modal-overlay" id="gltf-import-modal" role="dialog" aria-modal="true" aria-labelledby="gltf-import-modal-title">
+  <div class="modal-box settings-modal" style="max-width:480px;">
+    <h2 class="modal-title" id="gltf-import-modal-title" data-i18n="gltf.import.title">Import GLB/GLTF Model</h2>
+
+    <div class="settings-section">
+      <span class="settings-label" data-i18n="gltf.import.options">Import Options</span>
+
+      <label class="rbxm-option-checkbox">
+        <input type="checkbox" id="gltf-include-textures" checked>
+        <span data-i18n="gltf.import.textures">Include Textures</span>
+      </label>
+
+      <label class="rbxm-option-checkbox">
+        <input type="checkbox" id="gltf-merge-meshes" checked>
+        <span data-i18n="gltf.import.merge">Merge Meshes</span>
+      </label>
+
+      <label class="rbxm-option-checkbox">
+        <input type="checkbox" id="gltf-load-animations">
+        <span data-i18n="gltf.import.animations">Load Animations (experimental)</span>
+      </label>
+    </div>
+
+    <div id="gltf-progress-wrap" style="display:none;margin-top:16px;">
+      <div class="progress-track"><div class="progress-fill" id="gltf-progress-fill"></div></div>
+      <div class="hint" id="gltf-progress-label" data-i18n="gltf.import.progress">Loading… 0%</div>
+    </div>
+
+    <div id="gltf-error-wrap" style="display:none;margin-top:16px;padding:12px;background:rgba(255,68,102,.1);border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:11px;"></div>
+
+    <div class="settings-row" style="margin-top:16px;justify-content:flex-end;">
+      <button class="btn-outline" id="btn-cancel-gltf-import" data-i18n="cancel">Cancel</button>
+      <button class="btn" id="btn-start-gltf-import" data-i18n="gltf.import.start">Import GLB/GLTF</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 // Watchdog: if the UV Editor module never starts (blocked/failed CDN import, bad cache), show a recovery screen instead of a blank page.
@@ -896,6 +1041,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 window.__uvBooted = true; // all module imports resolved
 
@@ -973,10 +1119,889 @@ const GIZMO_COLOR_Y = '#00FFB3';
 let islandCache = null;
 let islandCacheVersion = 0;
 
-function st(msg, kind){
+// ============================================================================
+// UNDO/REDO HISTORY MODULE
+// ============================================================================
+// Stores diffs for granular ops, full snapshots for bulk ops.
+// Max 50 steps, ~50 MB cap for phone-friendly memory.
+const UVHistory = (() => {
+  const MAX_STEPS = 50;
+  const MAX_MEMORY_BYTES = 50 * 1024 * 1024; // 50 MB
+
+  let undoStack = [];
+  let redoStack = [];
+  let currentMemory = 0;
+
+  // Calculate memory cost of a history entry
+  function entryMemory(entry) {
+    if (entry.type === 'snapshot') {
+      // Full snapshot: sum of all UV array byte lengths
+      return entry.meshes.reduce((sum, m) => sum + (m.uvArray ? m.uvArray.byteLength : 0), 0);
+    } else if (entry.type === 'snapshot-pair') {
+      // Snapshot pair: sum of both before and after snapshot memory
+      const beforeMem = entry.before.meshes.reduce((sum, m) => sum + (m.uvArray ? m.uvArray.byteLength : 0), 0);
+      const afterMem = entry.after.meshes.reduce((sum, m) => sum + (m.uvArray ? m.uvArray.byteLength : 0), 0);
+      return beforeMem + afterMem;
+    } else {
+      // Diff: each changed vertex stores oldU, oldV, newU, newV (4 floats = 16 bytes) + index (4 bytes) + meshId string
+      return entry.changes.reduce((sum, c) => sum + 20 + (c.meshId?.length || 0), 0);
+    }
+  }
+
+  // Remove oldest entries until memory is under limit
+  function enforceMemoryLimit(stack) {
+    while (currentMemory > MAX_MEMORY_BYTES && stack.length > 0) {
+      const removed = stack.shift();
+      currentMemory -= entryMemory(removed);
+    }
+  }
+
+  // Remove oldest entries until step count is under limit
+  function enforceStepLimit(stack) {
+    while (stack.length > MAX_STEPS) {
+      const removed = stack.shift();
+      currentMemory -= entryMemory(removed);
+    }
+  }
+
+  // Capture current UV state for all meshes as a full snapshot
+  function captureSnapshot() {
+    const meshes = [];
+    if (currentRoot) {
+      currentRoot.traverse(child => {
+        if (!child.isMesh) return;
+        const data = getUVData(child);
+        if (!data) return;
+        const { uvAttr } = data;
+        // Clone the entire UV array
+        const uvArray = new Float32Array(uvAttr.array.length);
+        uvArray.set(uvAttr.array);
+        meshes.push({
+          meshId: child.uuid,
+          uvArray,
+          indexCount: uvAttr.count
+        });
+      });
+    }
+    return { type: 'snapshot', meshes, timestamp: Date.now() };
+  }
+
+  // Apply a snapshot (restore all UV arrays)
+  function applySnapshot(entry) {
+    if (!currentRoot) return;
+    for (const meshData of entry.meshes) {
+      const mesh = currentRoot.getObjectByProperty('uuid', meshData.meshId);
+      if (!mesh) continue;
+      const uvAttr = mesh.geometry.attributes.uv;
+      if (!uvAttr) continue;
+      uvAttr.array = meshData.uvArray.slice();
+      uvAttr.needsUpdate = true;
+    }
+    islandCache = null; // Invalidate island cache
+    islandCacheVersion++;
+    refreshAllViews();
+  }
+
+  // Apply a diff (restore old values)
+  function applyDiff(entry, reverse) {
+    if (!currentRoot) return;
+    for (const change of entry.changes) {
+      const mesh = currentRoot.getObjectByProperty('uuid', change.meshId);
+      if (!mesh) continue;
+      const uvAttr = mesh.geometry.attributes.uv;
+      if (!uvAttr) continue;
+      uvAttr.array = uvAttr.array.slice(); // Force copy for Three.js update
+      if (reverse) {
+        // Undo: restore old values
+        uvAttr.setX(change.index, change.oldU);
+        uvAttr.setY(change.index, change.oldV);
+      } else {
+        // Redo: apply new values
+        uvAttr.setX(change.index, change.newU);
+        uvAttr.setY(change.index, change.newV);
+      }
+      uvAttr.needsUpdate = true;
+    }
+    islandCache = null;
+    islandCacheVersion++;
+    refreshAllViews();
+  }
+
+  // Public API
+  return {
+    // Capture current UV state as a snapshot (for before/after in transform ops)
+    captureSnapshot() {
+      return captureSnapshot();
+    },
+
+    // Push a diff entry (for move, scale, rotate, flip, pin, weld, stitch)
+    pushDiff(changes, operation) {
+      if (!changes || changes.length === 0) return;
+      // Clear redo stack on new edit
+      redoStack = [];
+      currentMemory = 0; // Will be recalculated
+      const entry = { type: 'diff', changes, timestamp: Date.now(), operation: operation || 'Edit' };
+      undoStack.push(entry);
+      currentMemory += entryMemory(entry);
+      enforceMemoryLimit(undoStack);
+      enforceStepLimit(undoStack);
+    },
+
+    // Push a snapshot entry (for unwrap, pack, reset, import)
+    pushSnapshot(operation) {
+      redoStack = [];
+      currentMemory = 0;
+      const entry = captureSnapshot();
+      entry.operation = operation || 'Import';
+      undoStack.push(entry);
+      currentMemory += entryMemory(entry);
+      enforceMemoryLimit(undoStack);
+      enforceStepLimit(undoStack);
+    },
+
+    // Push a diff with before/after snapshots for complex ops that change many vertices
+    pushTransform(beforeSnapshot, afterSnapshot, operation) {
+      redoStack = [];
+      currentMemory = 0;
+      // If many vertices changed, store as snapshot; otherwise as diff
+      const beforeCount = beforeSnapshot.meshes.reduce((s, m) => s + m.indexCount, 0);
+      const afterCount = afterSnapshot.meshes.reduce((s, m) => s + m.indexCount, 0);
+      if (beforeCount > 50000 || afterCount > 50000) {
+        // Large change - store as snapshot pair
+        undoStack.push({ type: 'snapshot-pair', before: beforeSnapshot, after: afterSnapshot, timestamp: Date.now(), operation: operation || 'Transform' });
+      } else {
+        // Compute diff
+        const changes = [];
+        for (const afterMesh of afterSnapshot.meshes) {
+          const beforeMesh = beforeSnapshot.meshes.find(m => m.meshId === afterMesh.meshId);
+          if (!beforeMesh) continue;
+          const minLen = Math.min(beforeMesh.uvArray.length, afterMesh.uvArray.length);
+          for (let i = 0; i < minLen; i += 2) {
+            const oldU = beforeMesh.uvArray[i];
+            const oldV = beforeMesh.uvArray[i + 1];
+            const newU = afterMesh.uvArray[i];
+            const newV = afterMesh.uvArray[i + 1];
+            if (oldU !== newU || oldV !== newV) {
+              changes.push({ meshId: afterMesh.meshId, index: i / 2, oldU, oldV, newU, newV });
+            }
+          }
+        }
+        if (changes.length > 0) {
+          undoStack.push({ type: 'diff', changes, timestamp: Date.now(), operation: operation || 'Transform' });
+        }
+      }
+      currentMemory = undoStack.reduce((s, e) => s + entryMemory(e), 0);
+      enforceMemoryLimit(undoStack);
+      enforceStepLimit(undoStack);
+    },
+
+    undo() {
+      if (undoStack.length === 0) return null;
+      const entry = undoStack.pop();
+      currentMemory -= entryMemory(entry);
+      let operation = entry.operation || 'Edit';
+      if (entry.type === 'snapshot') {
+        applySnapshot(entry);
+        redoStack.push({ type: 'snapshot', meshes: entry.meshes.map(m => ({ ...m, uvArray: m.uvArray.slice() })), timestamp: entry.timestamp, operation });
+      } else if (entry.type === 'diff') {
+        applyDiff(entry, true);
+        redoStack.push({ type: 'diff', changes: entry.changes.map(c => ({ ...c })), timestamp: entry.timestamp, operation });
+      } else if (entry.type === 'snapshot-pair') {
+        applySnapshot(entry.before);
+        redoStack.push({ type: 'snapshot-pair', before: entry.before, after: entry.after, timestamp: entry.timestamp, operation });
+      }
+      currentMemory += entryMemory(redoStack[redoStack.length - 1]);
+      return operation;
+    },
+
+    redo() {
+      if (redoStack.length === 0) return null;
+      const entry = redoStack.pop();
+      currentMemory -= entryMemory(entry);
+      let operation = entry.operation || 'Edit';
+      if (entry.type === 'snapshot') {
+        applySnapshot(entry);
+        undoStack.push({ type: 'snapshot', meshes: entry.meshes.map(m => ({ ...m, uvArray: m.uvArray.slice() })), timestamp: entry.timestamp, operation });
+      } else if (entry.type === 'diff') {
+        applyDiff(entry, false);
+        undoStack.push({ type: 'diff', changes: entry.changes.map(c => ({ ...c })), timestamp: entry.timestamp, operation });
+      } else if (entry.type === 'snapshot-pair') {
+        applySnapshot(entry.after);
+        undoStack.push({ type: 'snapshot-pair', before: entry.before, after: entry.after, timestamp: entry.timestamp, operation });
+      }
+      currentMemory += entryMemory(undoStack[undoStack.length - 1]);
+      return operation;
+    },
+
+    clear() {
+      undoStack = [];
+      redoStack = [];
+      currentMemory = 0;
+    },
+
+    canUndo() { return undoStack.length > 0; },
+    canRedo() { return redoStack.length > 0; },
+    getUndoCount() { return undoStack.length; },
+    getRedoCount() { return redoStack.length; }
+  };
+})();
+
+// PWA: detect if running in standalone/fullscreen mode (installed PWA)
+// On localhost: always return true so all tools are available for testing
+function isFullMode() {
+  const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (isLocalhost) return true;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true ||
+         document.referrer.includes('android-app://');
+}
+
+// Apply PWA-only tool locks based on full mode
+function applyPwaToolLocks() {
+  const fullMode = isFullMode();
+  document.querySelectorAll('[data-pwa-only]').forEach(btn => {
+    if (!fullMode) {
+      btn.disabled = true;
+      btn.classList.add('pwa-locked');
+      btn.title = (btn.title || '') + ' — Install the app to unlock';
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('pwa-locked');
+      if (btn.title && btn.title.includes('Install the app to unlock')) {
+        btn.title = btn.title.replace(' — Install the app to unlock', '');
+      }
+    }
+  });
+}
+
+// Re-apply locks when display mode changes (e.g., user installs app)
+window.matchMedia('(display-mode: standalone)').addEventListener('change', applyPwaToolLocks);
+
+// ============================================================================
+// PHASE 0: TOOL INFRASTRUCTURE
+// ============================================================================
+
+// --- Tool Registry ---
+const ToolRegistry = (() => {
+  const tools = new Map(); // name -> { fn, params, description, section, tooltip }
+  const sections = new Map(); // sectionName -> { title, order, tools: [] }
+
+  function registerSection(name, { title, order = 99 }) {
+    if (!sections.has(name)) {
+      sections.set(name, { title, order, tools: [] });
+    }
+    return sections.get(name);
+  }
+
+  function registerTool(name, config) {
+    const { fn, params = [], description = '', section = 'uv', tooltip = '' } = config;
+    if (tools.has(name)) {
+      console.warn(`[ToolRegistry] Tool "${name}" already registered, overwriting`);
+    }
+    tools.set(name, { fn, params, description, section, tooltip });
+    const sec = registerSection(section);
+    if (!sec.tools.includes(name)) sec.tools.push(name);
+  }
+
+  function getTool(name) {
+    return tools.get(name);
+  }
+
+  function getToolsInSection(sectionName) {
+    const sec = sections.get(sectionName);
+    return sec ? sec.tools.map(n => ({ name: n, ...tools.get(n) })) : [];
+  }
+
+  function getAllSections() {
+    return Array.from(sections.entries())
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([name, data]) => ({ name, ...data }));
+  }
+
+  function executeTool(name, selection, params, meshData) {
+    const tool = tools.get(name);
+    if (!tool) throw new Error(`Tool "${name}" not found`);
+    return tool.fn(selection, params, meshData);
+  }
+
+  return { registerTool, registerSection, getTool, getToolsInSection, getAllSections, executeTool };
+})();
+
+// --- Unified Selection Abstraction ---
+function getSelection(mesh) {
+  const uvData = getUVData(mesh);
+  if (!uvData) return { vertices: new Set(), edges: new Set(), faces: new Set(), islands: new Set() };
+
+  const { uvAttr, idx } = uvData;
+  const vertCount = uvAttr.count;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(vertCount / 3);
+
+  const selectedVerts = new Set();
+  const selectedEdges = new Set();
+  const selectedFaces = new Set();
+  const selectedIslands = new Set();
+
+  const meshId = mesh.uuid;
+
+  // Vertex selection
+  for (const key of selection.vertices) {
+    const [mId, vIdx] = key.split(':');
+    if (mId === meshId) selectedVerts.add(parseInt(vIdx));
+  }
+
+  // Edge selection
+  for (const key of selection.edges) {
+    const [mId, edge] = key.split(':');
+    if (mId === meshId) selectedEdges.add(edge);
+  }
+
+  // Face selection
+  for (const key of selection.faces) {
+    const [mId, fIdx] = key.split(':');
+    if (mId === meshId) selectedFaces.add(parseInt(fIdx));
+  }
+
+  // Island selection
+  const islands = getAllIslands();
+  for (const isl of islands) {
+    if (selection.islands.has(isl.id) && isl.mesh === mesh) {
+      selectedIslands.add(isl.id);
+      // Also add all vertices/faces of this island
+      for (const v of isl.vertices) selectedVerts.add(v);
+      for (const f of isl.faces) selectedFaces.add(f);
+    }
+  }
+
+  // Helper to get UV for a vertex index
+  function getUV(vi) {
+    const vIdx = idx ? idx.getX(vi) : vi;
+    return [uvAttr.getX(vIdx), uvAttr.getY(vIdx)];
+  }
+
+  function setUV(vi, u, v) {
+    const vIdx = idx ? idx.getX(vi) : vi;
+    uvAttr.setX(vIdx, u);
+    uvAttr.setY(vIdx, v);
+  }
+
+  return {
+    mesh,
+    meshId,
+    uvAttr,
+    idx,
+    vertCount,
+    triCount,
+    selectedVerts,
+    selectedEdges,
+    selectedFaces,
+    selectedIslands,
+    getUV,
+    setUV,
+    hasSelection: () => selectedVerts.size > 0 || selectedEdges.size > 0 || selectedFaces.size > 0 || selectedIslands.size > 0
+  };
+}
+
+// Get selection for all meshes
+function getAllSelections() {
+  const result = [];
+  if (!currentRoot) return result;
+  currentRoot.traverse(child => {
+    if (child.isMesh) {
+      const sel = getSelection(child);
+      if (sel.hasSelection()) result.push(sel);
+    }
+  });
+  return result;
+}
+
+// --- Base Tool Pattern: returns { diffs: [{ vertexIndex, oldUV: [u,v], newUV: [u,v] }] }
+// Caller must push to UVHistory via UVHistory.pushDiff(diffs, operationName)
+function createToolDiff(selection, oldUVs, newUVs) {
+  const diffs = [];
+  for (let i = 0; i < oldUVs.length; i++) {
+    const vi = oldUVs[i].index;
+    const oldU = oldUVs[i].u;
+    const oldV = oldUVs[i].v;
+    const newU = newUVs[i].u;
+    const newV = newUVs[i].v;
+    if (oldU !== newU || oldV !== newV) {
+      diffs.push({ vertexIndex: vi, oldUV: [oldU, oldV], newUV: [newU, newV] });
+    }
+  }
+  return diffs;
+}
+
+// --- Parameter Panel System ---
+function createParameterPanel(toolName, params, onApply, onCancel, onLivePreview) {
+  const panel = document.getElementById('right-sidebar-content');
+  if (!panel) return;
+
+  const title = ToolRegistry.getTool(toolName)?.description || toolName;
+  panel.innerHTML = `
+    <div class="param-panel" data-tool="${toolName}">
+      <h4 class="param-title">${title}</h4>
+      <div class="param-fields"></div>
+      <div class="param-actions">
+        <button class="btn btn-outline param-cancel">Cancel</button>
+        <button class="btn param-apply">Apply</button>
+      </div>
+    </div>
+  `;
+
+  const fieldsContainer = panel.querySelector('.param-fields');
+
+  for (const param of params) {
+    const field = document.createElement('div');
+    field.className = 'param-field';
+
+    if (param.type === 'number') {
+      field.innerHTML = `
+        <label>${param.label}${param.unit ? ` (${param.unit})` : ''}</label>
+        <input type="range" class="param-slider"
+               min="${param.min ?? 0}" max="${param.max ?? 1}" step="${param.step ?? 0.01}"
+               value="${param.default ?? param.min ?? 0}"
+               data-param="${param.name}">
+        <span class="param-value">${param.default ?? param.min ?? 0}</span>
+      `;
+    } else if (param.type === 'select') {
+      const options = param.options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+      field.innerHTML = `
+        <label>${param.label}</label>
+        <select class="param-select" data-param="${param.name}">${options}</select>
+      `;
+    } else if (param.type === 'checkbox') {
+      field.innerHTML = `
+        <label class="param-checkbox">
+          <input type="checkbox" ${param.default ? 'checked' : ''} data-param="${param.name}">
+          <span>${param.label}</span>
+        </label>
+      `;
+    }
+    fieldsContainer.appendChild(field);
+  }
+
+  // Wire up live preview
+  panel.querySelectorAll('.param-slider, .param-select, .param-checkbox input').forEach(input => {
+    input.addEventListener('input', () => {
+      const values = getParamValues(panel);
+      if (onLivePreview) onLivePreview(values);
+      // Update value display for sliders
+      if (input.classList.contains('param-slider')) {
+        input.nextElementSibling.textContent = parseFloat(input.value).toFixed(input.step.includes('.') ? 2 : 0);
+      }
+    });
+  });
+
+  panel.querySelector('.param-apply').addEventListener('click', () => {
+    const values = getParamValues(panel);
+    onApply(values);
+    closeParameterPanel();
+  });
+
+  panel.querySelector('.param-cancel').addEventListener('click', () => {
+    if (onCancel) onCancel();
+    closeParameterPanel();
+  });
+}
+
+function getParamValues(panel) {
+  const values = {};
+  panel.querySelectorAll('[data-param]').forEach(input => {
+    const name = input.dataset.param;
+    if (input.type === 'checkbox') values[name] = input.checked;
+    else if (input.type === 'range') values[name] = parseFloat(input.value);
+    else values[name] = input.value;
+  });
+  return values;
+}
+
+function closeParameterPanel() {
+  const panel = document.getElementById('right-sidebar-content');
+  if (panel) {
+    panel.innerHTML = '<div id="panel-placeholder" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Select a tool or mode to see options here</div>';
+  }
+}
+
+// --- Web Worker Pool ---
+const WorkerPool = (() => {
+  const workers = new Map(); // name -> { worker, busy: false, resolve: null }
+  const queue = [];
+
+  function getWorker(name, code) {
+    if (!workers.has(name)) {
+      const blob = new Blob([code], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      const worker = new Worker(url);
+      workers.set(name, { worker, busy: false, resolve: null });
+    }
+    return workers.get(name);
+  }
+
+  function runInWorker(name, code, data, transferables = []) {
+    return new Promise((resolve, reject) => {
+      const entry = getWorker(name, code);
+      const { worker, busy } = entry;
+
+      const task = { data, transferables, resolve, reject };
+
+      if (!busy) {
+        executeTask(entry, task);
+      } else {
+        queue.push({ entry, task });
+      }
+    });
+  }
+
+  function executeTask(entry, task) {
+    entry.busy = true;
+    entry.worker.postMessage(task.data, task.transferables);
+
+    entry.worker.onmessage = (e) => {
+      entry.busy = false;
+      task.resolve(e.data);
+      processQueue();
+    };
+    entry.worker.onerror = (err) => {
+      entry.busy = false;
+      task.reject(err);
+      processQueue();
+    };
+  }
+
+  function processQueue() {
+    if (queue.length === 0) return;
+    for (const name of workers.keys()) {
+      const entry = workers.get(name);
+      if (!entry.busy && queue.length > 0) {
+        const { entry: qEntry, task } = queue.shift();
+        executeTask(qEntry, task);
+        break;
+      }
+    }
+  }
+
+  function terminateAll() {
+    for (const { worker } of workers.values()) worker.terminate();
+    workers.clear();
+    queue.length = 0;
+  }
+
+  return { runInWorker, terminateAll };
+})();
+
+// --- Collapsible Tool Groups Registration ---
+// Extends existing sidebar group UI with dynamic registration
+function registerToolGroup(sectionName, groupConfig) {
+  // groupConfig: { title, order, tools: [toolName1, toolName2, ...] }
+  ToolRegistry.registerSection(sectionName, { title: groupConfig.title, order: groupConfig.order });
+  for (const toolName of groupConfig.tools) {
+    // Tools should already be registered via ToolRegistry.registerTool
+  }
+}
+
+// Build tool groups in sidebar from registry
+function buildToolGroupsFromRegistry() {
+  const sidebarContent = document.querySelector('.sidebar-content');
+  if (!sidebarContent) return;
+
+  const sections = ToolRegistry.getAllSections();
+  sidebarContent.innerHTML = ''; // Clear existing static groups
+
+  for (const sec of sections) {
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'tool-group';
+    groupDiv.id = `group-${sec.name}`;
+
+    groupDiv.innerHTML = `
+      <div class="tool-group-header">
+        <span class="tool-group-title">${sec.title}</span>
+        <svg class="tool-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="tool-group-body"></div>
+    `;
+
+    const body = groupDiv.querySelector('.tool-group-body');
+    for (const toolName of sec.tools) {
+      const tool = ToolRegistry.getTool(toolName);
+      if (!tool) continue;
+
+      const btn = document.createElement('button');
+      btn.className = 'tool-btn';
+      btn.id = `tool-${toolName}`;
+      btn.dataset.tool = toolName;
+      btn.title = tool.tooltip || tool.description || toolName;
+      btn.innerHTML = `${tool.icon || ''}<span>${tool.label || toolName}</span>`;
+
+      // Click handler
+      btn.addEventListener('click', () => handleToolClick(toolName));
+      body.appendChild(btn);
+    }
+
+    sidebarContent.appendChild(groupDiv);
+  }
+
+  // Re-bind group toggle behavior
+  document.querySelectorAll('.tool-group-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.parentElement.classList.toggle('open');
+    });
+  });
+}
+
+// Initialize default sections (matches existing structure)
+ToolRegistry.registerSection('selection', { title: 'Selection & Transform', order: 1 });
+ToolRegistry.registerSection('uv', { title: 'UV Editing', order: 2 });
+ToolRegistry.registerSection('view', { title: 'View Options', order: 3 });
+ToolRegistry.registerSection('file', { title: 'File Operations', order: 4 });
+
+// Register existing tools into ToolRegistry
+// --- Selection & Transform ---
+ToolRegistry.registerTool('select', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by handleToolClick
+  params: [],
+  description: 'Select vertices, edges, faces, or islands',
+  section: 'selection',
+  tooltip: 'Select (V)',
+  label: 'Select',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>'
+});
+ToolRegistry.registerTool('move', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Gizmo-based
+  params: [],
+  description: 'Move selected UVs',
+  section: 'selection',
+  tooltip: 'Move (G)',
+  label: 'Move',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3"/><path d="M19 9l3 3-3 3"/><path d="M9 5l3-3 3 3"/><path d="M9 19l3 3 3-3"/></svg>'
+});
+ToolRegistry.registerTool('rotate', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Gizmo-based
+  params: [],
+  description: 'Rotate selected UVs',
+  section: 'selection',
+  tooltip: 'Rotate (R)',
+  label: 'Rotate',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6"/><path d="M1 20v-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>'
+});
+ToolRegistry.registerTool('scale', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Gizmo-based
+  params: [],
+  description: 'Scale selected UVs',
+  section: 'selection',
+  tooltip: 'Scale (S)',
+  label: 'Scale',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h6v6"/><path d="M21 3h-6v6"/><path d="M3 21h6v-6"/><path d="M21 21h-6v-6"/></svg>'
+});
+
+// --- UV Editing ---
+ToolRegistry.registerTool('straighten', {
+  fn: (sel, params, meshData) => applyStraightenUV(sel, meshData),
+  params: [
+    { name: 'axis', type: 'select', label: 'Axis', default: 'auto',
+      options: [{ value: 'auto', label: 'Auto' }, { value: 'u', label: 'U (Horizontal)' }, { value: 'v', label: 'V (Vertical)' }] },
+    { name: 'threshold', type: 'number', label: 'Threshold', min: 0, max: 0.5, step: 0.01, default: 0.01, unit: 'UV' }
+  ],
+  description: 'Straighten selected UV edges',
+  section: 'uv',
+  tooltip: 'Straighten UVs',
+  label: 'Straighten',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M12 3v18"/></svg>'
+});
+ToolRegistry.registerTool('align', {
+  fn: (sel, params, meshData) => applyAlignUV(sel, meshData),
+  params: [
+    { name: 'axis', type: 'select', label: 'Axis', default: 'both',
+      options: [{ value: 'both', label: 'Both' }, { value: 'u', label: 'U (Horizontal)' }, { value: 'v', label: 'V (Vertical)' }] },
+    { name: 'gridSize', type: 'number', label: 'Grid Size', min: 0.01, max: 0.5, step: 0.01, default: 0.125, unit: 'UV' }
+  ],
+  description: 'Align selected UVs to grid',
+  section: 'uv',
+  tooltip: 'Align UVs',
+  label: 'Align',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="7" y2="10"/><line x1="7" y1="20" x2="7" y2="4"/></svg>'
+});
+ToolRegistry.registerTool('relax', {
+  fn: (sel, params, meshData) => applyRelaxUV(sel, meshData),
+  params: [
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 50, step: 1, default: 5 },
+    { name: 'strength', type: 'number', label: 'Strength', min: 0.1, max: 1, step: 0.1, default: 1 }
+  ],
+  description: 'Relax/smooth selected UV vertices',
+  section: 'uv',
+  tooltip: 'Relax UVs',
+  label: 'Relax',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/></svg>'
+});
+ToolRegistry.registerTool('unwrap', {
+  fn: (sel, params, meshData) => applyUnwrapUV(sel, meshData),
+  params: [
+    { name: 'method', type: 'select', label: 'Method', default: 'angle',
+      options: [{ value: 'angle', label: 'Angle Based' }, { value: 'conformal', label: 'Conformal' }] },
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' }
+  ],
+  description: 'Unwrap selected faces',
+  section: 'uv',
+  tooltip: 'Unwrap',
+  label: 'Unwrap',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
+});
+ToolRegistry.registerTool('pack', {
+  fn: (sel, params, meshData) => applyPackUV(sel, meshData),
+  params: [
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 20, step: 1, default: 8 }
+  ],
+  description: 'Pack UV islands efficiently',
+  section: 'uv',
+  tooltip: 'Pack Islands',
+  label: 'Pack',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>'
+});
+ToolRegistry.registerTool('organize', {
+  fn: (sel, params, meshData) => applyOrganizeUV(sel, meshData),
+  params: [
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' }
+  ],
+  description: 'Organize/Unfoldify UV islands',
+  section: 'uv',
+  tooltip: 'Organize / Unfoldify',
+  label: 'Organize',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>'
+});
+ToolRegistry.registerTool('undo', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by UVHistory
+  params: [],
+  description: 'Undo last operation (Ctrl+Z)',
+  section: 'uv',
+  tooltip: 'Undo (Ctrl+Z)',
+  label: 'Undo',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>'
+});
+ToolRegistry.registerTool('redo', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by UVHistory
+  params: [],
+  description: 'Redo last undone operation (Ctrl+Shift+Z)',
+  section: 'uv',
+  tooltip: 'Redo (Ctrl+Shift+Z)',
+  label: 'Redo',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>'
+});
+
+// --- View Options ---
+ToolRegistry.registerTool('checker', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Show checkerboard UV map',
+  section: 'view',
+  tooltip: 'Checker Map',
+  label: 'Checker Map',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></svg>'
+});
+ToolRegistry.registerTool('real', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Show real texture',
+  section: 'view',
+  tooltip: 'Real Texture',
+  label: 'Real Texture',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+});
+ToolRegistry.registerTool('wire', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Show wireframe overlay',
+  section: 'view',
+  tooltip: 'Wireframe',
+  label: 'Wireframe',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18v3a2 2 0 01-2 2h-3M3 16v3a2 2 0 002 2h3"/></svg>'
+});
+ToolRegistry.registerTool('problems', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Find UV problems (flipped, overlapping, zero-area)',
+  section: 'view',
+  tooltip: 'Problem Finder',
+  label: 'Problem Finder',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+});
+ToolRegistry.registerTool('texel', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Show texel density heatmap',
+  section: 'view',
+  tooltip: 'Texel Density',
+  label: 'Texel Density',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="9"/><rect x="3" y="15" width="7" height="9"/><rect x="14" y="15" width="7" height="9"/></svg>'
+});
+ToolRegistry.registerTool('overlap', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Mode switch
+  params: [],
+  description: 'Detect overlapping UV islands',
+  section: 'view',
+  tooltip: 'Overlap Detection',
+  label: 'Overlap Detection',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'
+});
+ToolRegistry.registerTool('2d', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Opens modal
+  params: [],
+  description: 'Open 2D UV map editor',
+  section: 'view',
+  tooltip: '2D UV Map',
+  label: '2D UV Map',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>'
+});
+
+// --- File Operations ---
+ToolRegistry.registerTool('import', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by handleToolClick
+  params: [],
+  description: 'Import model (OBJ/ZIP/GLTF/GLB)',
+  section: 'file',
+  tooltip: 'Import Model',
+  label: 'Import (OBJ/ZIP)',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+});
+ToolRegistry.registerTool('export-obj', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by handleToolClick
+  params: [],
+  description: 'Export as OBJ with MTL and texture',
+  section: 'file',
+  tooltip: 'Export OBJ',
+  label: 'Export OBJ',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+});
+ToolRegistry.registerTool('export-png', {
+  fn: (sel, params, meshData) => ({ diffs: [] }), // Handled by handleToolClick
+  params: [],
+  description: 'Export UV layout as PNG',
+  section: 'file',
+  tooltip: 'Export UV PNG',
+  label: 'Export UV PNG',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+});
+
+// Refresh all views that depend on UVs
+function refreshAllViews() {
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  requestRender();
+}
+
+let stClearTimer = null;
+
+function st(msg, kind, duration){
   const box = document.getElementById('uv-status');
   box.className = 'status-box ' + kind;
   box.querySelector('span').textContent = msg;
+  if (stClearTimer) clearTimeout(stClearTimer);
+  if (duration) {
+    stClearTimer = setTimeout(() => {
+      box.className = 'status-box idle';
+      box.querySelector('span').textContent = '';
+      stClearTimer = null;
+    }, duration);
+  }
 }
 
 // Procedural UV checker: supports multiple patterns, densities, sizes, optional glyph
@@ -1450,6 +2475,9 @@ function moveUVIsland(island, offsetU, offsetV, mesh) {
   const { uvAttr, idx } = data;
   if (!uvAttr || !uvAttr.array) return;
 
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
+
   uvAttr.array = uvAttr.array.slice();
   for (const vi of island.vertices) {
     const u = uvAttr.getX(vi);
@@ -1459,6 +2487,10 @@ function moveUVIsland(island, offsetU, offsetV, mesh) {
     uvAttr.setY(vi, v + offsetV);
   }
   uvAttr.needsUpdate = true;
+
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Move UV Island');
 }
 
 // Compute island bounds (minU, maxU, minV, maxV, width, height, center)
@@ -1888,7 +2920,36 @@ function createSelectionGizmo() {
 
       let include = false;
       if (selectionMode === 'vertex' && (selection.vertices.has(key0) || selection.vertices.has(key1) || selection.vertices.has(key2))) include = true;
+      if (selectionMode === 'edge') {
+        // Check if this face contains any selected edge
+        const edges = buildMeshEdges(child);
+        for (const edgeKey of selection.edges) {
+          const [meshId, edge] = edgeKey.split(':');
+          if (meshId !== child.uuid) continue;
+          const [a, b] = edge.split(':').map(Number);
+          // Check if this face's edges match the selected edge
+          const faceEdges = [
+            v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`,
+            v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`,
+            v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`
+          ];
+          if (faceEdges.includes(`${a}:${b}`) || faceEdges.includes(`${b}:${a}`)) {
+            include = true;
+            break;
+          }
+        }
+      }
       if (selectionMode === 'face' && selection.faces.has(`${child.uuid}:${t}`)) include = true;
+      if (selectionMode === 'island') {
+        // Check if this face belongs to a selected island
+        const islands = getAllIslands();
+        for (const isl of islands) {
+          if (selection.islands.has(isl.id) && isl.mesh === child && isl.faces.has(t)) {
+            include = true;
+            break;
+          }
+        }
+      }
 
       if (include) {
         hasSelection = true;
@@ -2060,9 +3121,14 @@ function transformSelectionUV(deltaU, deltaV) {
   requestRender();
 }
 
+let transformBeforeSnapshot = null;
+
 function startTransform() {
   if (!currentRoot) return;
   transformSnapshot = new Map();
+
+  // Capture before snapshot for undo/redo
+  transformBeforeSnapshot = UVHistory.captureSnapshot();
 
   currentRoot.traverse(child => {
     if (!child.isMesh) return;
@@ -2085,6 +3151,14 @@ function endTransform() {
   transformSnapshot = null;
   // Invalidate island cache since UVs changed
   islandCache = null;
+
+  // Push transform to history (compare before/after)
+  if (transformBeforeSnapshot) {
+    const afterSnapshot = UVHistory.captureSnapshot();
+    const operation = gizmoMode === 'translate' ? 'Move UV' : gizmoMode === 'rotate' ? 'Rotate UV' : 'Scale UV';
+    UVHistory.pushTransform(transformBeforeSnapshot, afterSnapshot, operation);
+    transformBeforeSnapshot = null;
+  }
 }
 
 
@@ -2672,10 +3746,22 @@ async function handleFile(file){
   current3DMode = 'checker';
   updateRightSidebarForMode('checker');
 
+  // Detect RBXM/RBXMX files and show import modal
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith('.rbxm') || lower.endsWith('.rbxmx')) {
+    showRBXMImportModal(file);
+    return;
+  }
+
+  // Detect GLB/GLTF files and load with GLTFLoader
+  if (lower.endsWith('.glb') || lower.endsWith('.gltf')) {
+    await loadGLTFFromFile(file);
+    return;
+  }
+
   st('⏳ Reading file…', 'loading');
 
   try{
-    const lower = file.name.toLowerCase();
     let objText, mtlText;
     const imageFiles = {};
 
@@ -4268,7 +5354,7 @@ function bindCustomDropdown(id, onChange, container) {
 // New UI uses tool-import button and hidden file input
 const fileInput = document.createElement('input');
 fileInput.type = 'file';
-fileInput.accept = '.obj,.zip';
+fileInput.accept = '.obj,.zip,.rbxm,.rbxmx,.gltf,.glb';
 fileInput.style.display = 'none';
 document.body.appendChild(fileInput);
 
@@ -4566,6 +5652,9 @@ document.querySelectorAll('.device-btn').forEach(btn => {
 // Change device button in top bar
 document.getElementById('btn-device')?.addEventListener('click', showDeviceModal);
 
+// Import GLB/GLTF button in top bar
+document.getElementById('btn-import-gltf')?.addEventListener('click', showGLTFImportModal);
+
 // Sidebar toggles
 function toggleLeftSidebar() {
   if (window.matchMedia('(max-width:1023px)').matches) {
@@ -4811,7 +5900,43 @@ function handleToolClick(tool) {
 function updateRightSidebarForTool(tool) {
   const content = document.getElementById('right-sidebar-content');
   const sheetContent = document.getElementById('sheet-options-content');
+  const toolInfo = ToolRegistry.getTool(tool);
 
+  if (!toolInfo) {
+    content.innerHTML = '<div id="panel-placeholder" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Select a tool or mode to see options here</div>';
+    if (sheetContent) sheetContent.innerHTML = content.innerHTML;
+    return;
+  }
+
+  // Tools with parameters → use parameter panel system
+  if (toolInfo.params && toolInfo.params.length > 0) {
+    const params = toolInfo.params;
+    const onApply = (values) => {
+      const selections = getAllSelections();
+      for (const sel of selections) {
+        const result = toolInfo.fn(sel, values, { mesh: sel.mesh });
+        if (result?.diffs?.length) {
+          UVHistory.pushDiff(result.diffs, toolInfo.description || tool);
+        }
+      }
+      if (!selections.length) {
+        st('No UV selection', 'err');
+      }
+      refreshAllViews();
+    };
+    const onCancel = () => {};
+    const onLivePreview = (values) => {
+      // Optional: show live preview without committing to history
+      // Could be implemented later
+    };
+    createParameterPanel(tool, params, onApply, onCancel, onLivePreview);
+    if (sheetContent) {
+      // Mirror to sheet if needed
+    }
+    return;
+  }
+
+  // Tools without parameters → simple UI (selection modes, gizmo options, mode switches)
   let html = '';
   switch (tool) {
     case 'select':
@@ -4846,28 +5971,36 @@ function updateRightSidebarForTool(tool) {
           <div style="margin-top:12px;font-size:11px;color:var(--muted)">Use G / R / S shortcuts</div>
         </div>`;
       break;
-    case 'straighten':
-    case 'align':
-    case 'relax':
-    case 'unwrap':
-    case 'pack':
-    case 'organize':
+    case 'checker':
+    case 'real':
+    case 'wire':
+    case 'problems':
+    case 'texel':
+    case 'overlap':
+    case '2d':
       html = `
         <div style="padding:12px">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${tool.toUpperCase()} UV</div>
-          <button class="btn" id="btn-apply-${tool}" style="width:100%">Apply ${tool.charAt(0).toUpperCase() + tool.slice(1)}</button>
-          <div style="margin-top:8px;font-size:11px;color:var(--muted)">Select UV islands first, then apply</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${toolInfo.label?.toUpperCase() || tool.toUpperCase()}</div>
+          <div style="font-size:12px;color:var(--white);line-height:1.6">${toolInfo.description}</div>
         </div>`;
       break;
+    case 'import':
+    case 'export-obj':
+    case 'export-png':
+    case 'undo':
+    case 'redo':
+      html = `
+        <div style="padding:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${toolInfo.label?.toUpperCase() || tool.toUpperCase()}</div>
+          <div style="font-size:12px;color:var(--white);line-height:1.6">${toolInfo.description}</div>
+          <div style="margin-top:12px;font-size:11px;color:var(--muted)">Use toolbar button or shortcut</div>
+        </div>`;
+      break;
+    default:
+      html = '<div id="panel-placeholder" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Select a tool or mode to see options here</div>';
   }
   content.innerHTML = html;
   if (sheetContent) sheetContent.innerHTML = html;
-
-  // Bind apply buttons
-  if (['straighten', 'align', 'relax', 'unwrap', 'pack', 'organize'].includes(tool)) {
-    const btn = document.getElementById(`btn-apply-${tool}`);
-    if (btn) btn.addEventListener('click', () => applyUVTool(tool));
-  }
 
   // Bind selection mode buttons
   if (tool === 'select') {
@@ -4876,6 +6009,20 @@ function updateRightSidebarForTool(tool) {
     });
   }
 }
+
+// Undo/Redo button handlers
+document.getElementById('tool-undo')?.addEventListener('click', () => {
+  if (typeof UVHistory !== 'undefined' && UVHistory.canUndo()) {
+    const operation = UVHistory.undo();
+    st(`↩ Undo: ${operation}`, 'ok', 3000);
+  }
+});
+document.getElementById('tool-redo')?.addEventListener('click', () => {
+  if (typeof UVHistory !== 'undefined' && UVHistory.canRedo()) {
+    const operation = UVHistory.redo();
+    st(`↪ Redo: ${operation}`, 'ok', 3000);
+  }
+});
 
 // Keyboard shortcuts for gizmo mode and tools
 document.addEventListener('keydown', (e) => {
@@ -4923,6 +6070,22 @@ document.addEventListener('keydown', (e) => {
     // Could delete selected UVs - for now just clear
     clearSelection();
   }
+
+  // Undo/Redo
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    e.preventDefault();
+    if (typeof UVHistory !== 'undefined' && UVHistory.canUndo()) {
+      const operation = UVHistory.undo();
+      st(`↩ Undo: ${operation}`, 'ok', 3000);
+    }
+  }
+  if ((e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) || (e.key === 'y' && (e.ctrlKey || e.metaKey))) {
+    e.preventDefault();
+    if (typeof UVHistory !== 'undefined' && UVHistory.canRedo()) {
+      const operation = UVHistory.redo();
+      st(`↪ Redo: ${operation}`, 'ok', 3000);
+    }
+  }
 });
 
 function applyUVTool(tool) {
@@ -4952,6 +6115,9 @@ function applyStraightenUV() {
   }
 
   st('⚙ Straightening UVs…', 'loading');
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   // Collect selected vertices
   const selectedVerts = new Map(); // mesh -> Set of vertex indices
@@ -5093,6 +6259,10 @@ function applyStraightenUV() {
   // Invalidate island cache
   islandCache = null;
 
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Straighten UV');
+
   st(`✓ Straightened UVs (${selectedVerts.size} mesh${selectedVerts.size === 1 ? '' : 'es'} modified)`, 'ok');
   requestRender();
 }
@@ -5106,6 +6276,9 @@ function applyAlignUV() {
   }
 
   st('⚙ Aligning UVs…', 'loading');
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   const selectedVerts = new Map();
   currentRoot.traverse(child => {
@@ -5181,6 +6354,10 @@ function applyAlignUV() {
   if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
   islandCache = null;
 
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Align UV');
+
   st('✓ UVs aligned to grid', 'ok');
   requestRender();
 }
@@ -5194,6 +6371,9 @@ function applyRelaxUV() {
   }
 
   st('⚙ Relaxing UVs…', 'loading');
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   const iterations = 5; // Number of relaxation iterations
 
@@ -5294,6 +6474,10 @@ function applyRelaxUV() {
   if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
   islandCache = null;
 
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Relax UV');
+
   st('✓ UVs relaxed', 'ok');
   requestRender();
 }
@@ -5305,6 +6489,9 @@ function applyUnwrapUV() {
     st('✗ No selection — select faces or islands first', 'err');
     return;
   }
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   st('⚙ Unwrapping UVs…', 'loading');
 
@@ -5394,6 +6581,10 @@ function applyUnwrapUV() {
   if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
   islandCache = null;
 
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Unwrap UV');
+
   st('✓ UVs unwrapped (planar projection)', 'ok');
   requestRender();
 }
@@ -5401,6 +6592,9 @@ function applyUnwrapUV() {
 // Pack UV Islands: MaxRects bin packing for optimal UV space utilization
 async function applyPackUV() {
   if (!currentRoot) return;
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   st('⚙ Packing UV islands (MaxRects)…', 'loading');
   try {
@@ -5548,6 +6742,10 @@ async function applyPackUV() {
     if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
     islandCache = null;
 
+    // Push to history (compare before/after)
+    const afterSnapshot = UVHistory.captureSnapshot();
+    UVHistory.pushTransform(beforeSnapshot, afterSnapshot);
+
     st(`✓ Packed ${placed.length} UV islands (MaxRects)`, 'ok');
     requestRender();
   } catch (e) {
@@ -5561,6 +6759,9 @@ function applyOrganizeUV() {
   if (!currentRoot) return;
 
   st('⚙ Organizing UV islands…', 'loading');
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
 
   const islands = getAllIslands();
   if (islands.length === 0) {
@@ -5607,6 +6808,10 @@ function applyOrganizeUV() {
   if (current3DMode === 'checker') updateCheckerTexture();
   if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
   islandCache = null;
+
+  // Push to history (compare before/after)
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Organize UV');
 
   st(`✓ Organized ${islands.length} UV islands`, 'ok');
   requestRender();
@@ -5893,6 +7098,892 @@ async function buildUV2DInModal() {
     progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
     progressFill.style.width = '0%';
   }
+}
+
+// ============================================================================
+// RBXM IMPORT MODAL
+// ============================================================================
+
+let rbxmImportFile = null;
+let rbxmImportResults = null;
+
+function showRBXMImportModal(file) {
+  rbxmImportFile = file;
+  rbxmImportResults = null;
+  const modal = document.getElementById('rbxm-import-modal');
+  const progressWrap = document.getElementById('rbxm-progress-wrap');
+  const resultsWrap = document.getElementById('rbxm-results-wrap');
+  const errorWrap = document.getElementById('rbxm-error-wrap');
+  const startBtn = document.getElementById('btn-start-rbxm-import');
+  const cancelBtn = document.getElementById('btn-cancel-rbxm-import');
+  const progressFill = document.getElementById('rbxm-progress-fill');
+  const progressLabel = document.getElementById('rbxm-progress-label');
+  const resultsList = document.getElementById('rbxm-results-list');
+
+  // Reset UI state
+  progressWrap.style.display = 'none';
+  resultsWrap.style.display = 'none';
+  errorWrap.style.display = 'none';
+  progressFill.style.width = '0%';
+  progressLabel.textContent = 'Uploading and converting… 0%';
+  resultsList.innerHTML = '';
+  startBtn.disabled = false;
+  startBtn.textContent = 'Start Import';
+
+  // Show modal
+  modal.classList.add('visible');
+
+  // Bind button handlers
+  cancelBtn.onclick = closeRBXMImportModal;
+  startBtn.onclick = startRBXMImport;
+
+  // Close on overlay click
+  modal.onclick = (e) => {
+    if (e.target === modal) closeRBXMImportModal();
+  };
+}
+
+function closeRBXMImportModal() {
+  const modal = document.getElementById('rbxm-import-modal');
+  modal.classList.remove('visible');
+  rbxmImportFile = null;
+  rbxmImportResults = null;
+}
+
+async function startRBXMImport() {
+  if (!rbxmImportFile) return;
+
+  const modal = document.getElementById('rbxm-import-modal');
+  const progressWrap = document.getElementById('rbxm-progress-wrap');
+  const resultsWrap = document.getElementById('rbxm-results-wrap');
+  const errorWrap = document.getElementById('rbxm-error-wrap');
+  const startBtn = document.getElementById('btn-start-rbxm-import');
+  const progressFill = document.getElementById('rbxm-progress-fill');
+  const progressLabel = document.getElementById('rbxm-progress-label');
+  const resultsList = document.getElementById('rbxm-results-list');
+  const includeTextures = document.getElementById('rbxm-include-textures').checked;
+  const mergeMode = document.querySelector('input[name="rbxm-import-mode"]:checked').value;
+
+  // Show progress
+  progressWrap.style.display = 'block';
+  resultsWrap.style.display = 'none';
+  errorWrap.style.display = 'none';
+  startBtn.disabled = true;
+  startBtn.textContent = 'Processing…';
+
+  try {
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', rbxmImportFile);
+
+    // Add query params
+    const params = new URLSearchParams();
+    params.set('merge', mergeMode === 'merged' ? 'true' : 'false');
+    params.set('includeTextures', includeTextures ? 'true' : 'false');
+    params.set('outputFormat', 'obj');
+
+    // Upload with progress
+    const response = await fetch(`/api/rbxm-to-obj?${params.toString()}`, {
+      method: 'POST',
+      body: formData
+    });
+
+    // Simulate progress since we can't easily track upload progress with fetch
+    progressFill.style.width = '50%';
+    progressLabel.textContent = 'Converting meshes… 50%';
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Conversion failed');
+    }
+
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Done!';
+
+    // Store results
+    rbxmImportResults = result.meshes;
+
+    // Display results
+    resultsList.innerHTML = '';
+    result.meshes.forEach((mesh, index) => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:10px;margin-bottom:8px;background:var(--s2);border:1px solid var(--border);border-radius:8px;';
+      item.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <strong>${mesh.name}</strong>
+          <span style="font-size:10px;color:var(--muted);">${mesh.className}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
+          ${mesh.vertexCount} vertices · ${mesh.faceCount} faces
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-outline" data-mesh-index="${index}" style="padding:6px 10px;font-size:11px;">Load in Viewer</button>
+          <button class="btn-outline" data-download-obj="${index}" style="padding:6px 10px;font-size:11px;">Download OBJ</button>
+          ${mesh.mtlContent ? `<button class="btn-outline" data-download-mtl="${index}" style="padding:6px 10px;font-size:11px;">Download MTL</button>` : ''}
+        </div>
+      `;
+      resultsList.appendChild(item);
+    });
+
+    // Bind result button handlers
+    resultsList.querySelectorAll('[data-mesh-index]').forEach(btn => {
+      btn.onclick = () => loadOBJFromResult(parseInt(btn.dataset.meshIndex));
+    });
+    resultsList.querySelectorAll('[data-download-obj]').forEach(btn => {
+      btn.onclick = () => downloadOBJFromResult(parseInt(btn.dataset.downloadObj));
+    });
+    resultsList.querySelectorAll('[data-download-mtl]').forEach(btn => {
+      btn.onclick = () => downloadMTLFromResult(parseInt(btn.dataset.downloadMtl));
+    });
+
+    resultsWrap.style.display = 'block';
+    startBtn.textContent = 'Re-import';
+    startBtn.disabled = false;
+
+  } catch (err) {
+    console.error('[UV Checker] RBXM import error:', err);
+    progressWrap.style.display = 'none';
+    errorWrap.style.display = 'block';
+    errorWrap.textContent = 'Error: ' + err.message;
+    startBtn.disabled = false;
+    startBtn.textContent = 'Retry';
+  }
+}
+
+function loadOBJFromResult(index) {
+  if (!rbxmImportResults || index >= rbxmImportResults.length) return;
+  const mesh = rbxmImportResults[index];
+  loadOBJFromString(mesh.objContent, mesh.mtlContent, mesh.textureUrls);
+  closeRBXMImportModal();
+}
+
+function downloadOBJFromResult(index) {
+  if (!rbxmImportResults || index >= rbxmImportResults.length) return;
+  const mesh = rbxmImportResults[index];
+  const blob = new Blob([mesh.objContent], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${mesh.name}.obj`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadMTLFromResult(index) {
+  if (!rbxmImportResults || index >= rbxmImportResults.length) return;
+  const mesh = rbxmImportResults[index];
+  if (!mesh.mtlContent) return;
+  const blob = new Blob([mesh.mtlContent], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${mesh.name}.mtl`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================================
+// GLB/GLTF IMPORT MODAL
+// ============================================================================
+
+let gltfImportFile = null;
+
+function showGLTFImportModal() {
+  const modal = document.getElementById('gltf-import-modal');
+  const progressWrap = document.getElementById('gltf-progress-wrap');
+  const errorWrap = document.getElementById('gltf-error-wrap');
+  const startBtn = document.getElementById('btn-start-gltf-import');
+  const cancelBtn = document.getElementById('btn-cancel-gltf-import');
+  const progressFill = document.getElementById('gltf-progress-fill');
+  const progressLabel = document.getElementById('gltf-progress-label');
+
+  // Reset UI state
+  progressWrap.style.display = 'none';
+  errorWrap.style.display = 'none';
+  progressFill.style.width = '0%';
+  progressLabel.textContent = 'Loading… 0%';
+  startBtn.disabled = false;
+  startBtn.textContent = 'Import GLB/GLTF';
+
+  // Show modal
+  modal.classList.add('visible');
+
+  // Bind button handlers
+  cancelBtn.onclick = closeGLTFImportModal;
+  startBtn.onclick = startGLTFImport;
+
+  // Close on overlay click
+  modal.onclick = (e) => {
+    if (e.target === modal) closeGLTFImportModal();
+  };
+}
+
+function closeGLTFImportModal() {
+  const modal = document.getElementById('gltf-import-modal');
+  modal.classList.remove('visible');
+  gltfImportFile = null;
+}
+
+async function startGLTFImport() {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.gltf,.glb,.bin,.png,.jpg,.jpeg,.webp,.ktx,.ktx2,.basis,.zip,.obj,.mtl';
+  fileInput.multiple = true;
+  fileInput.style.display = 'none';
+
+  fileInput.onchange = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    document.body.removeChild(fileInput);
+
+    const modal = document.getElementById('gltf-import-modal');
+    const progressWrap = document.getElementById('gltf-progress-wrap');
+    const errorWrap = document.getElementById('gltf-error-wrap');
+    const startBtn = document.getElementById('btn-start-gltf-import');
+    const progressFill = document.getElementById('gltf-progress-fill');
+    const progressLabel = document.getElementById('gltf-progress-label');
+
+    progressWrap.style.display = 'block';
+    errorWrap.style.display = 'none';
+    startBtn.disabled = true;
+    startBtn.textContent = 'Loading…';
+
+    try {
+      progressFill.style.width = '50%';
+      progressLabel.textContent = 'Parsing… 50%';
+
+      // Handle single .zip file
+      if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
+        await loadGLTFFromZip(files[0]);
+      } else {
+        await loadGLTFFromFiles(files);
+      }
+
+      progressFill.style.width = '100%';
+      progressLabel.textContent = 'Done!';
+
+      closeGLTFImportModal();
+    } catch (err) {
+      console.error('[UV Checker] GLB/GLTF import error:', err);
+      progressWrap.style.display = 'none';
+      errorWrap.style.display = 'block';
+      errorWrap.textContent = 'Error: ' + err.message;
+      startBtn.disabled = false;
+      startBtn.textContent = 'Retry';
+    }
+  };
+
+  document.body.appendChild(fileInput);
+  fileInput.click();
+}
+
+async function loadOBJFromString(objText, mtlText, textureUrls = []) {
+  st('⏳ Loading RBXM mesh…', 'loading');
+
+  try {
+    // Clear history on new model load
+    UVHistory.clear();
+
+    // Clean up current scene
+    if (currentRoot) { scene.remove(currentRoot); currentRoot = null; }
+    activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
+    activeBlobUrls = [];
+
+    const blobUrlMap = {};
+    const imageFiles = {};
+
+    // Load textures if provided
+    if (mtlText && textureUrls.length > 0) {
+      // For RBXM, textures come from Roblox asset delivery URLs
+      // We need to fetch them and create blob URLs
+      for (const textureUrl of textureUrls) {
+        try {
+          const response = await fetch(textureUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const filename = textureUrl.split('/').pop() || 'texture.png';
+            const url = URL.createObjectURL(blob);
+            blobUrlMap[filename] = url;
+            imageFiles[filename] = blob;
+            activeBlobUrls.push(url);
+          }
+        } catch (e) {
+          console.warn('[UV Checker] Failed to load texture:', textureUrl, e);
+        }
+      }
+    }
+
+    let root;
+    if (mtlText && Object.keys(imageFiles).length > 0) {
+      const manager = new THREE.LoadingManager();
+      manager.setURLModifier(url => blobUrlMap[url.split('/').pop()] || url);
+
+      const mtlLoader = new MTLLoader(manager);
+      const materials = mtlLoader.parse(mtlText, '');
+      materials.preload();
+
+      const objLoader = new OBJLoader(manager);
+      objLoader.setMaterials(materials);
+      root = objLoader.parse(objText);
+
+      await new Promise(resolve => {
+        let done = false;
+        manager.onLoad = () => { if (!done) { done = true; resolve(); } };
+        setTimeout(() => { if (!done) { done = true; resolve(); } }, 8000);
+      });
+    } else {
+      root = new OBJLoader().parse(objText);
+    }
+
+    if (!root) throw new Error('OBJ parse returned null');
+
+    let meshCount = 0, uvlessCount = 0;
+    root.traverse(child => {
+      if (child.isMesh) {
+        meshCount++;
+        const hasUV = !!(child.geometry.attributes && child.geometry.attributes.uv);
+        if (!hasUV) uvlessCount++;
+        child.userData.realMap = (child.material && child.material.map) || null;
+        child.material = new THREE.MeshBasicMaterial({
+          map: hasUV ? checkerTexture : null,
+          color: hasUV ? 0xffffff : 0xff4466
+        });
+      }
+    });
+
+    if (meshCount === 0) throw new Error('No mesh geometry found in this OBJ.');
+
+    scene.add(root);
+    currentRoot = root;
+    frameObject(root);
+
+    // Push initial snapshot for undo/redo
+    UVHistory.pushSnapshot('Import OBJ');
+
+    document.getElementById('tool-checker')?.classList.add('active');
+    document.getElementById('tool-real')?.classList.remove('active');
+    { const _r = document.getElementById('tool-real'); if (_r) _r.style.display = Object.keys(imageFiles).length > 0 && !!mtlText ? 'inline-block' : 'none'; }
+    { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'block'; }
+
+    let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded from RBXM.`;
+    if (uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
+    st(msg, uvlessCount > 0 ? 'err' : 'ok');
+
+  } catch (e) {
+    console.error('[UV Checker] RBXM OBJ load error:', e);
+    st('✗ ' + e.message, 'err');
+  }
+}
+
+// Fix malformed GLB files that have buffer URIs (e.g., "scene.bin") in JSON chunk
+// GLB should have embedded buffers without URIs; some exporters create malformed GLBs
+function fixMalformedGLB(arrayBuffer) {
+  const data = new Uint8Array(arrayBuffer);
+  // Check for GLB magic "gltf" (0x676C7466)
+  if (data.length < 12 || data[0] !== 0x67 || data[1] !== 0x6C || data[2] !== 0x74 || data[3] !== 0x66) {
+    console.log('[fixMalformedGLB] Not a GLB file (magic bytes mismatch)');
+    return arrayBuffer; // Not a GLB, return as-is
+  }
+
+  const view = new DataView(arrayBuffer);
+  // GLB header: 4 bytes magic, 4 bytes version, 4 bytes totalLength
+  const version = view.getUint32(4, true);
+  const totalLength = view.getUint32(8, true);
+
+  console.log('[fixMalformedGLB] GLB detected: version=' + version + ', totalLength=' + totalLength + ', actualLength=' + data.length);
+
+  if (data.length !== totalLength) {
+    console.log('[fixMalformedGLB] Length mismatch, returning as-is');
+    return arrayBuffer; // Length mismatch, return as-is
+  }
+
+  let offset = 12;
+  let jsonChunk = null;
+  let jsonOffset = 0;
+  let jsonLength = 0;
+  let postJsonData = null; // binary chunk + any other chunks after JSON
+
+  // Parse chunks
+  while (offset < data.length) {
+    if (offset + 8 > data.length) break;
+    const chunkLength = view.getUint32(offset, true);
+    const chunkType = view.getUint32(offset + 4, true);
+    const chunkDataStart = offset + 8;
+    const chunkDataEnd = chunkDataStart + chunkLength;
+
+    if (chunkDataEnd > data.length) break;
+
+    const chunkTypeStr = String.fromCharCode(
+      chunkType & 0xFF,
+      (chunkType >> 8) & 0xFF,
+      (chunkType >> 16) & 0xFF,
+      (chunkType >> 24) & 0xFF
+    );
+    console.log('[fixMalformedGLB] Chunk: type=' + chunkTypeStr + ' (0x' + chunkType.toString(16) + '), length=' + chunkLength + ', offset=' + offset);
+
+    // Chunk type "JSON" (0x4E4F534A) - little endian
+    if (chunkType === 0x4E4F534A) {
+      jsonOffset = chunkDataStart;
+      jsonLength = chunkLength;
+      const jsonBytes = data.slice(jsonOffset, jsonOffset + jsonLength);
+      jsonChunk = new TextDecoder().decode(jsonBytes);
+      console.log('[fixMalformedGLB] Found JSON chunk, length=' + jsonLength);
+    }
+
+    offset = chunkDataEnd;
+    // Align to 4 bytes
+    if (offset % 4 !== 0) offset += 4 - (offset % 4);
+
+    // If we've passed the JSON chunk and there's more data, save it
+    if (jsonChunk && offset < data.length && !postJsonData) {
+      postJsonData = data.slice(offset);
+      console.log('[fixMalformedGLB] Saved post-JSON data, length=' + postJsonData.length);
+    }
+  }
+
+  if (!jsonChunk) {
+    console.log('[fixMalformedGLB] No JSON chunk found');
+    return arrayBuffer; // No JSON chunk found
+  }
+
+  // Parse JSON and remove buffer URIs
+  let json;
+  try {
+    json = JSON.parse(jsonChunk);
+  } catch {
+    console.log('[fixMalformedGLB] Invalid JSON, returning as-is');
+    return arrayBuffer; // Invalid JSON, return as-is
+  }
+
+  let modified = false;
+  if (json.buffers && Array.isArray(json.buffers)) {
+    console.log('[fixMalformedGLB] Found ' + json.buffers.length + ' buffer(s) in JSON');
+    for (let i = 0; i < json.buffers.length; i++) {
+      const buffer = json.buffers[i];
+      console.log('[fixMalformedGLB] Buffer ' + i + ': uri=' + (buffer.uri || 'none') + ', byteLength=' + buffer.byteLength + ', byteOffset=' + (buffer.byteOffset || 'none'));
+      if (buffer.uri) {
+        console.log('[fixMalformedGLB] Removing uri from buffer ' + i + ': ' + buffer.uri);
+        delete buffer.uri;
+        modified = true;
+      }
+    }
+  } else {
+    console.log('[fixMalformedGLB] No buffers array in JSON');
+  }
+
+  if (!modified) {
+    console.log('[fixMalformedGLB] No URIs to remove, returning as-is');
+    return arrayBuffer; // No URIs to remove
+  }
+
+  console.log('[fixMalformedGLB] Modified JSON, reconstructing GLB...');
+
+  // Re-serialize JSON
+  const newJsonStr = JSON.stringify(json);
+  const newJsonBytes = new TextEncoder().encode(newJsonStr);
+  const newJsonLength = newJsonBytes.length;
+
+  // Reconstruct GLB: header + JSON chunk (padded to 4 bytes) + saved post-JSON data
+  const jsonPadding = (4 - (newJsonLength % 4)) % 4;
+  const postJsonLength = postJsonData ? postJsonData.length : 0;
+  const newTotalLength = 12 + 8 + newJsonLength + jsonPadding + postJsonLength;
+  const newBuffer = new ArrayBuffer(newTotalLength);
+  const newView = new DataView(newBuffer);
+  const newData = new Uint8Array(newBuffer);
+
+  // Copy header
+  newView.setUint32(0, 0x676C7466, true); // magic "gltf"
+  newView.setUint32(4, version, true);
+  newView.setUint32(8, newTotalLength, true);
+
+  // Write JSON chunk
+  newView.setUint32(12, newJsonLength, true);
+  newView.setUint32(16, 0x4E4F534A, true); // "JSON"
+  newData.set(newJsonBytes, 20);
+
+  // Padding after JSON
+  let writeOffset = 20 + newJsonLength + jsonPadding;
+
+  // Copy saved post-JSON data (binary chunk, etc.)
+  if (postJsonData) {
+    newData.set(postJsonData, writeOffset);
+  }
+
+  console.log('[fixMalformedGLB] Reconstructed GLB: newTotalLength=' + newTotalLength + ', newJsonLength=' + newJsonLength + ', postJsonLength=' + postJsonLength);
+  return newBuffer;
+}
+
+// Load model from .zip file using JSZip
+// Supports .glb, .gltf (+ .bin + textures), .obj (+ .mtl + textures)
+async function loadGLTFFromZip(zipFile) {
+  st('⏳ Loading ZIP…', 'loading');
+
+  try {
+    // Clean up current scene
+    if (currentRoot) { scene.remove(currentRoot); currentRoot = null; }
+    activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
+    activeBlobUrls = [];
+
+    const blobUrlMap = {};
+    const imageFiles = {};
+
+    // Size limit: 100 MB
+    const MAX_ZIP_SIZE = 100 * 1024 * 1024;
+    if (zipFile.size > MAX_ZIP_SIZE) {
+      throw new Error('ZIP file too large (max 100 MB).');
+    }
+
+    st('⏳ Unpacking ZIP…', 'loading');
+    const zip = await JSZip.loadAsync(zipFile);
+
+    // Collect all entries, skip __MACOSX and hidden files
+    const entries = new Map(); // lowercased relative path -> entry
+    let topLevelFolder = '';
+
+    // DEBUG: log all raw entry names
+    console.log('[ZIP DEBUG] Raw zip entries:', Object.keys(zip.files));
+
+    for (const filename of Object.keys(zip.files)) {
+      const entry = zip.files[filename];
+      console.log('[ZIP DEBUG] Entry:', filename, 'dir=', entry.dir);
+      if (entry.dir) continue;
+      const lower = filename.toLowerCase();
+      if (lower.startsWith('__macosx/')) continue;
+      if (lower.split('/').some(part => part.startsWith('.'))) continue;
+
+      // Detect common top-level folder (only if it's the first level and not a known asset folder)
+      const parts = filename.split('/');
+      if (parts.length > 1 && !topLevelFolder) {
+        // Only treat as top-level folder if it's not a known asset folder like 'textures/'
+        const firstPart = parts[0].toLowerCase();
+        if (!['textures', 'images', 'materials', 'assets'].includes(firstPart)) {
+          topLevelFolder = parts[0] + '/';
+          console.log('[ZIP DEBUG] Detected top-level folder:', topLevelFolder);
+        }
+      }
+
+      // Store with normalized path (without top-level folder)
+      const normalizedPath = topLevelFolder && filename.startsWith(topLevelFolder)
+        ? filename.slice(topLevelFolder.length)
+        : filename;
+      entries.set(normalizedPath.toLowerCase(), { entry, originalPath: filename, normalizedPath });
+    }
+
+    // DEBUG: log all normalized entries
+    console.log('[ZIP DEBUG] Normalized entries map keys:', Array.from(entries.keys()));
+
+    if (entries.size === 0) {
+      throw new Error('ZIP contains no valid files.');
+    }
+
+    // Helper to find entry by suffix (case-insensitive)
+    function findEntry(suffixes) {
+      for (const [key, val] of entries) {
+        for (const suf of suffixes) {
+          if (key.endsWith(suf.toLowerCase())) return val;
+        }
+      }
+      return null;
+    }
+
+    // Prefer .glb, then .gltf, then .obj
+    const glbEntry = findEntry(['.glb']);
+    const gltfEntry = findEntry(['.gltf']);
+    const objEntry = findEntry(['.obj']);
+
+    // Single .glb - use existing GLB path
+    if (glbEntry) {
+      st('⏳ Parsing GLB from ZIP…', 'loading');
+      const arrayBuffer = await glbEntry.entry.async('arraybuffer');
+      const fixedBuffer = fixMalformedGLB(arrayBuffer);
+
+      const loader = new GLTFLoader();
+      loader.setDRACOLoader(null);
+      const gltf = await loader.parseAsync(fixedBuffer, '');
+      return processGLTFResult(gltf, blobUrlMap, imageFiles);
+    }
+
+    // .gltf with external resources - use LoadingManager URL modifier
+    if (gltfEntry) {
+      st('⏳ Parsing GLTF from ZIP…', 'loading');
+      const gltfText = await gltfEntry.entry.async('text');
+      let gltfJson;
+      try {
+        gltfJson = JSON.parse(gltfText);
+      } catch (e) {
+        throw new Error('Invalid .gltf in ZIP: ' + e.message);
+      }
+
+      // Collect all URIs referenced in the .gltf (buffers, images)
+      const referencedUris = new Set();
+      if (gltfJson.buffers) {
+        for (const buf of gltfJson.buffers) {
+          if (buf.uri) referencedUris.add(buf.uri);
+        }
+      }
+      if (gltfJson.images) {
+        for (const img of gltfJson.images) {
+          if (img.uri) referencedUris.add(img.uri);
+        }
+      }
+
+      // DEBUG: log referenced URIs and entries map
+      console.log('[ZIP DEBUG] Referenced URIs from glTF:', Array.from(referencedUris));
+      console.log('[ZIP DEBUG] Entries map keys:', Array.from(entries.keys()));
+
+      // Create blob URLs for all referenced files
+      const uriToBlobUrl = new Map();
+      const missing = [];
+      for (const uri of referencedUris) {
+        const lowerUri = uri.toLowerCase();
+        console.log('[ZIP DEBUG] Looking up URI:', uri, '-> lower:', lowerUri);
+        const found = entries.get(lowerUri);
+        if (found) {
+          const blob = await found.entry.async('blob');
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrls.push(blobUrl);
+          uriToBlobUrl.set(lowerUri, blobUrl);
+        } else {
+          missing.push(uri);
+        }
+      }
+
+      if (missing.length > 0) {
+        // Revoke created blob URLs before throwing
+        uriToBlobUrl.forEach(u => { URL.revokeObjectURL(u); activeBlobUrls = activeBlobUrls.filter(x => x !== u); });
+        throw new Error('Missing files in ZIP for .gltf: ' + missing.join(', '));
+      }
+
+      // LoadingManager with URL modifier
+      const manager = new THREE.LoadingManager();
+      manager.setURLModifier((url) => {
+        const lower = url.toLowerCase();
+        if (uriToBlobUrl.has(lower)) return uriToBlobUrl.get(lower);
+        return url;
+      });
+
+      const loader = new GLTFLoader(manager);
+      loader.setDRACOLoader(null);
+
+      const gltfArrayBuffer = new TextEncoder().encode(JSON.stringify(gltfJson)).buffer;
+      const gltf = await loader.parseAsync(gltfArrayBuffer, '');
+
+      // Success - keep blob URLs alive (processGLTFResult will handle cleanup on next load)
+      return processGLTFResult(gltf, blobUrlMap, imageFiles);
+    }
+
+    // .obj with optional .mtl and textures
+    if (objEntry) {
+      st('⏳ Parsing OBJ from ZIP…', 'loading');
+      const objText = await objEntry.entry.async('text');
+
+      // Find .mtl
+      let mtlText = null;
+      const mtlEntry = findEntry(['.mtl']);
+      if (mtlEntry) {
+        mtlText = await mtlEntry.entry.async('text');
+      }
+
+      // Collect texture files from ZIP
+      const textureUrls = [];
+      for (const [key, val] of entries) {
+        if (/\.(png|jpe?g|webp)$/i.test(key)) {
+          const blob = await val.entry.async('blob');
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrls.push(blobUrl);
+          textureUrls.push(blobUrl);
+        }
+      }
+
+      // Use existing OBJ loader
+      return loadOBJFromString(objText, mtlText, textureUrls);
+    }
+
+    throw new Error('No supported model format found in ZIP (.glb, .gltf, or .obj required).');
+  } catch (e) {
+    console.error('[UV Checker] ZIP load error:', e);
+    st('✗ ' + e.message, 'err');
+    throw e;
+  }
+}
+
+// Load GLB/GLTF file(s) using three.js GLTFLoader
+// files: array of File objects (single .glb, or .gltf + .bin + textures)
+async function loadGLTFFromFiles(files) {
+  st('⏳ Loading GLB/GLTF…', 'loading');
+
+  try {
+    // Clear history on new model load
+    UVHistory.clear();
+
+    // Clean up current scene
+    if (currentRoot) { scene.remove(currentRoot); currentRoot = null; }
+    activeBlobUrls.forEach(u => URL.revokeObjectURL(u));
+    activeBlobUrls = [];
+
+    const blobUrlMap = {};
+    const imageFiles = {};
+
+    // Check if single .glb file
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.glb')) {
+      // Single GLB - process as before
+      const fileUrl = URL.createObjectURL(files[0]);
+      activeBlobUrls.push(fileUrl);
+
+      const loader = new GLTFLoader();
+      loader.setDRACOLoader(null);
+
+      const arrayBuffer = await files[0].arrayBuffer();
+      const fixedBuffer = fixMalformedGLB(arrayBuffer);
+
+      const gltf = await loader.parseAsync(fixedBuffer, '');
+      return processGLTFResult(gltf, blobUrlMap, imageFiles);
+    }
+
+    // Multiple files: .gltf + .bin + textures
+    // Create blob URLs for all files
+    const fileBlobs = new Map();
+    let gltfFile = null;
+    let gltfJson = null;
+
+    for (const file of files) {
+      const blobUrl = URL.createObjectURL(file);
+      activeBlobUrls.push(blobUrl);
+      fileBlobs.set(file.name.toLowerCase(), { file, url: blobUrl });
+
+      if (file.name.toLowerCase().endsWith('.gltf')) {
+        gltfFile = file;
+        const text = await file.text();
+        try {
+          gltfJson = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Invalid .gltf file: ' + e.message);
+        }
+      }
+    }
+
+    if (!gltfFile || !gltfJson) {
+      throw new Error('No valid .gltf file found in selection');
+    }
+
+    // Collect all URIs referenced in the .gltf (buffers, images)
+    const referencedUris = new Set();
+    if (gltfJson.buffers) {
+      for (const buf of gltfJson.buffers) {
+        if (buf.uri) referencedUris.add(buf.uri);
+      }
+    }
+    if (gltfJson.images) {
+      for (const img of gltfJson.images) {
+        if (img.uri) referencedUris.add(img.uri);
+      }
+    }
+
+    // Check for missing files
+    const missing = [];
+    for (const uri of referencedUris) {
+      const lower = uri.toLowerCase();
+      if (!fileBlobs.has(lower)) {
+        missing.push(uri);
+      }
+    }
+    if (missing.length > 0) {
+      throw new Error('Missing files for .gltf: ' + missing.join(', ') + '. Select all .bin and texture files together.');
+    }
+
+    // Create a LoadingManager with URL modifier to map URIs → blob URLs
+    const manager = new THREE.LoadingManager();
+    manager.setURLModifier((url) => {
+      const lower = url.toLowerCase();
+      if (fileBlobs.has(lower)) {
+        return fileBlobs.get(lower).url;
+      }
+      return url;
+    });
+
+    // Create loader with our manager
+    const loader = new GLTFLoader(manager);
+    loader.setDRACOLoader(null);
+
+    // Parse GLTF from JSON with empty base path (modifier handles resolution)
+    const gltfArrayBuffer = new TextEncoder().encode(JSON.stringify(gltfJson)).buffer;
+    const gltf = await loader.parseAsync(gltfArrayBuffer, '');
+
+    return processGLTFResult(gltf, blobUrlMap, imageFiles);
+  } catch (e) {
+    console.error('[UV Checker] GLB/GLTF load error:', e);
+    st('✗ ' + e.message, 'err');
+    throw e;
+  }
+}
+
+// Shared processing for GLTF result
+function processGLTFResult(gltf, blobUrlMap, imageFiles) {
+  // Extract textures from GLB (embedded images)
+  if (gltf.textures && gltf.images) {
+    for (let i = 0; i < gltf.images.length; i++) {
+      const image = gltf.images[i];
+      if (image.uri && image.uri.startsWith('data:')) {
+        // Data URI - convert to blob
+        fetch(image.uri).then(response => {
+          if (response.ok) {
+            return response.blob().then(blob => {
+              const filename = `texture_${i}.png`;
+              const url = URL.createObjectURL(blob);
+              blobUrlMap[filename] = url;
+              imageFiles[filename] = blob;
+              activeBlobUrls.push(url);
+            });
+          }
+        });
+      } else if (image.bufferView !== undefined) {
+        // Buffer view - extract from GLB buffer
+        // The GLTFLoader already handles this internally for materials
+      } else if (image.uri) {
+        // External URI - for .gltf with blob URLs, already handled by loader
+      }
+    }
+  }
+
+  // Get the scene root
+  let root = gltf.scene;
+
+  if (!root) throw new Error('GLTF parse returned null scene');
+
+  let meshCount = 0, uvlessCount = 0;
+  root.traverse(child => {
+    if (child.isMesh) {
+      meshCount++;
+      const hasUV = !!(child.geometry.attributes && child.geometry.attributes.uv);
+      if (!hasUV) uvlessCount++;
+      // Preserve original material for real texture view
+      child.userData.realMap = (child.material && child.material.map) || null;
+      // Apply checker material for UV mode
+      child.material = new THREE.MeshBasicMaterial({
+        map: hasUV ? checkerTexture : null,
+        color: hasUV ? 0xffffff : 0xff4466
+      });
+    }
+  });
+
+  if (meshCount === 0) throw new Error('No mesh geometry found in this GLB/GLTF.');
+
+  scene.add(root);
+  currentRoot = root;
+  frameObject(root);
+
+  // Push initial snapshot for undo/redo
+  UVHistory.pushSnapshot('Import GLTF/GLB');
+
+  document.getElementById('tool-checker')?.classList.add('active');
+  document.getElementById('tool-real')?.classList.remove('active');
+  { const _r = document.getElementById('tool-real'); if (_r) _r.style.display = Object.keys(imageFiles).length > 0 ? 'inline-block' : 'none'; }
+  { const _e = document.getElementById('viewer-section'); if (_e) _e.style.display = 'block'; }
+
+  let msg = `✓ ${meshCount} mesh${meshCount === 1 ? '' : 'es'} loaded from GLB/GLTF.`;
+  if (uvlessCount > 0) msg += ` ⚠ ${uvlessCount} of them have NO UV data (shown in red).`;
+  st(msg, uvlessCount > 0 ? 'err' : 'ok');
 }
 
 // Overlay & background handlers registered once at module init (lines 3022-3051)

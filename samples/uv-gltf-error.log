@@ -1,0 +1,16 @@
+[16:49:01.633][INFO] MobiDevTools 4.5 — 3DRBXMT — UV Map Checker
+[16:49:01.633][INFO] ↻ Reload the page to capture console output, errors and event listeners from the very first line.
+[16:49:10.217][NAV] http://localhost:8083/uv-checker.html
+[16:49:10.218][INFO] MobiDevTools 4.5 — 3DRBXMT — UV Map Checker
+[16:49:25.650][LOG] [fixMalformedGLB] Not a GLB file (magic bytes mismatch)  (uv-checker.html:6376)
+[16:49:26.151][ERROR] [UV Checker] GLB/GLTF load error: Error: THREE.GLTFLoader: Failed to load buffer "scene.bin".
+loadBuffer/</<@https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js:2950:13
+load/<@https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js:43662:39
+  (uv-checker.html:6598)
+[16:49:26.169][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_baseColor.png  (GLTFLoader.js:3267)
+[16:49:26.181][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_1_metallicRoughness.png  (GLTFLoader.js:3267)
+[16:49:26.182][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_metallicRoughness.png  (GLTFLoader.js:3267)
+[16:49:26.206][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_normal.png  (GLTFLoader.js:3267)
+[16:49:26.210][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_1_baseColor.png  (GLTFLoader.js:3267)
+[16:49:26.219][ERROR] THREE.GLTFLoader: Couldn't load texture textures/material_1_normal.png  (GLTFLoader.js:3267)
+[16:49:26.253][ERROR] GET http://localhost:8083/scene.bin 404 (File not found)

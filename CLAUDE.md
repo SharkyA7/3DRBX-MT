@@ -64,3 +64,26 @@ If you cannot run the browser test, say so explicitly. Do not claim "it works" w
 - If a change breaks anything, revert with `git checkout -- <file>` or `git revert`, then retry smaller. Do not stack fixes on top of a broken state.
 - If you are unsure whether a change is safe, stop and ask me before changing the code.
 - Final answer must list: files changed, what was broken or added, and the result of every check in section 7.
+
+## RBXM decoder status (2026-11-05)
+
+Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.
+
+Done and verified on the chair control sample:
+- samples/case-control-chair.rbxm: TextureID is a plain String (rbxassetid://9797125350), MeshId/MeshID rbxassetid://9797125202. SharedStrings are physics data only (CSGPHS, plus an empty one).
+- tools/rbxm_check.py is the reference decoder. tools/rbxm_dump.py matches it on the chair.
+- Pipeline ran end to end: asset IDs -> Open Cloud asset delivery download -> gunzip -> mesh version 4.01 decode (header 24 bytes, 40-byte vertices, 996 verts, 844 faces, 5 LOD offsets, LOD 0 = 590 faces; byte accounting matches the 50,025-byte file) -> out/chair.obj, chair.mtl, chair.png (v written as 1 - v). Opened in Nomad Sculpt with the texture applied.
+- chair.png is a palette atlas; the mesh UVs sit in one thin band (v 0.42-0.50).
+
+Rules for this project:
+- Never ask for, print or log ROBLOX_API_KEY. It is not available to Claude Code's shell. The user downloads assets in their own Termux shell; work only from files already in samples/downloads/.
+- Downloaded assets are gzip-compressed (starts 1f 8b). Decompress before reading.
+- A previous sampling script returned all-black results for a texture that is fully colored, so verify image decoding with PIL before trusting texture analysis.
+
+Open items:
+1. The original missing-texture asset has not been found. Need a file where TextureID is a SharedString (rbxm_check.py --sstr shows it).
+2. The V flip (v = 1 - v) is unproven. The chair's UVs are in one band so color can't confirm it. Test on a model whose UVs span several colored swatches and compare with Roblox.
+3. CFrame is not decoded, so multi-part models can't be placed.
+4. Not yet tested: other mesh versions, SpecialMesh models, unions (geometry in SharedString), skipping Transparency 1.0 parts, scale from part Size vs InitialSize.
+
+Next step: get a second RBXM with several MeshParts (catalog accessory or Studio "Save to File"), run rbxm_check.py --all --sstr on it, then run our decoder and compare.
