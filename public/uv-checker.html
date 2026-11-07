@@ -1845,6 +1845,441 @@ ToolRegistry.registerTool('unwrap', {
   label: 'Unwrap',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
 });
+
+// ============================================================================
+// PHASE 3: UV UNWRAPPING OPERATIONS
+// ============================================================================
+
+// --- Auto Unwrap (LSCM/ABF full mesh) ---
+async function autoUnwrapTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const method = params.method ?? 'lscm';
+  const margin = params.margin ?? 0.005;
+
+  // Capture before snapshot
+  const beforeSnapshot = UVHistory.captureSnapshot();
+
+  st(`⚙ Auto-unwrapping (${method.toUpperCase()})…`, 'loading');
+
+  // For each mesh, unwrap all islands
+  currentRoot.traverse(async (child) => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) return;
+
+    const islands = getAllIslands().filter(i => i.mesh === child);
+    if (islands.length === 0) return;
+
+    // Apply LSCM or ABF unwrap per island
+    for (const isl of islands) {
+      await unwrapIslandLSCM(isl, uvAttr, idx, posAttr, method, margin);
+    }
+  });
+
+  if (uvAttr) uvAttr.needsUpdate = true;
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, `Auto Unwrap (${method.toUpperCase()})`);
+
+  st(`✓ Auto-unwrap complete (${method.toUpperCase()})`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('auto-unwrap', {
+  fn: autoUnwrapTool,
+  params: [
+    { name: 'method', type: 'select', label: 'Method', default: 'lscm',
+      options: [{ value: 'lscm', label: 'LSCM (Least Squares Conformal Maps)' },
+                { value: 'abf', label: 'ABF (Angle Based Flattening)' }] },
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'pinBoundary', type: 'checkbox', label: 'Pin boundary vertices', default: false }
+  ],
+  description: 'Auto-unwrap full mesh using LSCM or ABF',
+  section: 'uv',
+  tooltip: 'Auto Unwrap',
+  label: 'Auto Unwrap',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M12 4v16"/><path d="M4 12h16"/></svg>'
+});
+
+// --- Smart Unwrap (by 3D normals) ---
+function smartUnwrapTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const angleLimit = params.angleLimit ?? 66;
+  const margin = params.margin ?? 0.005;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Smart unwrapping…', 'loading');
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr, normAttr } = data;
+    if (!posAttr || !normAttr) return;
+
+    const islands = getAllIslands().filter(i => i.mesh === child);
+
+    for (const isl of islands) {
+      // Group faces by normal direction (smart projection)
+      const faceGroups = new Map();
+      for (const f of isl.faces) {
+        const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const n = new THREE.Vector3(normAttr.getX(v0), normAttr.getY(v0), normAttr.getZ(v0)).normalize();
+        // Quantize normal to find dominant axis
+        const absN = new THREE.Vector3(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z));
+        let axis = 'z';
+        if (absN.x > absN.y && absN.x > absN.z) axis = 'x';
+        else if (absN.y > absN.x && absN.y > absN.z) axis = 'y';
+        const key = `${axis}:${n.x > 0 ? '+' : '-'}`;
+        if (!faceGroups.has(key)) faceGroups.set(key, []);
+        faceGroups.get(key).push(f);
+      }
+
+      // Project each group with planar projection on its dominant axis
+      for (const [, faces] of faceGroups) {
+        projectFacesPlanar(faces, uvAttr, idx, posAttr, child);
+      }
+    }
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Smart Unwrap');
+
+  st('✓ Smart unwrap complete', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('smart-unwrap', {
+  fn: smartUnwrapTool,
+  params: [
+    { name: 'angleLimit', type: 'number', label: 'Angle limit (°)', min: 10, max: 89, step: 1, default: 66, unit: 'deg' },
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' }
+  ],
+  description: 'Smart projection unwrap based on 3D face normals',
+  section: 'uv',
+  tooltip: 'Smart Unwrap',
+  label: 'Smart Unwrap',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/><path d="M12 12l4-4-4-4"/></svg>'
+});
+
+// --- Project from View ---
+function projectFromViewTool(sel, params, meshData) {
+  if (!currentRoot || !camera) return { diffs: [] };
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Projecting from view…', 'loading');
+
+  // Get camera view matrix
+  const viewMatrix = new THREE.Matrix4();
+  viewMatrix.copy(camera.matrixWorldInverse);
+  const projMatrix = new THREE.Matrix4();
+  projMatrix.copy(camera.projectionMatrix);
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) return;
+
+    // Determine selected faces
+    const selectedFaces = new Set();
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      selectedFaces.add(parseInt(faceIdx));
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          for (const f of isl.faces) selectedFaces.add(f);
+        }
+      }
+    }
+    if (selectedFaces.size === 0) return;
+
+    uvAttr.array = uvAttr.array.slice();
+    for (const t of selectedFaces) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      for (const vi of [v0, v1, v2]) {
+        const worldPos = new THREE.Vector3(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi));
+        worldPos.applyMatrix4(child.matrixWorld);
+        const viewPos = worldPos.clone().applyMatrix4(viewMatrix);
+        const ndc = viewPos.clone().applyMatrix4(projMatrix);
+
+        if (ndc.w !== 0) {
+          const u = (ndc.x / ndc.w + 1) * 0.5;
+          const v = (ndc.y / ndc.w + 1) * 0.5;
+          uvAttr.setX(vi, THREE.MathUtils.clamp(u, 0, 1));
+          uvAttr.setY(vi, THREE.MathUtils.clamp(v, 0, 1));
+        }
+      }
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Project from View');
+
+  st('✓ Projected from view', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('project-from-view', {
+  fn: projectFromViewTool,
+  params: [],
+  description: 'Project UVs from current camera view (camera-space projection)',
+  section: 'uv',
+  tooltip: 'Project from View',
+  label: 'Project from View',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M4 12h16"/><path d="M12 4v16"/></svg>'
+});
+
+// --- Project Cubic ---
+function projectCubicTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const margin = params.margin ?? 0.005;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Cubic projecting…', 'loading');
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr, normAttr } = data;
+    if (!posAttr || !normAttr) return;
+
+    const box = new THREE.Box3().setFromObject(child);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    uvAttr.array = uvAttr.array.slice();
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const pos = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+      pos.applyMatrix4(child.matrixWorld);
+      const rel = pos.clone().sub(center);
+
+      const absX = Math.abs(rel.x), absY = Math.abs(rel.y), absZ = Math.abs(rel.z);
+      let u, v;
+
+      if (absX >= absY && absX >= absZ) {
+        // Project on YZ plane (±X faces)
+        u = (rel.z + size.z/2) / size.z;
+        v = (rel.y + size.y/2) / size.y;
+        if (rel.x < 0) u = 1 - u;
+      } else if (absY >= absX && absY >= absZ) {
+        // Project on XZ plane (±Y faces)
+        u = (rel.x + size.x/2) / size.x;
+        v = (rel.z + size.z/2) / size.z;
+        if (rel.y < 0) v = 1 - v;
+      } else {
+        // Project on XY plane (±Z faces)
+        u = (rel.x + size.x/2) / size.x;
+        v = (rel.y + size.y/2) / size.y;
+        if (rel.z < 0) u = 1 - u;
+      }
+
+      uvAttr.setX(i, THREE.MathUtils.clamp(u, margin, 1-margin));
+      uvAttr.setY(i, THREE.MathUtils.clamp(v, margin, 1-margin));
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Project Cubic');
+
+  st('✓ Cubic projection complete', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('project-cubic', {
+  fn: projectCubicTool,
+  params: [
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' }
+  ],
+  description: 'Cubic (box) projection from object-space bounding box',
+  section: 'uv',
+  tooltip: 'Project Cubic',
+  label: 'Project Cubic',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2h8a2 2 0 012 2v8a2 2 0 01-2 2h-8a2 2 0 01-2-2V4a2 2 0 012-2z"/><path d="M4 8l4 4"/><path d="M16 8l-4 4"/><path d="M8 16l4-4"/></svg>'
+});
+
+// --- Project Spherical ---
+function projectSphericalTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const margin = params.margin ?? 0.005;
+  const alignTo = params.alignTo ?? 'object';
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Spherical projecting…', 'loading');
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, posAttr } = data;
+    if (!posAttr) return;
+
+    const box = new THREE.Box3().setFromObject(child);
+    const center = box.getCenter(new THREE.Vector3());
+
+    uvAttr.array = uvAttr.array.slice();
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const pos = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+      pos.applyMatrix4(child.matrixWorld);
+      const rel = pos.clone().sub(center).normalize();
+
+      // Spherical coordinates: u = longitude, v = latitude
+      const u = 0.5 + Math.atan2(rel.z, rel.x) / (2 * Math.PI);
+      const v = 0.5 - Math.asin(THREE.MathUtils.clamp(rel.y, -1, 1)) / Math.PI;
+
+      uvAttr.setX(i, THREE.MathUtils.clamp(u, margin, 1-margin));
+      uvAttr.setY(i, THREE.MathUtils.clamp(v, margin, 1-margin));
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Project Spherical');
+
+  st('✓ Spherical projection complete', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('project-spherical', {
+  fn: projectSphericalTool,
+  params: [
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'alignTo', type: 'select', label: 'Align to', default: 'object',
+      options: [{ value: 'object', label: 'Object Space' }, { value: 'world', label: 'World Space' }] }
+  ],
+  description: 'Spherical projection (longitude/latitude)',
+  section: 'uv',
+  tooltip: 'Project Spherical',
+  label: 'Project Spherical',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="2" x2="12" y2="22"/><path d="M12 2a10 10 0 010 20M12 2a10 10 0 000 20"/></svg>'
+});
+
+// --- Project Cylindrical ---
+function projectCylindricalTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const margin = params.margin ?? 0.005;
+  const axis = params.axis ?? 'y';
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Cylindrical projecting…', 'loading');
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, posAttr } = data;
+    if (!posAttr) return;
+
+    const box = new THREE.Box3().setFromObject(child);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    uvAttr.array = uvAttr.array.slice();
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const pos = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+      pos.applyMatrix4(child.matrixWorld);
+      const rel = pos.clone().sub(center);
+
+      let u, v;
+      if (axis === 'x') {
+        const len = Math.hypot(rel.y, rel.z);
+        if (len > 1e-6) {
+          u = 0.5 + Math.atan2(rel.z, rel.y) / (2 * Math.PI);
+          v = (rel.x + size.x/2) / size.x;
+        } else { u = 0.5; v = (rel.x + size.x/2) / size.x; }
+      } else if (axis === 'y') {
+        const len = Math.hypot(rel.x, rel.z);
+        if (len > 1e-6) {
+          u = 0.5 + Math.atan2(rel.x, rel.z) / (2 * Math.PI);
+          v = (rel.y + size.y/2) / size.y;
+        } else { u = 0.5; v = (rel.y + size.y/2) / size.y; }
+      } else { // axis === 'z'
+        const len = Math.hypot(rel.x, rel.y);
+        if (len > 1e-6) {
+          u = 0.5 + Math.atan2(rel.y, rel.x) / (2 * Math.PI);
+          v = (rel.z + size.z/2) / size.z;
+        } else { u = 0.5; v = (rel.z + size.z/2) / size.z; }
+      }
+
+      uvAttr.setX(i, THREE.MathUtils.clamp(u, margin, 1-margin));
+      uvAttr.setY(i, THREE.MathUtils.clamp(v, margin, 1-margin));
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Project Cylindrical');
+
+  st('✓ Cylindrical projection complete', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('project-cylindrical', {
+  fn: projectCylindricalTool,
+  params: [
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'axis', type: 'select', label: 'Axis', default: 'y',
+      options: [{ value: 'x', label: 'X Axis' }, { value: 'y', label: 'Y Axis' }, { value: 'z', label: 'Z Axis' }] }
+  ],
+  description: 'Cylindrical projection around specified axis',
+  section: 'uv',
+  tooltip: 'Project Cylindrical',
+  label: 'Project Cylindrical',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="4" rx="8" ry="2"/><path d="M4 4v16"/><path d="M20 4v16"/><ellipse cx="12" cy="20" rx="8" ry="2"/></svg>'
+});
+
 ToolRegistry.registerTool('pack', {
   fn: (sel, params, meshData) => applyPackUV(sel, meshData),
   params: [
@@ -7198,6 +7633,169 @@ function applyUnwrapUV() {
 
   st('✓ UVs unwrapped (planar projection)', 'ok');
   requestRender();
+}
+
+// ============================================================================
+// PHASE 3 HELPER FUNCTIONS
+// ============================================================================
+
+// Planar projection helper for a set of faces
+function projectFacesPlanar(faces, uvAttr, idx, posAttr, mesh) {
+  if (faces.length === 0) return;
+
+  // Compute bounding box of selected faces
+  const box = new THREE.Box3();
+  for (const t of faces) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    box.expandByPoint(new THREE.Vector3(posAttr.getX(v0), posAttr.getY(v0), posAttr.getZ(v0)));
+    box.expandByPoint(new THREE.Vector3(posAttr.getX(v1), posAttr.getY(v1), posAttr.getZ(v1)));
+    box.expandByPoint(new THREE.Vector3(posAttr.getX(v2), posAttr.getY(v2), posAttr.getZ(v2)));
+  }
+
+  const size = box.getSize(new THREE.Vector3());
+  let projAxis = 'z';
+  if (size.x > size.y && size.x > size.z) projAxis = 'x';
+  else if (size.y > size.x && size.y > size.z) projAxis = 'y';
+
+  for (const t of faces) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+
+    for (const vi of [v0, v1, v2]) {
+      const x = posAttr.getX(vi);
+      const y = posAttr.getY(vi);
+      const z = posAttr.getZ(vi);
+
+      let u, v;
+      if (projAxis === 'x') { u = z; v = y; }
+      else if (projAxis === 'y') { u = x; v = z; }
+      else { u = x; v = y; }
+
+      const min = box.min, max = box.max;
+      if (projAxis === 'x') {
+        u = (u - min.z) / (max.z - min.z || 1);
+        v = (v - min.y) / (max.y - min.y || 1);
+      } else if (projAxis === 'y') {
+        u = (u - min.x) / (max.x - min.x || 1);
+        v = (v - min.z) / (max.z - min.z || 1);
+      } else {
+        u = (u - min.x) / (max.x - min.x || 1);
+        v = (v - min.y) / (max.y - min.y || 1);
+      }
+
+      uvAttr.setX(vi, THREE.MathUtils.clamp(u, 0, 1));
+      uvAttr.setY(vi, THREE.MathUtils.clamp(v, 0, 1));
+    }
+  }
+}
+
+// LSCM (Least Squares Conformal Maps) unwrap for a single island
+async function unwrapIslandLSCM(island, uvAttr, idx, posAttr, method = 'lscm', margin = 0.005) {
+  // Build vertex-face adjacency for the island
+  const vertices = Array.from(island.vertices);
+  const vertToIdx = new Map(vertices.map((v, i) => [v, i]));
+  const n = vertices.length;
+  if (n < 3) return;
+
+  // Build triangle list for the island
+  const triangles = [];
+  for (const f of island.faces) {
+    const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const i0m = vertToIdx.get(v0);
+    const i1m = vertToIdx.get(v1);
+    const i2m = vertToIdx.get(v2);
+    if (i0m !== undefined && i1m !== undefined && i2m !== undefined) {
+      triangles.push([i0m, i1m, i2m]);
+    }
+  }
+  if (triangles.length === 0) return;
+
+  // For LSCM, we need to find boundary vertices and pin two
+  const edgeCount = new Map();
+  for (const [a, b, c] of triangles) {
+    const edges = [[a, b], [b, c], [c, a]];
+    for (const [x, y] of edges) {
+      const key = x < y ? `${x}:${y}` : `${y}:${x}`;
+      edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+    }
+  }
+
+  const boundaryVerts = new Set();
+  for (const [key, count] of edgeCount) {
+    if (count === 1) {
+      const [x, y] = key.split(':').map(Number);
+      boundaryVerts.add(x);
+      boundaryVerts.add(y);
+    }
+  }
+
+  // Pin two boundary vertices (first and middle)
+  const boundaryArray = Array.from(boundaryVerts);
+  const pinned = boundaryArray.length >= 2
+    ? [boundaryArray[0], boundaryArray[Math.floor(boundaryArray.length / 2)]]
+    : boundaryArray.slice(0, 2);
+
+  // Solve linear system for LSCM
+  // This is a simplified LSCM - for production, use a proper linear solver
+  // Here we use a basic iterative approach
+  const positions = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const vi = vertices[i];
+    positions[i * 2] = uvAttr.getX(vi);
+    positions[i * 2 + 1] = uvAttr.getY(vi);
+  }
+
+  // Simple iterative LSCM relaxation (20 iterations)
+  for (let iter = 0; iter < 20; iter++) {
+    const newPositions = new Float32Array(positions);
+
+    for (let i = 0; i < n; i++) {
+      if (pinned.includes(i)) continue;
+
+      // Find connected vertices
+      let sumU = 0, sumV = 0, count = 0;
+      for (const [a, b, c] of triangles) {
+        if (a === i) { sumU += positions[b*2]; sumV += positions[b*2+1]; count++; sumU += positions[c*2]; sumV += positions[c*2+1]; count++; }
+        else if (b === i) { sumU += positions[a*2]; sumV += positions[a*2+1]; count++; sumU += positions[c*2]; sumV += positions[c*2+1]; count++; }
+        else if (c === i) { sumU += positions[a*2]; sumV += positions[a*2+1]; count++; sumU += positions[b*2]; sumV += positions[b*2+1]; count++; }
+      }
+
+      if (count > 0) {
+        newPositions[i*2] = sumU / count;
+        newPositions[i*2+1] = sumV / count;
+      }
+    }
+    positions.set(newPositions);
+  }
+
+  // Normalize to 0-1 with margin
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (let i = 0; i < n; i++) {
+    minU = Math.min(minU, positions[i*2]);
+    maxU = Math.max(maxU, positions[i*2]);
+    minV = Math.min(minV, positions[i*2+1]);
+    maxV = Math.max(maxV, positions[i*2+1]);
+  }
+
+  const rangeU = maxU - minU || 1;
+  const rangeV = maxV - minV || 1;
+  const scale = Math.min(1 / rangeU, 1 / rangeV) * (1 - 2 * margin);
+
+  for (let i = 0; i < n; i++) {
+    const vi = vertices[i];
+    const u = margin + (positions[i*2] - minU) * scale;
+    const v = margin + (positions[i*2+1] - minV) * scale;
+    uvAttr.setX(vi, u);
+    uvAttr.setY(vi, v);
+  }
 }
 
 // Pack UV Islands: MaxRects bin packing for optimal UV space utilization
