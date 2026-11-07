@@ -2244,6 +2244,516 @@ ToolRegistry.registerTool('normalize', {
   label: 'Normalize',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>'
 });
+// ============================================================================
+// PHASE 6: ADVANCED UV EDITING TOOLS
+// ============================================================================
+
+// --- Gridify (snap UVs to grid) ---
+function gridifyTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const gridSize = params.gridSize ?? 0.0625; // 1/16
+  const mode = params.mode ?? 'snap'; // 'snap', 'align'
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Gridifying UVs…', 'loading');
+
+  let modifiedCount = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    // Get selected vertices
+    const selectedVerts = new Set();
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      selectedVerts.add(parseInt(vertIdx));
+    }
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      const t = parseInt(faceIdx);
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      selectedVerts.add(v0); selectedVerts.add(v1); selectedVerts.add(v2);
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          for (const v of isl.vertices) selectedVerts.add(v);
+        }
+      }
+    }
+    if (selectedVerts.size === 0) return;
+
+    uvAttr.array = uvAttr.array.slice();
+
+    for (const vi of selectedVerts) {
+      let u = uvAttr.getX(vi);
+      let v = uvAttr.getY(vi);
+
+      if (mode === 'snap') {
+        u = Math.round(u / gridSize) * gridSize;
+        v = Math.round(v / gridSize) * gridSize;
+      } else if (mode === 'align') {
+        // Align to nearest grid line but preserve relative positions within island
+        const island = getAllIslands().find(i => i.mesh === child && i.vertices.has(vi));
+        if (island) {
+          const centerU = (island.min_uv.x + island.max_uv.x) / 2;
+          const centerV = (island.min_uv.y + island.max_uv.y) / 2;
+          const alignedCenterU = Math.round(centerU / gridSize) * gridSize;
+          const alignedCenterV = Math.round(centerV / gridSize) * gridSize;
+          u = alignedCenterU + (u - centerU);
+          v = alignedCenterV + (v - centerV);
+        } else {
+          u = Math.round(u / gridSize) * gridSize;
+          v = Math.round(v / gridSize) * gridSize;
+        }
+      }
+
+      uvAttr.setX(vi, u);
+      uvAttr.setY(vi, v);
+      modifiedCount++;
+    }
+
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Gridify');
+
+  st(`✓ Gridified ${modifiedCount} vertices (grid: ${gridSize})`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('gridify', {
+  fn: gridifyTool,
+  params: [
+    { name: 'gridSize', type: 'number', label: 'Grid Size', min: 0.001, max: 0.5, step: 0.001, default: 0.0625, unit: 'UV' },
+    { name: 'mode', type: 'select', label: 'Mode', default: 'snap',
+      options: [{ value: 'snap', label: 'Snap to Grid' }, { value: 'align', label: 'Align Island to Grid' }] }
+  ],
+  description: 'Snap UV vertices or align islands to a regular grid',
+  section: 'uv',
+  tooltip: 'Gridify',
+  label: 'Gridify',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>'
+});
+
+// --- Rectify (straighten UV edges to horizontal/vertical) ---
+function rectifyTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const threshold = params.threshold ?? 15; // degrees
+  const mode = params.mode ?? 'edges'; // 'edges', 'islands'
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Rectifying UVs…', 'loading');
+
+  let rectifiedCount = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    const islands = getAllIslands().filter(i => i.mesh === child);
+    if (islands.length === 0) return;
+
+    // Filter by selection
+    const targetIslands = [];
+    if (selection.islands.size > 0) {
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id)) targetIslands.push(isl);
+      }
+    } else {
+      targetIslands.push(...islands);
+    }
+
+    if (targetIslands.length === 0) return;
+
+    for (const isl of targetIslands) {
+      uvAttr.array = uvAttr.array.slice();
+
+      // Build edges for this island
+      const edgeData = new Map(); // edgeKey -> { a, b, faces: [] }
+      for (const f of isl.faces) {
+        const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+        const edges = [
+          { key: v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`, a: v0, b: v1 },
+          { key: v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`, a: v1, b: v2 },
+          { key: v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`, a: v2, b: v0 }
+        ];
+        for (const e of edges) {
+          if (!edgeData.has(e.key)) edgeData.set(e.key, { a: e.a, b: e.b, faces: [] });
+          edgeData.get(e.key).faces.push(f);
+        }
+      }
+
+      // Find edges close to horizontal/vertical
+      const thresholdRad = threshold * Math.PI / 180;
+      const edgesToStraighten = [];
+
+      for (const [key, edata] of edgeData) {
+        if (edata.faces.length === 2 || mode === 'islands') {
+          // Internal edge or island boundary
+          const ua = uvAttr.getX(edata.a), va = uvAttr.getY(edata.a);
+          const ub = uvAttr.getX(edata.b), vb = uvAttr.getY(edata.b);
+          const du = ub - ua, dv = vb - va;
+          const len = Math.hypot(du, dv);
+          if (len < 1e-6) continue;
+
+          const angle = Math.atan2(dv, du);
+          const deg = Math.abs(angle * 180 / Math.PI);
+          const degNormalized = deg % 90;
+
+          if (degNormalized <= threshold || degNormalized >= 90 - threshold) {
+            // Close to horizontal or vertical - straighten it
+            edgesToStraighten.push({ edata, angle, len, ua, va, ub, vb });
+          }
+        }
+      }
+
+      // Straighten edges by moving vertices
+      const vertexAdjustments = new Map(); // vi -> { du, dv, count }
+      for (const { edata, angle, len, ua, va, ub, vb } of edgesToStraighten) {
+        const deg = Math.abs(angle * 180 / Math.PI) % 90;
+        const isHorizontal = deg < 45;
+        const targetAngle = isHorizontal ? 0 : Math.PI / 2;
+
+        // Calculate target positions
+        const midU = (ua + ub) / 2;
+        const midV = (va + vb) / 2;
+        const halfLen = len / 2;
+
+        let targetUA, targetVA, targetUB, targetVB;
+        if (isHorizontal) {
+          targetUA = midU - halfLen; targetVA = midV;
+          targetUB = midU + halfLen; targetVB = midV;
+        } else {
+          targetUA = midU; targetVA = midV - halfLen;
+          targetUB = midU; targetVB = midV + halfLen;
+        }
+
+        // Accumulate adjustments
+        for (const [vi, tu, tv] of [[edata.a, targetUA, targetVA], [edata.b, targetUB, targetVB]]) {
+          const currU = uvAttr.getX(vi);
+          const currV = uvAttr.getY(vi);
+          const adj = vertexAdjustments.get(vi) || { du: 0, dv: 0, count: 0 };
+          adj.du += tu - currU;
+          adj.dv += tv - currV;
+          adj.count++;
+          vertexAdjustments.set(vi, adj);
+        }
+      }
+
+      // Apply averaged adjustments
+      for (const [vi, adj] of vertexAdjustments) {
+        const u = uvAttr.getX(vi) + adj.du / adj.count;
+        const v = uvAttr.getY(vi) + adj.dv / adj.count;
+        uvAttr.setX(vi, u);
+        uvAttr.setY(vi, v);
+        rectifiedCount++;
+      }
+
+      uvAttr.needsUpdate = true;
+    }
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Rectify');
+
+  st(`✓ Rectified ${rectifiedCount} vertex adjustments`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('rectify', {
+  fn: rectifyTool,
+  params: [
+    { name: 'threshold', type: 'number', label: 'Angle Threshold', min: 1, max: 45, step: 1, default: 15, unit: '°' },
+    { name: 'mode', type: 'select', label: 'Mode', default: 'edges',
+      options: [{ value: 'edges', label: 'Straighten Edges' }, { value: 'islands', label: 'Align Island Bounds' }] }
+  ],
+  description: 'Straighten UV edges to horizontal/vertical within angle threshold',
+  section: 'uv',
+  tooltip: 'Rectify',
+  label: 'Rectify',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M4 8h16"/><path d="M4 16h16"/></svg>'
+});
+
+// --- Unfoldify (iterative relaxation to reduce UV distortion) ---
+function unfoldifyTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const iterations = params.iterations ?? 10;
+  const stiffness = params.stiffness ?? 0.5;
+  const pinnedOnly = params.pinnedOnly ?? false;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st(`⚙ Unfoldifying (${iterations} iterations)…`, 'loading');
+
+  let totalMoved = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) return;
+
+    // Get selected islands
+    const islands = getAllIslands().filter(i => i.mesh === child);
+    const targetIslands = selection.islands.size > 0
+      ? islands.filter(i => selection.islands.has(i.id))
+      : islands;
+    if (targetIslands.length === 0) return;
+
+    // Build adjacency for LSCM-style relaxation
+    for (let iter = 0; iter < iterations; iter++) {
+      const vertexForces = new Map(); // vi -> { fx, fy, count }
+
+      for (const isl of targetIslands) {
+        for (const f of isl.faces) {
+          const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+          const v0 = idx ? idx.getX(i0) : i0;
+          const v1 = idx ? idx.getX(i1) : i1;
+          const v2 = idx ? idx.getX(i2) : i2;
+
+          // Get 3D positions
+          const p0 = new THREE.Vector3(posAttr.getX(v0), posAttr.getY(v0), posAttr.getZ(v0));
+          const p1 = new THREE.Vector3(posAttr.getX(v1), posAttr.getY(v1), posAttr.getZ(v1));
+          const p2 = new THREE.Vector3(posAttr.getX(v2), posAttr.getY(v2), posAttr.getZ(v2));
+
+          // Get UV positions
+          const u0 = uvAttr.getX(v0), v0uv = uvAttr.getY(v0);
+          const u1 = uvAttr.getX(v1), v1uv = uvAttr.getY(v1);
+          const u2 = uvAttr.getX(v2), v2uv = uvAttr.getY(v2);
+
+          // Compute edge vectors in 3D and UV
+          const e01_3d = p1.clone().sub(p0);
+          const e12_3d = p2.clone().sub(p1);
+          const e20_3d = p0.clone().sub(p2);
+
+          const e01_uv = new THREE.Vector2(u1 - u0, v1uv - v0uv);
+          const e12_uv = new THREE.Vector2(u2 - u1, v2uv - v1uv);
+          const e20_uv = new THREE.Vector2(u0 - u2, v0uv - v2uv);
+
+          // Target: UV edges should match 3D edge proportions
+          const len01_3d = e01_3d.length();
+          const len12_3d = e12_3d.length();
+          const len20_3d = e20_3d.length();
+
+          const len01_uv = e01_uv.length();
+          const len12_uv = e12_uv.length();
+          const len20_uv = e20_uv.length();
+
+          if (len01_uv > 1e-6 && len01_3d > 1e-6) {
+            const scale = len01_3d / len01_uv;
+            const fx = e01_uv.x * (scale - 1) * stiffness;
+            const fy = e01_uv.y * (scale - 1) * stiffness;
+            for (const [vi, f] of [[v0, -fx], [v1, fx]]) {
+              if (pinnedOnly && child.userData.pinnedVerts?.has(vi)) continue;
+              const curr = vertexForces.get(vi) || { fx: 0, fy: 0, count: 0 };
+              curr.fx += f; curr.fy += 0; curr.count++;
+              vertexForces.set(vi, curr);
+            }
+          }
+          if (len12_uv > 1e-6 && len12_3d > 1e-6) {
+            const scale = len12_3d / len12_uv;
+            const fx = e12_uv.x * (scale - 1) * stiffness;
+            const fy = e12_uv.y * (scale - 1) * stiffness;
+            for (const [vi, f] of [[v1, -fx], [v2, fx]]) {
+              if (pinnedOnly && child.userData.pinnedVerts?.has(vi)) continue;
+              const curr = vertexForces.get(vi) || { fx: 0, fy: 0, count: 0 };
+              curr.fx += f; curr.fy += 0; curr.count++;
+              vertexForces.set(vi, curr);
+            }
+          }
+          if (len20_uv > 1e-6 && len20_3d > 1e-6) {
+            const scale = len20_3d / len20_uv;
+            const fx = e20_uv.x * (scale - 1) * stiffness;
+            const fy = e20_uv.y * (scale - 1) * stiffness;
+            for (const [vi, f] of [[v2, -fx], [v0, fx]]) {
+              if (pinnedOnly && child.userData.pinnedVerts?.has(vi)) continue;
+              const curr = vertexForces.get(vi) || { fx: 0, fy: 0, count: 0 };
+              curr.fx += f; curr.fy += 0; curr.count++;
+              vertexForces.set(vi, curr);
+            }
+          }
+        }
+      }
+
+      // Apply forces
+      uvAttr.array = uvAttr.array.slice();
+      for (const [vi, force] of vertexForces) {
+        if (force.count > 0) {
+          const u = uvAttr.getX(vi) + force.fx / force.count;
+          const v = uvAttr.getY(vi) + force.fy / force.count;
+          uvAttr.setX(vi, u);
+          uvAttr.setY(vi, v);
+          totalMoved++;
+        }
+      }
+      uvAttr.needsUpdate = true;
+    }
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Unfoldify');
+
+  st(`✓ Unfoldify complete (${totalMoved} vertex updates)`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('unfoldify', {
+  fn: unfoldifyTool,
+  params: [
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 50, step: 1, default: 10 },
+    { name: 'stiffness', type: 'number', label: 'Stiffness', min: 0.01, max: 2, step: 0.01, default: 0.5 },
+    { name: 'pinnedOnly', type: 'checkbox', label: 'Respect pinned vertices', default: false }
+  ],
+  description: 'Iterative relaxation to reduce UV distortion (LSCM-style)',
+  section: 'uv',
+  tooltip: 'Unfoldify',
+  label: 'Unfoldify',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0110 10"/><path d="M2 12h20"/><path d="M12 2a4 4 0 00-4 4"/><path d="M12 2a4 4 0 014 4"/></svg>'
+});
+
+// --- Align Body Parts (align UV islands of symmetrical body parts) ---
+function alignBodyPartsTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const axis = params.axis ?? 'x'; // 'x', 'y', 'z'
+  const tolerance = params.tolerance ?? 0.01;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Aligning body parts…', 'loading');
+
+  let alignedCount = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) return;
+
+    const islands = getAllIslands().filter(i => i.mesh === child);
+    if (islands.length < 2) return;
+
+    // Group islands by 3D position symmetry
+    const groups = new Map(); // key -> [islands]
+
+    for (const isl of islands) {
+      // Compute 3D center of island
+      let cx = 0, cy = 0, cz = 0;
+      for (const v of isl.vertices) {
+        cx += posAttr.getX(v);
+        cy += posAttr.getY(v);
+        cz += posAttr.getZ(v);
+      }
+      cx /= isl.vertices.size;
+      cy /= isl.vertices.size;
+      cz /= isl.vertices.size;
+
+      // Round to tolerance for grouping
+      let key;
+      if (axis === 'x') {
+        key = Math.round(cx / tolerance) * tolerance;
+      } else if (axis === 'y') {
+        key = Math.round(cy / tolerance) * tolerance;
+      } else {
+        key = Math.round(cz / tolerance) * tolerance;
+      }
+
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ island: isl, center3d: { x: cx, y: cy, z: cz } });
+    }
+
+    // For each group with 2+ islands, align their UV bounds
+    uvAttr.array = uvAttr.array.slice();
+
+    for (const [key, group] of groups) {
+      if (group.length < 2) continue;
+
+      // Find reference island (largest area)
+      const ref = group.reduce((a, b) => a.island.area > b.island.area ? a : b);
+      const refCenterU = (ref.island.min_uv.x + ref.island.max_uv.x) / 2;
+      const refCenterV = (ref.island.min_uv.y + ref.island.max_uv.y) / 2;
+
+      for (const { island } of group) {
+        if (island === ref.island) continue;
+
+        const centerU = (island.min_uv.x + island.max_uv.x) / 2;
+        const centerV = (island.min_uv.y + island.max_uv.y) / 2;
+
+        const offsetU = refCenterU - centerU;
+        const offsetV = refCenterV - centerV;
+
+        for (const vi of island.vertices) {
+          const u = uvAttr.getX(vi) + offsetU;
+          const v = uvAttr.getY(vi) + offsetV;
+          uvAttr.setX(vi, u);
+          uvAttr.setY(vi, v);
+          alignedCount++;
+        }
+      }
+    }
+
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Align Body Parts');
+
+  st(`✓ Aligned ${alignedCount} vertices across symmetrical parts`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('align-body-parts', {
+  fn: alignBodyPartsTool,
+  params: [
+    { name: 'axis', type: 'select', label: 'Symmetry Axis', default: 'x',
+      options: [{ value: 'x', label: 'X (Left/Right)' }, { value: 'y', label: 'Y (Up/Down)' }, { value: 'z', label: 'Z (Front/Back)' }] },
+    { name: 'tolerance', type: 'number', label: 'Position Tolerance', min: 0.001, max: 0.1, step: 0.001, default: 0.01, unit: 'units' }
+  ],
+  description: 'Align UV islands of symmetrical body parts along chosen axis',
+  section: 'uv',
+  tooltip: 'Align Body Parts',
+  label: 'Align Parts',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M2 12h20"/><circle cx="12" cy="12" r="4"/><path d="M12 8v8M8 12h8"/></svg>'
+});
 
 ToolRegistry.registerTool('unwrap', {
   fn: (sel, params, meshData) => applyUnwrapUV(sel, meshData),
