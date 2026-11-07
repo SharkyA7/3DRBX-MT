@@ -2292,6 +2292,510 @@ ToolRegistry.registerTool('pack', {
   label: 'Pack',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>'
 });
+ToolRegistry.registerTool('pack-to-bounds', {
+  fn: (sel, params, meshData) => applyPackToBoundsUV(params),
+  params: [
+    { name: 'minU', type: 'number', label: 'Min U', min: -10, max: 10, step: 0.01, default: 0, unit: 'UV' },
+    { name: 'minV', type: 'number', label: 'Min V', min: -10, max: 10, step: 0.01, default: 0, unit: 'UV' },
+    { name: 'maxU', type: 'number', label: 'Max U', min: -10, max: 10, step: 0.01, default: 1, unit: 'UV' },
+    { name: 'maxV', type: 'number', label: 'Max V', min: -10, max: 10, step: 0.01, default: 1, unit: 'UV' },
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'maintainAspectRatio', type: 'checkbox', label: 'Maintain Aspect Ratio', default: true }
+  ],
+  description: 'Pack UV islands to specified bounds',
+  section: 'uv',
+  tooltip: 'Pack to Bounds',
+  label: 'Pack to Bounds',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="5" y="5" width="14" height="14" rx="1"/></svg>'
+});
+
+// ============================================================================
+// PHASE 4: UV PACKING OPERATIONS
+// ============================================================================
+
+// --- Repack (re-run MaxRects with configurable parameters) ---
+async function repackTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const padding = params.padding ?? 0.005;
+  const sortBy = params.sortBy ?? 'area';
+  const rotate = params.rotate ?? false;
+  const heuristic = params.heuristic ?? 'shortSideFit';
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st(`⚙ Repacking (${heuristic}, sort by ${sortBy})…`, 'loading');
+
+  // Reuse the core packing logic with new parameters
+  const islands = getAllIslands();
+  if (islands.length === 0) {
+    st('✗ No UV islands found', 'err');
+    return { diffs: [] };
+  }
+
+  // Sort islands based on parameter
+  if (sortBy === 'area') {
+    islands.sort((a, b) => b.area - a.area);
+  } else if (sortBy === 'perimeter') {
+    islands.sort((a, b) => (b.width + b.height) * 2 - (a.width + a.height) * 2);
+  }
+  // 'none' keeps original order
+
+  const freeRects = [{ x: 0, y: 0, w: 1, h: 1 }];
+  const placed = [];
+
+  function splitFreeRect(freeRect, placedRect) {
+    if (placedRect.x >= freeRect.x + freeRect.w ||
+        placedRect.x + placedRect.w <= freeRect.x ||
+        placedRect.y >= freeRect.y + freeRect.h ||
+        placedRect.y + placedRect.h <= freeRect.y) {
+      return [freeRect];
+    }
+    const result = [];
+    if (placedRect.x > freeRect.x) {
+      result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
+    }
+    if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
+      result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
+    }
+    if (placedRect.y > freeRect.y) {
+      result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
+    }
+    if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
+      result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
+    }
+    return result;
+  }
+
+  function pruneFreeList(freeRects) {
+    const result = [];
+    for (let i = 0; i < freeRects.length; i++) {
+      let contained = false;
+      for (let j = 0; j < freeRects.length; j++) {
+        if (i !== j &&
+            freeRects[i].x >= freeRects[j].x &&
+            freeRects[i].y >= freeRects[j].y &&
+            freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
+            freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
+          contained = true; break;
+        }
+      }
+      if (!contained) result.push(freeRects[i]);
+    }
+    return result;
+  }
+
+  function findPositionForNewRect(w, h, heuristicType) {
+    let bestRect = null, bestScore = Infinity, bestIdx = -1;
+    for (let i = 0; i < freeRects.length; i++) {
+      const r = freeRects[i];
+      if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
+        let score;
+        switch (heuristicType) {
+          case 'longSideFit': score = Math.max(r.w - w, r.h - h); break;
+          case 'bestAreaFit': score = r.w * r.h - w * h; break;
+          case 'contactPoint': score = 0; // Simplified
+            for (const fr of freeRects) {
+              if (fr !== r && !(fr.x >= r.x + w || fr.x + fr.w <= r.x || fr.y >= r.y + h || fr.y + fr.h <= r.y)) {
+                score += Math.min(fr.w, fr.h);
+              }
+            }
+            break;
+          default: score = Math.min(r.w - w, r.h - h); // shortSideFit
+        }
+        if (score < bestScore) {
+          bestScore = score; bestRect = r; bestIdx = i;
+        }
+      }
+    }
+    return { rect: bestRect, idx: bestIdx };
+  }
+
+  for (const isl of islands) {
+    const w = isl.width, h = isl.height;
+    if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) continue;
+
+    let pw = w, ph = h;
+    // Try rotation if enabled
+    const tryRotate = rotate && w !== h && w > 0 && h > 0;
+    let useRotated = false;
+
+    if (tryRotate) {
+      const posRotated = findPositionForNewRect(h + padding * 2, w + padding * 2, heuristic);
+      const posNormal = findPositionForNewRect(w + padding * 2, h + padding * 2, heuristic);
+      if (posRotated.rect && (!posNormal.rect || (posRotated.rect.w * posRotated.rect.h < posNormal.rect.w * posNormal.rect.h))) {
+        useRotated = true;
+        pw = h; ph = w;
+      }
+    }
+
+    const pos = findPositionForNewRect(pw + padding * 2, ph + padding * 2, heuristic);
+    if (!pos.rect) {
+      st('⚠ Ran out of UV space — some islands not packed', 'err');
+      break;
+    }
+
+    const placedRect = { x: pos.rect.x + padding, y: pos.rect.y + padding, w: pw, h: ph, rotated: useRotated };
+    placed.push({ isl, rect: placedRect, minU: isl.min_uv.x, minV: isl.min_uv.y });
+
+    const newFree = [];
+    for (const fr of freeRects) {
+      newFree.push(...splitFreeRect(fr, { x: pos.rect.x, y: pos.rect.y, w: pw + padding * 2, h: ph + padding * 2 }));
+    }
+    freeRects.length = 0;
+    freeRects.push(...pruneFreeList(newFree));
+  }
+
+  // Apply positions
+  for (const p of placed) {
+    try {
+      const offsetU = p.rect.x - p.minU;
+      const offsetV = p.rect.y - p.minV;
+      // Apply rotation if needed
+      if (p.rect.rotated) {
+        const data = getUVData(p.isl.mesh);
+        if (data) {
+          const { uvAttr, idx } = data;
+          uvAttr.array = uvAttr.array.slice();
+          const centerU = (p.isl.min_uv.x + p.isl.max_uv.x) / 2;
+          const centerV = (p.isl.min_uv.y + p.isl.max_uv.y) / 2;
+          for (const vi of p.isl.vertices) {
+            const u = uvAttr.getX(vi) - centerU;
+            const v = uvAttr.getY(vi) - centerV;
+            uvAttr.setX(vi, centerU + v);
+            uvAttr.setY(vi, centerV - u);
+          }
+          uvAttr.needsUpdate = true;
+        }
+      }
+      moveUVIsland(p.isl, offsetU, offsetV, p.isl.mesh);
+    } catch (e) {
+      console.warn('[UV Checker] Failed to apply position to island:', e);
+    }
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, `Repack (${heuristic})`);
+
+  st(`✓ Repacked ${placed.length} UV islands`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('repack', {
+  fn: (sel, params, meshData) => applyRepackUV(params),
+  params: [
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 20, step: 1, default: 8 },
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.1, step: 0.001, default: 0, unit: 'UV' },
+    { name: 'sortBy', type: 'select', label: 'Sort by', default: 'area',
+      options: [{ value: 'area', label: 'Area (largest first)' }, { value: 'perimeter', label: 'Perimeter' }, { value: 'none', label: 'No sort' }] },
+    { name: 'rotate', type: 'checkbox', label: 'Allow 90° rotation', default: false }
+  ],
+  description: 'Repack UV islands with configurable MaxRects parameters (re-runs packing on all islands)',
+  section: 'uv',
+  tooltip: 'Repack Islands',
+  label: 'Repack',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg>'
+});
+
+// --- Pack to Bounds (fit islands within specific UV bounds) ---
+async function packToBoundsTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const minU = params.minU ?? 0;
+  const minV = params.minV ?? 0;
+  const maxU = params.maxU ?? 1;
+  const maxV = params.maxV ?? 1;
+  const padding = params.padding ?? 0.005;
+  const maintainAspect = params.maintainAspectRatio !== false;
+
+  if (maxU <= minU || maxV <= minV) {
+    st('✗ Invalid bounds: max must be greater than min', 'err');
+    return { diffs: [] };
+  }
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Packing to bounds…', 'loading');
+
+  const islands = getAllIslands();
+  if (islands.length === 0) {
+    st('✗ No UV islands found', 'err');
+    return { diffs: [] };
+  }
+
+  // First, compute overall bounds of all islands
+  let overallMinU = Infinity, overallMinV = Infinity, overallMaxU = -Infinity, overallMaxV = -Infinity;
+  for (const isl of islands) {
+    overallMinU = Math.min(overallMinU, isl.min_uv.x);
+    overallMinV = Math.min(overallMinV, isl.min_uv.y);
+    overallMaxU = Math.max(overallMaxU, isl.max_uv.x);
+    overallMaxV = Math.max(overallMaxV, isl.max_uv.y);
+  }
+
+  const currentWidth = overallMaxU - overallMinU;
+  const currentHeight = overallMaxV - overallMinV;
+  const targetWidth = maxU - minU - padding * 2;
+  const targetHeight = maxV - minV - padding * 2;
+
+  if (targetWidth <= 0 || targetHeight <= 0) {
+    st('✗ Target bounds too small for padding', 'err');
+    return { diffs: [] };
+  }
+
+  // Calculate scale
+  let scaleU = targetWidth / currentWidth;
+  let scaleV = targetHeight / currentHeight;
+
+  if (maintainAspect) {
+    const scale = Math.min(scaleU, scaleV);
+    scaleU = scaleV = scale;
+  }
+
+  // Calculate center of current layout and target center
+  const currentCenterU = (overallMinU + overallMaxU) / 2;
+  const currentCenterV = (overallMinV + overallMaxV) / 2;
+  const targetCenterU = (minU + maxU) / 2;
+  const targetCenterV = (minV + maxV) / 2;
+
+  // Scale and translate each island
+  for (const isl of islands) {
+    const data = getUVData(isl.mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+    uvAttr.array = uvAttr.array.slice();
+
+    for (const vi of isl.vertices) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+
+      // Scale around current center
+      const newU = currentCenterU + (u - currentCenterU) * scaleU;
+      const newV = currentCenterV + (v - currentCenterV) * scaleV;
+
+      // Translate to target center
+      const finalU = newU - currentCenterU + targetCenterU;
+      const finalV = newV - currentCenterV + targetCenterV;
+
+      uvAttr.setX(vi, finalU);
+      uvAttr.setY(vi, finalV);
+    }
+    uvAttr.needsUpdate = true;
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, `Pack to Bounds [${minU},${minV},${maxU},${maxV}]`);
+
+  st('✓ Packed to bounds', 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('pack-to-bounds', {
+  fn: packToBoundsTool,
+  params: [
+    { name: 'minU', type: 'number', label: 'Min U', min: -5, max: 1, step: 0.01, default: 0 },
+    { name: 'minV', type: 'number', label: 'Min V', min: -5, max: 1, step: 0.01, default: 0 },
+    { name: 'maxU', type: 'number', label: 'Max U', min: 0, max: 5, step: 0.01, default: 1 },
+    { name: 'maxV', type: 'number', label: 'Max V', min: 0, max: 5, step: 0.01, default: 1 },
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'maintainAspectRatio', type: 'checkbox', label: 'Maintain aspect ratio', default: true }
+  ],
+  description: 'Pack UV islands to fit within specified UV bounds',
+  section: 'uv',
+  tooltip: 'Pack to Bounds',
+  label: 'Pack to Bounds',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="1"/><rect x="5" y="5" width="14" height="14" rx="1"/></svg>'
+});
+
+// --- Pack Selected (pack only selected islands) ---
+async function packSelectedTool(sel, params, meshData) {
+  const { mesh, meshId, uvAttr, idx, selectedVerts, selectedFaces, selectedIslands } = sel;
+  if (!mesh) return { diffs: [] };
+
+  const padding = params.padding ?? 0.005;
+  const margin = params.margin ?? 0.0;
+  const sortBy = params.sortBy ?? 'area';
+  const iterations = params.iterations ?? 1;
+
+  // Get all islands for this mesh
+  const allIslands = getAllIslands().filter(isl => isl.mesh === mesh);
+  if (allIslands.length === 0) return { diffs: [] };
+
+  // Filter islands that have at least one selected face/vertex/island
+  const selectedIslandsList = allIslands.filter(isl => {
+    // Check if island is directly selected
+    if (selectedIslands.has(isl.id)) return true;
+    // Check if any face of the island is selected
+    for (const f of isl.faces) {
+      if (selectedFaces.has(f)) return true;
+    }
+    // Check if any vertex of the island is selected
+    for (const v of isl.vertices) {
+      if (selectedVerts.has(v)) return true;
+    }
+    return false;
+  });
+
+  if (selectedIslandsList.length === 0) {
+    return { diffs: [] }; // No selected islands on this mesh
+  }
+
+  // Capture before snapshot for diff computation
+  const beforeSnapshot = UVHistory.captureSnapshot();
+
+  // Run MaxRects on selected islands only
+  for (let iter = 0; iter < iterations; iter++) {
+    // Sort selected islands based on sortBy parameter
+    if (sortBy === 'area') {
+      selectedIslandsList.sort((a, b) => b.area - a.area);
+    } else if (sortBy === 'perimeter') {
+      selectedIslandsList.sort((a, b) => (b.width + b.height) * 2 - (a.width + a.height) * 2);
+    }
+    // 'none' keeps original order
+
+    // Define packing bounds with margin
+    const boundsX = margin;
+    const boundsY = margin;
+    const boundsW = 1 - margin * 2;
+    const boundsH = 1 - margin * 2;
+
+    const freeRects = [{ x: boundsX, y: boundsY, w: boundsW, h: boundsH }];
+
+    function splitFreeRect(freeRect, placedRect) {
+      if (placedRect.x >= freeRect.x + freeRect.w ||
+          placedRect.x + placedRect.w <= freeRect.x ||
+          placedRect.y >= freeRect.y + freeRect.h ||
+          placedRect.y + placedRect.h <= freeRect.y) {
+        return [freeRect];
+      }
+      const result = [];
+      if (placedRect.x > freeRect.x) {
+        result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
+      }
+      if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
+        result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
+      }
+      if (placedRect.y > freeRect.y) {
+        result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
+      }
+      if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
+        result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
+      }
+      return result;
+    }
+
+    function pruneFreeList(freeRects) {
+      const result = [];
+      for (let i = 0; i < freeRects.length; i++) {
+        let contained = false;
+        for (let j = 0; j < freeRects.length; j++) {
+          if (i !== j &&
+              freeRects[i].x >= freeRects[j].x &&
+              freeRects[i].y >= freeRects[j].y &&
+              freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
+              freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
+            contained = true; break;
+          }
+        }
+        if (!contained) result.push(freeRects[i]);
+      }
+      return result;
+    }
+
+    function findPositionForNewRect(w, h) {
+      let bestRect = null, bestScore = Infinity, bestIdx = -1;
+      for (let i = 0; i < freeRects.length; i++) {
+        const r = freeRects[i];
+        if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
+          const score = Math.min(r.w - w, r.h - h);
+          if (score < bestScore) { bestScore = score; bestRect = r; bestIdx = i; }
+        }
+      }
+      return { rect: bestRect, idx: bestIdx };
+    }
+
+    for (const isl of selectedIslandsList) {
+      const w = isl.width, h = isl.height;
+      if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) continue;
+
+      const pw = w + padding * 2;
+      const ph = h + padding * 2;
+      const pos = findPositionForNewRect(pw, ph);
+      if (!pos.rect) {
+        st('⚠ Ran out of UV space — some islands not packed', 'err');
+        break;
+      }
+
+      const placedRect = { x: pos.rect.x + padding, y: pos.rect.y + padding, w, h };
+      const offsetU = placedRect.x - isl.min_uv.x;
+      const offsetV = placedRect.y - isl.min_uv.y;
+
+      try {
+        moveUVIsland(isl, offsetU, offsetV, mesh);
+      } catch (e) {
+        console.warn('[UV Checker] Failed to apply position to island:', e);
+      }
+
+      const newFree = [];
+      for (const fr of freeRects) {
+        newFree.push(...splitFreeRect(fr, { x: pos.rect.x, y: pos.rect.y, w: pw, h: ph }));
+      }
+      freeRects.length = 0;
+      freeRects.push(...pruneFreeList(newFree));
+    }
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  // Capture after snapshot and compute diffs for UVHistory.pushDiff
+  const afterSnapshot = UVHistory.captureSnapshot();
+  const changes = [];
+  for (const afterMesh of afterSnapshot.meshes) {
+    const beforeMesh = beforeSnapshot.meshes.find(m => m.meshId === afterMesh.meshId);
+    if (!beforeMesh) continue;
+    const minLen = Math.min(beforeMesh.uvArray.length, afterMesh.uvArray.length);
+    for (let i = 0; i < minLen; i += 2) {
+      const oldU = beforeMesh.uvArray[i];
+      const oldV = beforeMesh.uvArray[i + 1];
+      const newU = afterMesh.uvArray[i];
+      const newV = afterMesh.uvArray[i + 1];
+      if (oldU !== newU || oldV !== newV) {
+        changes.push({ meshId: afterMesh.meshId, index: i / 2, oldU, oldV, newU, newV });
+      }
+    }
+  }
+
+  st(`✓ Packed ${selectedIslandsList.length} selected islands`, 'ok');
+  requestRender();
+  return { diffs: changes };
+}
+
+ToolRegistry.registerTool('pack-selected', {
+  fn: packSelectedTool,
+  params: [
+    { name: 'padding', type: 'number', label: 'Padding', min: 0, max: 0.1, step: 0.001, default: 0.005, unit: 'UV' },
+    { name: 'margin', type: 'number', label: 'Margin', min: 0, max: 0.5, step: 0.001, default: 0.0, unit: 'UV' },
+    { name: 'sortBy', type: 'select', label: 'Sort by', default: 'area',
+      options: [{ value: 'area', label: 'Area (largest first)' }, { value: 'perimeter', label: 'Perimeter' }, { value: 'none', label: 'No sort' }] },
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 10, step: 1, default: 1 }
+  ],
+  description: 'Pack only the currently selected UV islands',
+  section: 'uv',
+  tooltip: 'Pack Selected',
+  label: 'Pack Selected',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><path d="M6 6h4v4H6z" fill="currentColor" opacity="0.5"/></svg>'
+});
+
 ToolRegistry.registerTool('organize', {
   fn: (sel, params, meshData) => applyOrganizeUV(sel, meshData),
   params: [
@@ -7798,6 +8302,131 @@ async function unwrapIslandLSCM(island, uvAttr, idx, posAttr, method = 'lscm', m
   }
 }
 
+// Pack UV Islands to Bounds: Scale and translate all islands to fit within specified UV bounds
+async function applyPackToBoundsUV(params = {}) {
+  if (!currentRoot) return;
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
+
+  const minU = params.minU ?? 0;
+  const minV = params.minV ?? 0;
+  const maxU = params.maxU ?? 1;
+  const maxV = params.maxV ?? 1;
+  const padding = params.padding ?? 0.005;
+  const maintainAspectRatio = params.maintainAspectRatio ?? true;
+
+  const targetWidth = maxU - minU;
+  const targetHeight = maxV - minV;
+
+  st('⚙ Packing UV islands to bounds…', 'loading');
+  try {
+    let hasValidUV = false;
+    try {
+      currentRoot.traverse(child => {
+        if (child.isMesh && child.geometry.attributes?.uv) hasValidUV = true;
+      });
+    } catch (e) {
+      st('✗ Scene traversal error: ' + e.message, 'err');
+      return;
+    }
+    if (!hasValidUV) {
+      st('✗ No UV data found on meshes', 'err');
+      return;
+    }
+
+    let islands;
+    try {
+      islands = getAllIslands();
+    } catch (e) {
+      st('✗ Island detection failed: ' + e.message, 'err');
+      console.error('[UV Checker] getAllIslands error:', e);
+      return;
+    }
+    if (!islands || islands.length === 0) {
+      st('✗ No UV islands found', 'err');
+      return;
+    }
+
+    // Compute overall bounds of all islands
+    let overallMinU = Infinity, overallMaxU = -Infinity;
+    let overallMinV = Infinity, overallMaxV = -Infinity;
+
+    for (const isl of islands) {
+      overallMinU = Math.min(overallMinU, isl.min_uv.x);
+      overallMaxU = Math.max(overallMaxU, isl.max_uv.x);
+      overallMinV = Math.min(overallMinV, isl.min_uv.y);
+      overallMaxV = Math.max(overallMaxV, isl.max_uv.y);
+    }
+
+    const overallWidth = overallMaxU - overallMinU;
+    const overallHeight = overallMaxV - overallMinV;
+
+    if (overallWidth <= 0 || overallHeight <= 0) {
+      st('✗ Islands have zero size', 'err');
+      return;
+    }
+
+    // Calculate scale factors
+    const availableWidth = targetWidth - padding * 2;
+    const availableHeight = targetHeight - padding * 2;
+
+    let scaleU = availableWidth / overallWidth;
+    let scaleV = availableHeight / overallHeight;
+
+    if (maintainAspectRatio) {
+      const uniformScale = Math.min(scaleU, scaleV);
+      scaleU = scaleV = uniformScale;
+    }
+
+    // Calculate translation to center the scaled islands in target bounds
+    const scaledWidth = overallWidth * scaleU;
+    const scaledHeight = overallHeight * scaleV;
+    const offsetU = minU + padding + (availableWidth - scaledWidth) / 2 - overallMinU * scaleU;
+    const offsetV = minV + padding + (availableHeight - scaledHeight) / 2 - overallMinV * scaleV;
+
+    // Apply scale and translate to each island
+    for (const isl of islands) {
+      try {
+        const data = getUVData(isl.mesh);
+        if (!data) continue;
+        const { uvAttr } = data;
+        if (!uvAttr || !uvAttr.array) continue;
+
+        uvAttr.array = uvAttr.array.slice();
+        for (const vi of isl.vertices) {
+          const u = uvAttr.getX(vi);
+          const v = uvAttr.getY(vi);
+          if (!isFinite(u) || !isFinite(v)) continue;
+          const newU = u * scaleU + offsetU;
+          const newV = v * scaleV + offsetV;
+          if (!isFinite(newU) || !isFinite(newV)) continue;
+          uvAttr.setX(vi, newU);
+          uvAttr.setY(vi, newV);
+        }
+        uvAttr.needsUpdate = true;
+      } catch (e) {
+        console.warn('[UV Checker] Failed to apply pack-to-bounds to island:', e);
+        continue;
+      }
+    }
+
+    if (current3DMode === 'checker') updateCheckerTexture();
+    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    islandCache = null;
+
+    // Push to history (compare before/after)
+    const afterSnapshot = UVHistory.captureSnapshot();
+    UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Pack to Bounds');
+
+    st(`✓ Packed ${islands.length} UV islands to bounds [${minU.toFixed(3)}, ${minV.toFixed(3)}, ${maxU.toFixed(3)}, ${maxV.toFixed(3)}]`, 'ok');
+    requestRender();
+  } catch (e) {
+    st('✗ Pack to bounds failed: ' + e.message, 'err');
+    console.error('[UV Checker] Pack to bounds error:', e);
+  }
+}
+
 // Pack UV Islands: MaxRects bin packing for optimal UV space utilization
 async function applyPackUV() {
   if (!currentRoot) return;
@@ -7960,6 +8589,277 @@ async function applyPackUV() {
   } catch (e) {
     st('✗ Pack failed: ' + e.message, 'err');
     console.error('[UV Checker] Pack error:', e);
+  }
+}
+
+// Repack UV Islands: MaxRects bin packing with configurable parameters
+// Re-runs packing on ALL islands with new parameters (unlike pack which only runs once)
+async function applyRepackUV(params = {}) {
+  if (!currentRoot) return { diffs: [] };
+
+  const {
+    padding = 0.005,
+    iterations = 8,
+    margin = 0,
+    sortBy = 'area',
+    rotate = false
+  } = params;
+
+  // Capture before snapshot for undo/redo
+  const beforeSnapshot = UVHistory.captureSnapshot();
+
+  st('⚙ Repacking UV islands (MaxRects)…', 'loading');
+  try {
+    let hasValidUV = false;
+    try {
+      currentRoot.traverse(child => {
+        if (child.isMesh && child.geometry.attributes?.uv) hasValidUV = true;
+      });
+    } catch (e) {
+      st('✗ Scene traversal error: ' + e.message, 'err');
+      return { diffs: [] };
+    }
+    if (!hasValidUV) {
+      st('✗ No UV data found on meshes', 'err');
+      return { diffs: [] };
+    }
+
+    let islands;
+    try {
+      islands = getAllIslands();
+    } catch (e) {
+      st('✗ Island detection failed: ' + e.message, 'err');
+      console.error('[UV Checker] getAllIslands error:', e);
+      return { diffs: [] };
+    }
+    if (!islands || islands.length === 0) {
+      st('✗ No UV islands found', 'err');
+      return { diffs: [] };
+    }
+
+    // Sort islands based on sortBy parameter
+    switch (sortBy) {
+      case 'area':
+        islands.sort((a, b) => b.area - a.area);
+        break;
+      case 'perimeter':
+        islands.sort((a, b) => {
+          const periA = 2 * (a.width + a.height);
+          const periB = 2 * (b.width + b.height);
+          return periB - periA;
+        });
+        break;
+      case 'none':
+      default:
+        // Keep original order
+        break;
+    }
+
+    const effectivePadding = padding + margin;
+
+    // MaxRects bin packer with optional rotation
+    function runPacking(islandList, allowRotation) {
+      const freeRects = [{ x: 0, y: 0, w: 1, h: 1 }];
+      const placed = [];
+
+      function splitFreeRect(freeRect, placedRect) {
+        const result = [];
+        if (placedRect.x >= freeRect.x + freeRect.w ||
+            placedRect.x + placedRect.w <= freeRect.x ||
+            placedRect.y >= freeRect.y + freeRect.h ||
+            placedRect.y + placedRect.h <= freeRect.y) {
+          return [freeRect];
+        }
+        if (placedRect.x > freeRect.x) {
+          result.push({ x: freeRect.x, y: freeRect.y, w: placedRect.x - freeRect.x, h: freeRect.h });
+        }
+        if (placedRect.x + placedRect.w < freeRect.x + freeRect.w) {
+          result.push({ x: placedRect.x + placedRect.w, y: freeRect.y, w: freeRect.x + freeRect.w - placedRect.x - placedRect.w, h: freeRect.h });
+        }
+        if (placedRect.y > freeRect.y) {
+          result.push({ x: freeRect.x, y: freeRect.y, w: freeRect.w, h: placedRect.y - freeRect.y });
+        }
+        if (placedRect.y + placedRect.h < freeRect.y + freeRect.h) {
+          result.push({ x: freeRect.x, y: placedRect.y + placedRect.h, w: freeRect.w, h: freeRect.y + freeRect.h - placedRect.y - placedRect.h });
+        }
+        return result;
+      }
+
+      function pruneFreeList(freeRects) {
+        const result = [];
+        for (let i = 0; i < freeRects.length; i++) {
+          let contained = false;
+          for (let j = 0; j < freeRects.length; j++) {
+            if (i !== j &&
+                freeRects[i].x >= freeRects[j].x &&
+                freeRects[i].y >= freeRects[j].y &&
+                freeRects[i].x + freeRects[i].w <= freeRects[j].x + freeRects[j].w &&
+                freeRects[i].y + freeRects[i].h <= freeRects[j].y + freeRects[j].h) {
+              contained = true;
+              break;
+            }
+          }
+          if (!contained) result.push(freeRects[i]);
+        }
+        return result;
+      }
+
+      function findPositionForNewRect(w, h) {
+        let bestRect = null, bestScore = Infinity, bestIdx = -1;
+        for (let i = 0; i < freeRects.length; i++) {
+          const r = freeRects[i];
+          if (w <= r.w + 1e-6 && h <= r.h + 1e-6) {
+            const score = Math.min(r.w - w, r.h - h); // Short Side Fit
+            if (score < bestScore) {
+              bestScore = score;
+              bestRect = r;
+              bestIdx = i;
+            }
+          }
+        }
+        return { rect: bestRect, idx: bestIdx };
+      }
+
+      for (const isl of islandList) {
+        const w = isl.width;
+        const h = isl.height;
+        if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) continue;
+
+        let bestPlacement = null;
+        let bestRect = null;
+        let bestIdx = -1;
+
+        // Try without rotation
+        const pw = w + effectivePadding * 2;
+        const ph = h + effectivePadding * 2;
+        const pos = findPositionForNewRect(pw, ph);
+        if (pos.rect) {
+          bestPlacement = { w: w, h: h, rotated: false };
+          bestRect = pos.rect;
+          bestIdx = pos.idx;
+        }
+
+        // Try with rotation if allowed and island is not square
+        if (allowRotation && Math.abs(w - h) > 1e-6) {
+          const pwRot = h + effectivePadding * 2;
+          const phRot = w + effectivePadding * 2;
+          const posRot = findPositionForNewRect(pwRot, phRot);
+          if (posRot.rect) {
+            const score = Math.min(posRot.rect.w - pwRot, posRot.rect.h - phRot);
+            const bestScore = bestRect ? Math.min(bestRect.w - pw, bestRect.h - ph) : Infinity;
+            if (score < bestScore) {
+              bestPlacement = { w: h, h: w, rotated: true };
+              bestRect = posRot.rect;
+              bestIdx = posRot.idx;
+            }
+          }
+        }
+
+        if (!bestRect) {
+          continue; // Skip this island, no space
+        }
+
+        const placedRect = {
+          x: bestRect.x + effectivePadding,
+          y: bestRect.y + effectivePadding,
+          w: bestPlacement.w,
+          h: bestPlacement.h,
+          rotated: bestPlacement.rotated
+        };
+        placed.push({ isl, rect: placedRect, minU: isl.min_uv.x, minV: isl.min_uv.y });
+
+        // Split the free rect
+        const usedW = bestPlacement.w + effectivePadding * 2;
+        const usedH = bestPlacement.h + effectivePadding * 2;
+        const newFree = [];
+        for (const fr of freeRects) {
+          newFree.push(...splitFreeRect(fr, { x: bestRect.x, y: bestRect.y, w: usedW, h: usedH }));
+        }
+        freeRects.length = 0;
+        freeRects.push(...pruneFreeList(newFree));
+      }
+
+      return placed;
+    }
+
+    // Run multiple iterations if requested (for better packing with different strategies)
+    let bestPlaced = [];
+    let bestCoverage = -1;
+
+    for (let iter = 0; iter < iterations; iter++) {
+      // Shuffle or sort differently for each iteration to explore different packings
+      let workingIslands = [...islands];
+
+      if (iter > 0) {
+        // Try different sorting strategies on subsequent iterations
+        switch (iter % 4) {
+          case 1:
+            workingIslands.sort((a, b) => a.area - b.area); // Small first
+            break;
+          case 2:
+            workingIslands.sort((a, b) => b.width - a.width); // Width descending
+            break;
+          case 3:
+            workingIslands.sort((a, b) => b.height - a.height); // Height descending
+            break;
+        }
+      }
+
+      const placed = runPacking(workingIslands, rotate);
+
+      // Calculate coverage (sum of island areas / total UV space)
+      const coverage = placed.reduce((sum, p) => sum + p.rect.w * p.rect.h, 0);
+
+      if (coverage > bestCoverage) {
+        bestCoverage = coverage;
+        bestPlaced = placed;
+      }
+
+      // Early exit if we packed everything perfectly
+      if (placed.length === islands.length && coverage >= 0.95) break;
+    }
+
+    // Apply positions using moveUVIsland logic (without individual history entries)
+    for (const p of bestPlaced) {
+      try {
+        const data = getUVData(p.isl.mesh);
+        if (!data) continue;
+        const { uvAttr, idx } = data;
+        if (!uvAttr || !uvAttr.array) continue;
+
+        const offsetU = p.rect.x - p.minU;
+        const offsetV = p.rect.y - p.minV;
+
+        uvAttr.array = uvAttr.array.slice();
+        for (const vi of p.isl.vertices) {
+          const u = uvAttr.getX(vi);
+          const v = uvAttr.getY(vi);
+          if (!isFinite(u) || !isFinite(v)) continue;
+          uvAttr.setX(vi, u + offsetU);
+          uvAttr.setY(vi, v + offsetV);
+        }
+        uvAttr.needsUpdate = true;
+      } catch (e) {
+        console.warn('[UV Checker] Failed to apply position to island:', e);
+        continue;
+      }
+    }
+
+    if (current3DMode === 'checker') updateCheckerTexture();
+    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    islandCache = null;
+
+    // Push to history (compare before/after)
+    const afterSnapshot = UVHistory.captureSnapshot();
+    UVHistory.pushTransform(beforeSnapshot, afterSnapshot, `Repack UV Islands (${bestPlaced.length} islands)`);
+
+    st(`✓ Repacked ${bestPlaced.length} UV islands (MaxRects, ${iterations} iter${rotate ? ', rotation' : ''})`, 'ok');
+    requestRender();
+    return { diffs: [] }; // Snapshot-based, no individual diffs
+  } catch (e) {
+    st('✗ Repack failed: ' + e.message, 'err');
+    console.error('[UV Checker] Repack error:', e);
+    return { diffs: [] };
   }
 }
 
