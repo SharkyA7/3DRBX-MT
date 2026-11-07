@@ -8,7 +8,7 @@ const { spawnSync } = require('child_process');
 
 const PAGES = ['index.html', 'uv-checker.html', 'beta.html', 'flipbook.html', 'maintenance.html', 'privacy.html', 'terms.html'];
 const SYNCED = ['index.html', 'uv-checker.html', 'sw.js', 'manifest.json'];
-const MODALS = ['settings-modal', 'uv2d-modal', 'sheet-tools', 'sheet-options', 'sheet-layers'];
+const MODALS = ['settings-modal', 'uv-2d-panel', 'sheet-tools', 'sheet-options', 'sheet-layers'];
 let failed = 0;
 
 // Check modal/sheet elements exist and no divs left unclosed
@@ -29,7 +29,7 @@ function checkMarkup(html, filename) {
   let match;
   while ((match = divOpenRegex.exec(markup)) !== null) {
     const tag = match[0];
-    const modalMatch = tag.match(/id="(settings-modal|uv2d-modal|sheet-tools|sheet-options|sheet-layers)"/);
+    const modalMatch = tag.match(/id="(settings-modal|uv-2d-panel|sheet-tools|sheet-options|sheet-layers)"/);
     if (modalMatch) foundModals.add(modalMatch[1]);
     stack.push({ tag: 'div', modal: modalMatch ? modalMatch[1] : null });
   }

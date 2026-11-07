@@ -113,6 +113,33 @@ Registered in ToolRegistry under `uv` section:
 
 All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (snapshot-based); update checker/2D views, invalidate island cache.
 
+## 15. Phase 5 UV Editing Tools (uv-checker.html)
+Registered in ToolRegistry under `uv` section (after relax, before unwrap):
+- **pin-unpin** — pin or unpin selected UV vertices to prevent movement during relax/pack operations (action: pin/unpin)
+- **weld** — merge selected UV vertices within threshold distance (threshold parameter)
+- **stitch** — sew together boundary UV edges of selected islands (threshold parameter)
+- **normalize** — normalize UV scale across islands for consistent texel density (mode: average/max/min/custom, targetDensity parameter)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (snapshot-based); update checker/2D views, invalidate island cache.
+
+## 16. Phase 6 Advanced UV Editing Tools (uv-checker.html)
+Registered in ToolRegistry under `uv` section (after normalize, before unwrap):
+- **gridify** — snap UV vertices or align islands to a regular grid (gridSize, mode: snap/align)
+- **rectify** — straighten UV edges to horizontal/vertical within angle threshold (threshold, mode: edges/islands)
+- **unfoldify** — iterative LSCM-style relaxation to reduce UV distortion (iterations, stiffness, pinnedOnly)
+- **align-body-parts** — align UV islands of symmetrical body parts along chosen axis (axis: x/y/z, tolerance)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (snapshot-based); update checker/2D views, invalidate island cache.
+
+## 17. Phase 7 UV Utilities (uv-checker.html)
+Registered in ToolRegistry under `view` section (padding-overlay, exposure-adjustment, checker-options) and `file` section (uv-to-mesh-export):
+- **padding-overlay** — visualize padding gaps between UV islands in 2D view (padding, showNumbers)
+- **exposure-adjustment** — adjust checker texture brightness, contrast, and gamma (brightness, contrast, gamma)
+- **checker-options** — configure checker pattern size, colors, and grid lines (gridSize, colorA, colorB, showGrid)
+- **uv-to-mesh-export** — export UV layout as 3D mesh for visualization/debugging (height, includeEdges, exportOBJ)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (view tools are stateless, export tool creates new meshes); update checker/2D views.
+
 ## RBXM decoder status (2026-11-05)
 
 Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.

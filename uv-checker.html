@@ -25,6 +25,8 @@
   --layout-s: 280px;  /* sidebar width small */
   --layout-m: 340px;  /* sidebar width medium */
   --layout-w: 420px;  /* sidebar width wide */
+  --uv-2d-h: 300px;   /* 2D UV panel height */
+  --uv-2d-h-collapsed: 40px; /* 2D UV panel collapsed height (handle only) */
   /* Animation timings */
   --anim-fast: 150ms;
   --anim-normal: 250ms;
@@ -185,7 +187,26 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 /* ============================================================================
    RESPONSIVE LAYOUT SYSTEM
    ============================================================================ */
-.app-root{display:flex;flex-direction:column;min-height:100dvh; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left); padding-right: var(--safe-right);}
+.app-root{
+  display:grid;
+  grid-template-rows:
+    var(--top-bar-h)
+    1fr
+    var(--uv-2d-h)
+    var(--bottom-bar-h);
+  min-height:100dvh;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+.app-root.uv-2d-collapsed{
+  grid-template-rows:
+    var(--top-bar-h)
+    1fr
+    var(--uv-2d-h-collapsed)
+    var(--bottom-bar-h);
+}
 
 /* Top Bar */
 .top-bar{
@@ -261,6 +282,87 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   gap:12px;font-family:var(--font-ui);font-size:11px;color:var(--muted);
   padding-bottom: calc(0px + var(--safe-bottom));
 }
+
+/* 2D UV Panel (persistent, between main layout and bottom bar) */
+.uv-2d-panel{
+  background:var(--s2);border-top:1px solid var(--border);
+  display:flex;flex-direction:column;
+  height:var(--uv-2d-h);
+  min-height:var(--uv-2d-h-collapsed);
+  max-height:calc(100vh - var(--top-bar-h) - var(--bottom-bar-h) - 100px);
+  transition:height var(--anim-normal) var(--ease-out);
+  overflow:hidden;
+  z-index:50;
+}
+.uv-2d-panel.collapsed{
+  height:var(--uv-2d-h-collapsed);
+}
+.uv-2d-panel-handle{
+  width:100%;height:var(--uv-2d-h-collapsed);
+  display:flex;align-items:center;justify-content:center;
+  background:var(--s1);border-bottom:1px solid var(--border);
+  cursor:row-resize;touch-action:none;
+  user-select:none;
+}
+.uv-2d-panel-handle::before{
+  content:'';width:40px;height:4px;background:var(--border2);border-radius:2px;
+  transition:background var(--anim-fast);
+}
+.uv-2d-panel-handle:hover::before,
+.uv-2d-panel-handle.dragging::before{
+  background:var(--accent);
+}
+.uv-2d-panel.collapsed .uv-2d-panel-handle::before{
+  background:var(--accent);
+}
+.uv-2d-panel-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 16px;background:var(--s1);border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.uv-2d-panel-title{
+  font-family:var(--font-px);font-size:10px;color:var(--accent);letter-spacing:1.5px;
+}
+.uv-2d-panel-close{
+  background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;
+  display:flex;align-items:center;justify-content:center;border-radius:6px;
+  transition:all .15s;
+}
+.uv-2d-panel-close:hover{background:var(--s2);color:var(--accent);}
+.uv-2d-panel-content{
+  flex:1;overflow:auto;padding:12px 16px;background:#0a0a0a;
+  display:flex;flex-direction:column;gap:12px;
+}
+.uv-2d-panel-canvas-wrap{
+  flex:1;aspect-ratio:1;background:#0a0a0a;border:1px solid var(--border2);border-radius:8px;
+  overflow:hidden;position:relative;min-height:0;
+}
+.uv-2d-panel-canvas-wrap canvas{
+  width:100%;height:100%;display:block;touch-action:none;
+}
+.uv-2d-panel-controls{
+  display:flex;flex-direction:column;gap:10px;flex-shrink:0;
+}
+.uv-2d-panel-control-row{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+}
+.uv-2d-panel-control-label{
+  font-size:11px;color:var(--muted);font-family:var(--font-mono);white-space:nowrap;
+}
+.uv-2d-panel-control-row button{
+  padding:6px 10px;font-size:11px;
+}
+.uv-2d-panel-warn{
+  margin-top:8px;padding:10px 12px;
+  background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.35);
+  border-radius:10px;font-family:var(--font-ui);font-size:11px;color:var(--amber);line-height:1.6;
+}
+.uv-2d-panel-warn b{color:var(--white);}
+.uv-2d-panel-legend{
+  padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:10px;
+  font-family:var(--font-ui);font-size:11px;color:var(--muted);line-height:1.6;
+}
+.uv-2d-panel-legend b{color:var(--white);}
 .bottom-bar-left{display:flex;align-items:center;gap:16px;}
 .bottom-bar-right{display:flex;align-items:center;gap:12px;}
 .bottom-bar-tab{padding:6px 10px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:var(--font-ui);font-size:11px;cursor:pointer;transition:all .15s;}
@@ -283,6 +385,39 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .bottom-sheet-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;}
 .bottom-sheet-close:hover{color:var(--accent);}
 .bottom-sheet-content{flex:1;overflow-y:auto;padding:16px;}
+
+/* ============================================================================
+   GUIDE MODAL
+   ============================================================================ */
+.guide-modal{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.guide-modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);}
+.guide-modal-content{position:relative;width:100%;max-width:800px;max-height:85vh;background:var(--s0);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.5);}
+.guide-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--s1);flex-shrink:0;}
+.guide-modal-header h2{font-family:var(--font-px);font-size:13px;color:var(--accent);letter-spacing:1.5px;margin:0;}
+.guide-modal-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;border-radius:8px;transition:all .15s;}
+.guide-modal-close:hover{background:var(--s2);color:var(--accent);}
+.guide-modal-body{flex:1;overflow-y:auto;padding:20px;}
+.guide-loading{text-align:center;color:var(--muted);padding:40px;font-size:14px;}
+.guide-section{margin-bottom:28px;}
+.guide-section-title{font-family:var(--font-px);font-size:11px;color:var(--accent);letter-spacing:1.5px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;}
+.guide-section-title::before{content:'';width:8px;height:8px;background:var(--accent);border-radius:2px;}
+.guide-tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.guide-tool-card{background:var(--s1);border:1px solid var(--border2);border-radius:10px;padding:16px;transition:all .15s;}
+.guide-tool-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(80,232,244,.1);}
+.guide-tool-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.guide-tool-icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:rgba(80,232,244,.1);border:1px solid var(--border2);border-radius:8px;flex-shrink:0;}
+.guide-tool-icon svg{width:18px;height:18px;color:var(--accent);}
+.guide-tool-info{flex:1;min-width:0;}
+.guide-tool-name{font-family:var(--font-ui);font-size:13px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.guide-tool-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.guide-tool-desc{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px;}
+.guide-tool-params{font-size:10px;color:var(--accent);font-family:var(--font-mono);background:rgba(80,232,244,.05);padding:6px 8px;border-radius:6px;border:1px solid var(--border2);overflow-x:auto;white-space:pre-wrap;}
+.guide-tool-params.empty{color:var(--muted);background:transparent;border-color:transparent;padding:0;}
+@media(max-width:600px){
+  .guide-modal-content{max-height:95vh;border-radius:16px 16px 0 0;}
+  .guide-tool-grid{grid-template-columns:1fr;}
+  .guide-modal-body{padding:16px;}
+}
 
 /* ============================================================================
    SETTINGS MODAL
@@ -578,6 +713,9 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       <button class="top-bar-btn" id="btn-device" title="Change Device" aria-label="Change device type">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M12 22v-4"/></svg>
       </button>
+      <button class="top-bar-btn" id="btn-guide" title="Tool Guide" aria-label="Show tool guide">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      </button>
     </div>
   </header>
 
@@ -746,6 +884,53 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
     </aside>
   </div>
 
+  <!-- 2D UV Panel (persistent) -->
+  <div class="uv-2d-panel" id="uv-2d-panel" role="region" aria-label="2D UV Map">
+    <div class="uv-2d-panel-handle" id="uv-2d-panel-handle" aria-label="Drag to resize 2D UV panel, tap to collapse/expand"></div>
+    <div class="uv-2d-panel-header">
+      <span class="uv-2d-panel-title">2D UV MAP</span>
+      <button class="uv-2d-panel-close" id="uv-2d-panel-close" aria-label="Collapse 2D UV panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="uv-2d-panel-content">
+      <div id="uv-2d-progress-wrap" style="display:none;margin-bottom:12px">
+        <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
+        <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
+      </div>
+      <div class="uv-2d-panel-canvas-wrap">
+        <canvas id="uv-2d-canvas"></canvas>
+      </div>
+      <div class="uv-2d-panel-controls">
+        <div class="toggle-row" style="margin-top:0">
+          <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
+        </div>
+        <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
+          <div class="uv-2d-panel-control-row">
+            <span class="uv-2d-panel-control-label">Overlay:</span>
+            <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" style="padding:6px 10px;font-size:11px">None</button>
+            <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" style="padding:6px 10px;font-size:11px">Problems</button>
+            <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" style="padding:6px 10px;font-size:11px">Texel Density</button>
+            <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" style="padding:6px 10px;font-size:11px">Overlap</button>
+          </div>
+          <div class="uv-2d-panel-control-row">
+            <span class="uv-2d-panel-control-label">BG:</span>
+            <button class="btn-outline active" id="uv-2d-bg-black" data-bg="black" style="padding:6px 10px;font-size:11px" title="Black background">⬛ Black</button>
+            <button class="btn-outline" id="uv-2d-bg-white" data-bg="white" style="padding:6px 10px;font-size:11px" title="White background">⬜ White</button>
+            <button class="btn-outline" id="uv-2d-bg-transparent" data-bg="transparent" style="padding:6px 10px;font-size:11px" title="Transparent background">☐ Transparent</button>
+            <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" style="padding:6px 10px;font-size:11px" title="Transparent with dark grid">☑ Trans+Dark</button>
+          </div>
+        </div>
+      </div>
+      <div class="uv-2d-panel-warn">
+        ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
+      </div>
+      <div class="uv-2d-panel-legend">
+        Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.
+      </div>
+    </div>
+  </div>
+
   <!-- Bottom Bar -->
   <footer class="bottom-bar" role="statusbar">
     <div class="bottom-bar-left">
@@ -761,7 +946,23 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 
 </div>
 
-<!-- Bottom Sheet: Tools (Tablet/Mobile) -->
+  <!-- Guide Tool Modal -->
+  <div class="guide-modal" id="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title" style="display:none;">
+    <div class="guide-modal-backdrop"></div>
+    <div class="guide-modal-content">
+      <div class="guide-modal-header">
+        <h2 id="guide-title">Tool Guide</h2>
+        <button class="guide-modal-close" id="btn-guide-close" aria-label="Close guide">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="guide-modal-body" id="guide-body">
+        <div class="guide-loading">Loading tool guide…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Sheet: Tools (Tablet/Mobile) -->
 <div class="bottom-sheet" id="sheet-tools" role="dialog" aria-label="Tools" aria-modal="false">
   <div class="bottom-sheet-handle"></div>
   <div class="bottom-sheet-header">
@@ -851,51 +1052,6 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   </div>
   </div>
 
-<!-- 2D UV Map Modal -->
-<div class="modal-overlay" id="uv2d-modal" role="dialog" aria-modal="true" aria-labelledby="uv2d-modal-title" style="max-width:95vw;max-height:95vh;">
-  <div class="modal-box" style="width:100%;max-width:none;padding:0;overflow:hidden;background:#0a0a0a;">
-    <div class="bottom-sheet-header" style="border-radius:0;border-bottom:1px solid var(--border);padding:12px 16px;background:var(--s2);">
-      <span class="bottom-sheet-title" id="uv2d-modal-title">2D UV MAP</span>
-      <button class="bottom-sheet-close" id="btn-close-uv2d-modal" aria-label="Close 2D UV map">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div style="padding:16px;overflow:auto;max-height:calc(95vh - 60px);">
-      <div id="uv-2d-progress-wrap" style="display:none;margin-bottom:12px">
-        <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
-        <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
-      </div>
-      <div style="aspect-ratio:1;background:#0a0a0a;border:1px solid var(--border2);border-radius:8px;overflow:hidden;position:relative">
-        <canvas id="uv-2d-canvas" style="width:100%;height:100%;display:block"></canvas>
-      </div>
-      <div class="toggle-row" style="margin-top:12px">
-        <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
-      </div>
-      <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;color:var(--muted)">Overlay:</span>
-          <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" style="padding:6px 10px;font-size:11px">None</button>
-          <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" style="padding:6px 10px;font-size:11px">Problems</button>
-          <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" style="padding:6px 10px;font-size:11px">Texel Density</button>
-          <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" style="padding:6px 10px;font-size:11px">Overlap</button>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <span style="font-size:11px;color:var(--muted)">BG:</span>
-          <button class="btn-outline active" id="uv-2d-bg-black" data-bg="black" style="padding:6px 10px;font-size:11px" title="Black background">⬛ Black</button>
-          <button class="btn-outline" id="uv-2d-bg-white" data-bg="white" style="padding:6px 10px;font-size:11px" title="White background">⬜ White</button>
-          <button class="btn-outline" id="uv-2d-bg-transparent" data-bg="transparent" style="padding:6px 10px;font-size:11px" title="Transparent background">☐ Transparent</button>
-          <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" style="padding:6px 10px;font-size:11px" title="Transparent with dark grid">☑ Trans+Dark</button>
-        </div>
-      </div>
-      <div class="warn-box" style="margin-top:10px">
-        ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
-      </div>
-      <div class="legend">
-        Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- RBXM Import Modal -->
 <div class="modal-overlay" id="rbxm-import-modal" role="dialog" aria-modal="true" aria-labelledby="rbxm-import-modal-title">
@@ -1386,7 +1542,7 @@ const ToolRegistry = (() => {
   const tools = new Map(); // name -> { fn, params, description, section, tooltip }
   const sections = new Map(); // sectionName -> { title, order, tools: [] }
 
-  function registerSection(name, { title, order = 99 }) {
+  function registerSection(name, { title, order = 99 } = {}) {
     if (!sections.has(name)) {
       sections.set(name, { title, order, tools: [] });
     }
@@ -1418,14 +1574,21 @@ const ToolRegistry = (() => {
       .map(([name, data]) => ({ name, ...data }));
   }
 
+  function getAllTools() {
+    return Array.from(tools.entries())
+      .map(([name, data]) => ({ name, ...data }));
+  }
+
   function executeTool(name, selection, params, meshData) {
     const tool = tools.get(name);
     if (!tool) throw new Error(`Tool "${name}" not found`);
     return tool.fn(selection, params, meshData);
   }
 
-  return { registerTool, registerSection, getTool, getToolsInSection, getAllSections, executeTool };
+  return { registerTool, registerSection, getTool, getToolsInSection, getAllSections, getAllTools, executeTool };
 })();
+
+window.ToolRegistry = ToolRegistry;
 
 // --- Unified Selection Abstraction ---
 function getSelection(mesh) {
@@ -1966,7 +2129,8 @@ function weldUVTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2097,7 +2261,8 @@ function stitchUVTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2220,7 +2385,8 @@ function normalizeUVTool(sel, params, meshData) {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2327,7 +2493,8 @@ function gridifyTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2477,7 +2644,8 @@ function rectifyTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2620,7 +2788,8 @@ function unfoldifyTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2730,7 +2899,8 @@ function alignBodyPartsTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2804,7 +2974,8 @@ async function autoUnwrapTool(sel, params, meshData) {
 
   if (uvAttr) uvAttr.needsUpdate = true;
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2875,7 +3046,8 @@ function smartUnwrapTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -2961,7 +3133,8 @@ function projectFromViewTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3036,7 +3209,8 @@ function projectCubicTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3097,7 +3271,8 @@ function projectSphericalTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3178,7 +3353,8 @@ function projectCylindricalTool(sel, params, meshData) {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3397,7 +3573,8 @@ async function repackTool(sel, params, meshData) {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3510,7 +3687,8 @@ async function packToBoundsTool(sel, params, meshData) {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   const afterSnapshot = UVHistory.captureSnapshot();
@@ -3677,7 +3855,8 @@ async function packSelectedTool(sel, params, meshData) {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   // Capture after snapshot and compute diffs for UVHistory.pushDiff
@@ -3825,7 +4004,7 @@ function paddingOverlayTool(sel, params, meshData) {
 
   st(`⚙ Padding Overlay: ${padding} UV`, 'loading');
 
-  // This is a view toggle - the actual rendering happens in buildUV2DInModal
+  // This is a view toggle - the actual rendering happens in buildUV2DInPanel
   // by reading this global state
   window.paddingOverlayState = {
     enabled: true,
@@ -3833,8 +4012,9 @@ function paddingOverlayTool(sel, params, meshData) {
     showNumbers
   };
 
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
-    buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+  if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
+    buildUV2DInPanel();
   }
 
   st(`✓ Padding Overlay active (padding: ${padding})`, 'ok');
@@ -4690,7 +4870,8 @@ ToolRegistry.registerTool('scale-uv', {
 // Refresh all views that depend on UVs
 function refreshAllViews() {
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   requestRender();
 }
 
@@ -5820,8 +6001,9 @@ function transformSelectionUV(deltaU, deltaV) {
   }
 
   // Update 2D UV map if open
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
-    buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+  if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
+    buildUV2DInPanel();
   }
 
   requestRender();
@@ -6290,7 +6472,8 @@ async function initScene(){
             updateSelectionStatus();
             requestRender();
             // Update 2D UV map if open
-            if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+            const uv2dPanel = document.getElementById('uv-2d-panel');
+            if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
               draw2DOverlay();
             }
           }
@@ -6303,7 +6486,8 @@ async function initScene(){
           updateSelectionGizmo();
           updateSelectionStatus();
           requestRender();
-          if (document.getElementById('uv2d-modal').classList.contains('visible')) {
+          const uv2dPanel2 = document.getElementById('uv-2d-panel');
+          if (uv2dPanel2 && !uv2dPanel2.classList.contains('collapsed')) {
             draw2DOverlay();
           }
         }
@@ -6346,7 +6530,8 @@ async function initScene(){
       uvAttr.needsUpdate = true;
     });
     if (current3DMode === 'checker') updateCheckerTexture();
-    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
     requestRender();
   }
 
@@ -6386,7 +6571,8 @@ async function initScene(){
       uvAttr.needsUpdate = true;
     });
     if (current3DMode === 'checker') updateCheckerTexture();
-    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
     requestRender();
   }
 
@@ -8573,6 +8759,157 @@ document.getElementById('boost-mode')?.addEventListener('change', (e) => {
   }
 });
 
+// Guide Modal
+const guideModal = document.getElementById('guide-modal');
+function openGuide() {
+  populateGuide();
+  if (guideModal) {
+    guideModal.style.display = 'flex';
+    // Force reflow for animation
+    guideModal.offsetHeight;
+    guideModal.classList.add('visible');
+  }
+}
+function closeGuide() {
+  if (guideModal) {
+    guideModal.classList.remove('visible');
+    setTimeout(() => {
+      if (guideModal) guideModal.style.display = 'none';
+    }, 200);
+  }
+}
+function populateGuide() {
+  const body = document.getElementById('guide-body');
+  if (!body || !window.ToolRegistry) {
+    body.innerHTML = '<div class="guide-loading">ToolRegistry not available</div>';
+    return;
+  }
+
+  const tools = ToolRegistry.getAllTools ? ToolRegistry.getAllTools() : [];
+  const sections = ToolRegistry.getAllSections ? ToolRegistry.getAllSections() : {};
+
+  if (tools.length === 0) {
+    body.innerHTML = '<div class="guide-loading">No tools registered</div>';
+    return;
+  }
+
+  // Detailed usage guides for each tool
+  const guideText = {
+    'select': 'Click to select vertices/edges/faces/islands. Hold Shift to add to selection. Drag to box-select. Double-click island to select all its faces.',
+    'move': 'Select UV vertices, then drag the gizmo arrows or use the parameter panel to enter exact U/V offset values. Enable "Apply to Islands" to move entire islands together.',
+    'rotate': 'Select UV vertices, then drag the gizmo rotation handle or enter angle in degrees. Pivot defaults to selection center; uncheck "Pivot to Selection" to use custom pivot point.',
+    'scale': 'Select UV vertices, then drag gizmo scale handles or enter scale factors. Uniform scaling keeps aspect ratio. Pivot works same as Rotate tool.',
+    'straighten': 'Select an island or edge loop. Click Apply to align selected edges to nearest horizontal/vertical axis. Useful for cleaning up distorted UVs.',
+    'align': 'Select multiple vertices or edges. Choose alignment mode (horizontal/vertical/both) and click Apply to snap them to a common line.',
+    'relax': 'Select an island. Adjust iterations and stiffness, then click Apply. Iterative smoothing reduces UV distortion while preserving boundary shape. Higher stiffness = less movement per iteration.',
+    'pin-unpin': 'Select vertices, choose "Pin" to lock them in place during relax/pack operations. Choose "Unpin" to release. Pinned vertices show a pin icon in the 2D view.',
+    'weld': 'Select vertices that are close together. Set threshold (default 0.001 UV units). Click Apply to merge vertices within threshold into a single UV coordinate.',
+    'stitch': 'Select boundary edges of two islands that should connect. Set threshold for matching edge length. Click Apply to sew edges together by averaging vertex positions.',
+    'normalize': 'Select islands (or leave unselected for all). Choose mode: Average/Max/Min density or Custom target. Click Apply to scale islands for consistent texel density across the model.',
+    'gridify': 'Select vertices or islands. Set grid size (e.g., 0.0625 = 1/16). Choose "Snap" to align each vertex to nearest grid point, or "Align Island" to move whole island to grid while preserving internal layout.',
+    'rectify': 'Select islands. Set angle threshold (default 15°). Edges within threshold of horizontal/vertical get straightened. Use "Edges" mode for internal edges, "Islands" for boundary alignment.',
+    'unfoldify': 'Select islands. Set iterations (10-50) and stiffness (0.1-2). Enable "Respect pinned vertices" to keep pinned points fixed. Iterative LSCM-style relaxation reduces UV distortion.',
+    'align-body-parts': 'Select all islands of a symmetrical model. Choose symmetry axis (X/Y/Z). Set position tolerance for grouping. Islands on mirrored positions get aligned to the largest island in each pair.',
+    'auto-unwrap': 'Select faces (or leave unselected for full mesh). Choose LSCM (conformal) or ABF (angle-based) method. Set margin between islands. Click Apply for automatic unwrapping.',
+    'smart-unwrap': 'Select faces. Set angle limit for grouping by normal direction. Faces within angle get planar-projected together. Good for hard-surface models with distinct planar regions.',
+    'project-from-view': 'Rotate 3D view to desired angle. Select faces. Click Apply to project UVs from current camera view (orthographic or perspective). Great for quick texture baking from specific angles.',
+    'project-cubic': 'Select faces. Set margin. Projects from 6 box directions (±X, ±Y, ±Z) based on face normals. Best for boxy objects like crates, buildings, furniture.',
+    'project-spherical': 'Select faces. Set margin. Choose Object or World space alignment. Projects longitude/latitude from center. Good for spherical objects like planets, heads, balls.',
+    'project-cylindrical': 'Select faces. Set margin. Choose projection axis (X/Y/Z). Projects around chosen axis. Ideal for cylindrical objects like arms, legs, pipes, columns.',
+    'repack': 'Adjust padding, sort method (area/perimeter/none), rotation, and heuristic. Click Apply to re-run MaxRects bin packing on all islands with new settings.',
+    'pack-to-bounds': 'Set custom UV bounds (minU, minV, maxU, maxV). Set padding. Enable "Maintain Aspect Ratio" to preserve island proportions while fitting to bounds.',
+    'pack-selected': 'Select specific islands. Set padding, sort method, and iterations. Only selected islands get repacked; others stay in place.',
+    'padding-overlay': 'Open 2D UV view. Set padding value. Enable "Show padding values" to display gap measurements between islands. Helps verify packing quality.',
+    'exposure-adjustment': 'Adjust brightness (-1 to 1), contrast (0.1-3), and gamma (0.1-3) for the checker texture. Changes apply in real-time to 3D checker view.',
+    'checker-options': 'Set grid size in texels (1-128). Pick Color A and Color B for checker pattern. Toggle grid lines on/off. Changes apply to 3D checker view immediately.',
+    'uv-to-mesh-export': 'Set mesh height (thickness). Enable "Include edge outlines" for wireframe. Enable "Export OBJ" to download .obj file. Creates 3D mesh from UV layout for debugging.',
+    'import': 'Click to import OBJ, GLTF/GLB, or ZIP files. ZIP extracts and loads all supported formats. Drag-and-drop also works on the viewport.',
+    'export-obj': 'Exports current scene as OBJ with MTL and texture. UVs are preserved. Opens save dialog for .obj, .mtl, and .png files.',
+    'export-png': 'Exports 2D UV layout as PNG image. Includes island outlines and optional padding overlay. Opens save dialog.',
+    '2d': 'Opens the 2D UV map editor in a modal. Shows all islands with selection, gizmo, and overlay options (problems, texel density, overlap).'
+  };
+
+  // Group tools by section
+  const toolsBySection = {};
+  for (const tool of tools) {
+    const section = tool.section || 'uv';
+    if (!toolsBySection[section]) toolsBySection[section] = [];
+    toolsBySection[section].push(tool);
+  }
+
+  const sectionOrder = ['selection', 'uv', 'view', 'file'];
+  const sectionTitles = {
+    'selection': 'Selection Tools',
+    'uv': 'UV Editing Tools',
+    'view': 'View Tools',
+    'file': 'File Tools'
+  };
+
+  let html = '';
+  for (const sectionName of sectionOrder) {
+    const sectionTools = toolsBySection[sectionName];
+    if (!sectionTools || sectionTools.length === 0) continue;
+
+    html += `<div class="guide-section">`;
+    html += `<div class="guide-section-title">${sectionTitles[sectionName] || sectionName}</div>`;
+    html += `<div class="guide-tool-grid">`;
+
+    for (const tool of sectionTools) {
+      html += `<div class="guide-tool-card">`;
+      html += `<div class="guide-tool-header">`;
+      html += `<div class="guide-tool-icon">${tool.icon || ''}</div>`;
+      html += `<div class="guide-tool-info">`;
+      html += `<div class="guide-tool-name">${tool.label || tool.name}</div>`;
+      html += `<div class="guide-tool-section">${sectionName}</div>`;
+      html += `</div></div>`;
+      html += `<div class="guide-tool-desc">${tool.description || 'No description'}</div>`;
+
+      // Add detailed usage guide
+      const guide = guideText[tool.name];
+      if (guide) {
+        html += `<div class="guide-tool-guide">${guide}</div>`;
+      }
+
+      if (tool.params && tool.params.length > 0) {
+        const paramsText = tool.params.map(p => {
+          let str = `${p.name}: ${p.type}`;
+          if (p.min !== undefined || p.max !== undefined) {
+            str += ` (${p.min ?? ''}–${p.max ?? ''}`;
+            if (p.unit) str += ` ${p.unit}`;
+            str += ')';
+          }
+          if (p.options) {
+            str += ` [${p.options.map(o => o.value).join(', ')}]`;
+          }
+          if (p.default !== undefined) {
+            str += ` = ${p.default}`;
+          }
+          return str;
+        }).join('\n');
+        html += `<div class="guide-tool-params">${paramsText}</div>`;
+      } else {
+        html += `<div class="guide-tool-params empty">No parameters</div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div></div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+document.getElementById('btn-guide')?.addEventListener('click', openGuide);
+document.getElementById('btn-guide-close')?.addEventListener('click', closeGuide);
+guideModal?.addEventListener('click', (e) => {
+  if (e.target === guideModal || e.target.classList.contains('guide-modal-backdrop')) closeGuide();
+});
+
+// Handle Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && guideModal?.classList.contains('visible')) closeGuide();
+});
+
 function adjustColor(hex, amount) {
   // Lighten/darken hex color
   const num = parseInt(hex.replace('#', ''), 16);
@@ -8958,8 +9295,9 @@ function applyStraightenUV() {
   }
 
   // Update 2D UV map if open
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) {
-    buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+  if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
+    buildUV2DInPanel();
   }
 
   // Invalidate island cache
@@ -9057,7 +9395,8 @@ function applyAlignUV() {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   // Push to history (compare before/after)
@@ -9177,7 +9516,8 @@ function applyRelaxUV() {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   // Push to history (compare before/after)
@@ -9284,7 +9624,8 @@ function applyUnwrapUV() {
   });
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   // Push to history (compare before/after)
@@ -9568,7 +9909,8 @@ async function applyPackToBoundsUV(params = {}) {
     }
 
     if (current3DMode === 'checker') updateCheckerTexture();
-    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
     islandCache = null;
 
     // Push to history (compare before/after)
@@ -9733,7 +10075,8 @@ async function applyPackUV() {
     }
 
     if (current3DMode === 'checker') updateCheckerTexture();
-    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
     islandCache = null;
 
     // Push to history (compare before/after)
@@ -10002,7 +10345,8 @@ async function applyRepackUV(params = {}) {
     }
 
     if (current3DMode === 'checker') updateCheckerTexture();
-    if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+    const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
     islandCache = null;
 
     // Push to history (compare before/after)
@@ -10071,7 +10415,8 @@ function applyOrganizeUV() {
   }
 
   if (current3DMode === 'checker') updateCheckerTexture();
-  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) buildUV2DInPanel();
   islandCache = null;
 
   // Push to history (compare before/after)
@@ -10286,27 +10631,87 @@ function updateViewportHint() {
   hint.textContent = hints[device] || hints.desktop;
 }
 
-// 2D UV Map modal handler
-document.getElementById('tool-2d')?.addEventListener('click', openUV2DModal);
-document.getElementById('btn-close-uv2d-modal')?.addEventListener('click', closeUV2DModal);
-const uv2dModal = document.getElementById('uv2d-modal');
-uv2dModal?.addEventListener('click', (e) => {
-  if (e.target === uv2dModal) closeUV2DModal();
-});
+// 2D UV Panel handler
+document.getElementById('tool-2d')?.addEventListener('click', expandUV2DPanel);
+document.getElementById('uv-2d-panel-close')?.addEventListener('click', collapseUV2DPanel);
 
-let uv2dOpenedAt = 0; // used to ignore the ghost tap that lands on the canvas right after opening
-function openUV2DModal() {
+let uv2dPanelWasExpanded = false; // track if panel was expanded before a tool operation
+function expandUV2DPanel() {
   if (!currentRoot) return;
-  uv2dOpenedAt = performance.now();
-  const modal = document.getElementById('uv2d-modal');
-  modal.classList.add('visible');
-  buildUV2DInModal();
+  const panel = document.getElementById('uv-2d-panel');
+  const appRoot = document.getElementById('app-root');
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    appRoot.classList.remove('uv-2d-collapsed');
+    buildUV2DInPanel();
+  }
 }
-function closeUV2DModal() {
-  document.getElementById('uv2d-modal').classList.remove('visible');
+function collapseUV2DPanel() {
+  const panel = document.getElementById('uv-2d-panel');
+  const appRoot = document.getElementById('app-root');
+  panel.classList.add('collapsed');
+  appRoot.classList.add('uv-2d-collapsed');
 }
 
-async function buildUV2DInModal() {
+// 2D Panel drag-to-resize logic
+(function initUV2DPanelResize() {
+  const handle = document.getElementById('uv-2d-panel-handle');
+  const panel = document.getElementById('uv-2d-panel');
+  const appRoot = document.getElementById('app-root');
+  if (!handle || !panel || !appRoot) return;
+
+  let startY = 0;
+  let startHeight = 0;
+  let isDragging = false;
+
+  function onPointerMove(e) {
+    if (!isDragging) return;
+    const deltaY = startY - e.clientY; // negative = drag up = increase height
+    const newHeight = Math.max(120, Math.min(window.innerHeight * 0.6, startHeight + deltaY));
+    document.documentElement.style.setProperty('--uv-2d-h', newHeight + 'px');
+    appRoot.style.gridTemplateRows = `
+      var(--top-bar-h)
+      1fr
+      ${newHeight}px
+      var(--bottom-bar-h)
+    `;
+  }
+  function onPointerUp() {
+    if (!isDragging) return;
+    isDragging = false;
+    handle.classList.remove('dragging');
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    document.removeEventListener('pointercancel', onPointerUp);
+  }
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) return;
+    isDragging = true;
+    startY = e.clientY;
+    startHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uv-2d-h')) || 300;
+    handle.classList.add('dragging');
+    handle.setPointerCapture(e.pointerId);
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    document.addEventListener('pointercancel', onPointerUp);
+  });
+
+  // Tap handle to toggle collapse/expand
+  let lastTap = 0;
+  handle.addEventListener('pointerup', (e) => {
+    if (isDragging) return; // was a drag, not a tap
+    const now = performance.now();
+    if (now - lastTap < 300) {
+      // Double-tap: fully expand or collapse
+      const panel = document.getElementById('uv-2d-panel');
+      if (panel.classList.contains('collapsed')) expandUV2DPanel(); else collapseUV2DPanel();
+    }
+    lastTap = now;
+  });
+})();
+
+async function buildUV2DInPanel() {
   const progressWrap = document.getElementById('uv-2d-progress-wrap');
   const progressFill = document.getElementById('uv-2d-progress-fill');
   const progressLabel = document.getElementById('uv-2d-progress-label');
@@ -11282,7 +11687,6 @@ function bindUV2DSelectionEvents(canvas) {
   }
 
   canvas.onpointerdown = (e) => {
-    if (performance.now() - uv2dOpenedAt < 600) return; // ghost tap right after opening
     if (e.button === 2) return; // Right click handled separately via oncontextmenu
     const { u, v, x, y } = getUVFromPointer(e);
     lastMouseUV = { u, v };
