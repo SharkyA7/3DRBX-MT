@@ -140,6 +140,40 @@ Registered in ToolRegistry under `view` section (padding-overlay, exposure-adjus
 
 All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (view tools are stateless, export tool creates new meshes); update checker/2D views.
 
+## 18. Persistent 2D UV Map Panel (uv-checker.html)
+A responsive bottom panel with drag-to-resize handle, tap-to-collapse, and full 2D/3D bidirectional selection sync.
+
+Layout changes:
+- `.app-root` switched from flex to CSS Grid: `grid-template-rows: var(--top-bar-h) 1fr var(--uv-2d-h) var(--bottom-bar-h)`.
+- `--uv-2d-h: 300px` default, `--uv-2d-h-collapsed: 40px` (handle only).
+- `.app-root.uv-2d-collapsed` reduces the panel row to the collapsed height.
+- Panel sits between `.main-layout` (3D viewport + sidebars) and `.bottom-bar`.
+
+Panel components (`#uv-2d-panel`):
+- `.uv-2d-panel-handle` — 40px tall, `cursor:row-resize`, `touch-action:none`. Drag to resize (updates `--uv-2d-h` live, clamps 120–60vh). Double-tap toggles collapse/expand. Single tap does nothing (prevents accidental collapse while dragging).
+- `.uv-2d-panel-header` — title "2D UV MAP" + close button (collapses panel).
+- `.uv-2d-panel-content` — scrollable area with progress bar, square canvas (`#uv-2d-canvas`), overlay/background controls, warning, legend.
+
+Interactions (Step 1 — wiring in place, full interaction logic in Steps 2–3):
+- Tap on canvas → select nearest vertex/edge/face/island (spatial hash for O(1) pick).
+- Double-tap → select entire island.
+- 350ms hold → paint-select (adds to selection while dragging).
+- Quick drag after tap → invokes active gizmo tool (translate/rotate/scale).
+- Two-finger pan/pinch → canvas transform only.
+- All selection changes sync to 3D viewport instantly (shared `Selection` object).
+- Each gesture creates one `UVHistory` entry (snapshot for multi-vertex ops, diff for single).
+
+Guide Tool modal (`#guide-modal`):
+- Top bar "?" button opens modal listing all 31 registered tools grouped by section.
+- Each card shows icon, name, section, description, parameter schema.
+- Search/filter by section.
+
+ToolRegistry additions:
+- `getAllTools()` exported for Guide modal.
+- `registerSection` default params destructured safely.
+
+Files changed: `uv-checker.html` (CSS, HTML, JS), `check-scripts.js` (modal list + regex), `public/uv-checker.html` (synced copy).
+
 ## RBXM decoder status (2026-11-05)
 
 Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.

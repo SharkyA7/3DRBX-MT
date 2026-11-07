@@ -5251,12 +5251,26 @@ function updateSelectionStatus() {
   }
 }
 
-// Raycast in UV space (for 2D UV map click)
-function raycastUV(mouseU, mouseV, threshold = 0.008) {
-  if (!currentRoot) return null;
+// ============================================================================
+// Spatial Hash for O(1) UV picking
+// ============================================================================
 
-  let bestHit = null;
-  let bestDist = threshold;
+// Spatial hash grid cell size (in UV space)
+// Smaller = more precise but more cells; larger = fewer cells but more triangles per cell
+const SPATIAL_HASH_CELL_SIZE = 0.02; // 2% of UV space per cell
+const SPATIAL_HASH_GRID_SIZE = Math.ceil(1 / SPATIAL_HASH_CELL_SIZE); // 50x50 grid for 0-1 UV space
+
+let uvSpatialHash = null; // { grid: Map<cellKey, triangle[]>, cellSize, gridSize }
+let uvSpatialHashVersion = null; // currentRoot.uuid when hash was built
+
+// Build spatial hash from current model
+function buildUVSpatialHash() {
+  if (!currentRoot) return;
+  if (uvSpatialHashVersion === currentRoot.uuid) return; // Already built for this model
+
+  const cellSize = SPATIAL_HASH_CELL_SIZE;
+  const gridSize = SPATIAL_HASH_GRID_SIZE;
+  const grid = new Map();
 
   currentRoot.traverse(child => {
     if (!child.isMesh) return;
@@ -5275,48 +5289,129 @@ function raycastUV(mouseU, mouseV, threshold = 0.008) {
       const u1 = uvAttr.getX(v1), v1_ = uvAttr.getY(v1);
       const u2 = uvAttr.getX(v2), v2_ = uvAttr.getY(v2);
 
-      // Check if point is in triangle (barycentric)
-      const denom = (v1_ - v2_) * (u0 - u2) + (u2 - u1) * (v0_ - v2_);
-      if (Math.abs(denom) < 1e-10) continue;
+      // Compute triangle bounding box in UV space
+      const minU = Math.min(u0, u1, u2);
+      const maxU = Math.max(u0, u1, u2);
+      const minV = Math.min(v0_, v1_, v2_);
+      const maxV = Math.max(v0_, v1_, v2_);
 
-      const a = ((v1_ - v2_) * (mouseU - u2) + (u2 - u1) * (mouseV - v2_)) / denom;
-      const b = ((v2_ - v0_) * (mouseU - u2) + (u0 - u2) * (mouseV - v2_)) / denom;
-      const c = 1 - a - b;
+      // Determine which grid cells this triangle overlaps
+      const cellMinX = Math.max(0, Math.floor(minU / cellSize));
+      const cellMaxX = Math.min(gridSize - 1, Math.floor(maxU / cellSize));
+      const cellMinY = Math.max(0, Math.floor(minV / cellSize));
+      const cellMaxY = Math.min(gridSize - 1, Math.floor(maxV / cellSize));
 
-      if (a >= -0.001 && b >= -0.001 && c >= -0.001) {
-        // Point is in triangle - check vertex/edge proximity
-        const verts = [{u: u0, v: v0_, idx: v0}, {u: u1, v: v1_, idx: v1}, {u: u2, v: v2_, idx: v2}];
-        for (const vert of verts) {
-          const du = vert.u - mouseU;
-          const dv = vert.v - mouseV;
-          const dist = Math.sqrt(du * du + dv * dv);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestHit = { mesh: child, type: 'vertex', vertex: vert.idx, face: t, uv: [vert.u, vert.v] };
-          }
-        }
-
-        // Check edge proximity
-        const edges = [[verts[0], verts[1]], [verts[1], verts[2]], [verts[2], verts[0]]];
-        for (const [va, vb] of edges) {
-          const dist = pointToLineDist(mouseU, mouseV, va.u, va.v, vb.u, vb.v);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestHit = { mesh: child, type: 'edge', vertices: [va.idx, vb.idx], face: t, uv: [mouseU, mouseV] };
-          }
-        }
-
-        // Face hit (center)
-        const centerU = (u0 + u1 + u2) / 3;
-        const centerV = (v0_ + v1_ + v2_) / 3;
-        const faceDist = Math.sqrt((centerU - mouseU) ** 2 + (centerV - mouseV) ** 2);
-        if (faceDist < bestDist) {
-          bestDist = faceDist;
-          bestHit = { mesh: child, type: 'face', face: t, uv: [centerU, centerV] };
+      // Add triangle to all overlapping cells
+      for (let gx = cellMinX; gx <= cellMaxX; gx++) {
+        for (let gy = cellMinY; gy <= cellMaxY; gy++) {
+          const cellKey = `${gx},${gy}`;
+          if (!grid.has(cellKey)) grid.set(cellKey, []);
+          grid.get(cellKey).push({
+            mesh: child,
+            face: t,
+            vertices: [v0, v1, v2],
+            uvs: [[u0, v0_], [u1, v1_], [u2, v2_]],
+            minU, maxU, minV, maxV
+          });
         }
       }
     }
   });
+
+  uvSpatialHash = { grid, cellSize, gridSize };
+  uvSpatialHashVersion = currentRoot.uuid;
+}
+
+// Raycast in UV space using spatial hash for O(1) picking
+function raycastUV(mouseU, mouseV, threshold = 0.008) {
+  if (!currentRoot) return null;
+
+  // Build spatial hash if needed
+  buildUVSpatialHash();
+  if (!uvSpatialHash) return null;
+
+  const { grid, cellSize } = uvSpatialHash;
+
+  // Determine which cell the mouse point falls in
+  const cellX = Math.floor(mouseU / cellSize);
+  const cellY = Math.floor(mouseV / cellSize);
+  const cellKey = `${cellX},${cellY}`;
+
+  // Get triangles in this cell (and optionally neighbors for edge cases)
+  const triangles = grid.get(cellKey);
+  if (!triangles || triangles.length === 0) {
+    // Fallback: check neighboring cells if exact cell is empty
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (dx === 0 && dy === 0) continue;
+        const neighborKey = `${cellX + dx},${cellY + dy}`;
+        const neighborTris = grid.get(neighborKey);
+        if (neighborTris && neighborTris.length > 0) {
+          return raycastUVInTriangles(neighborTris, mouseU, mouseV, threshold);
+        }
+      }
+    }
+    return null;
+  }
+
+  return raycastUVInTriangles(triangles, mouseU, mouseV, threshold);
+}
+
+// Raycast against a specific list of triangles (used by spatial hash)
+function raycastUVInTriangles(triangles, mouseU, mouseV, threshold) {
+  let bestHit = null;
+  let bestDist = threshold;
+
+  for (const tri of triangles) {
+    // Quick bounding box check
+    if (mouseU < tri.minU - threshold || mouseU > tri.maxU + threshold ||
+        mouseV < tri.minV - threshold || mouseV > tri.maxV + threshold) {
+      continue;
+    }
+
+    const [[u0, v0], [u1, v1], [u2, v2]] = tri.uvs;
+
+    // Check if point is in triangle (barycentric)
+    const denom = (v1 - v2) * (u0 - u2) + (u2 - u1) * (v0 - v2);
+    if (Math.abs(denom) < 1e-10) continue;
+
+    const a = ((v1 - v2) * (mouseU - u2) + (u2 - u1) * (mouseV - v2)) / denom;
+    const b = ((v2 - v0) * (mouseU - u2) + (u0 - u2) * (mouseV - v2)) / denom;
+    const c = 1 - a - b;
+
+    if (a >= -0.001 && b >= -0.001 && c >= -0.001) {
+      // Point is in triangle - check vertex/edge proximity
+      const verts = [{u: u0, v: v0, idx: tri.vertices[0]}, {u: u1, v: v1, idx: tri.vertices[1]}, {u: u2, v: v2, idx: tri.vertices[2]}];
+      for (const vert of verts) {
+        const du = vert.u - mouseU;
+        const dv = vert.v - mouseV;
+        const dist = Math.sqrt(du * du + dv * dv);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestHit = { mesh: tri.mesh, type: 'vertex', vertex: vert.idx, face: tri.face, uv: [vert.u, vert.v] };
+        }
+      }
+
+      // Check edge proximity
+      const edges = [[verts[0], verts[1]], [verts[1], verts[2]], [verts[2], verts[0]]];
+      for (const [va, vb] of edges) {
+        const dist = pointToLineDist(mouseU, mouseV, va.u, va.v, vb.u, vb.v);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestHit = { mesh: tri.mesh, type: 'edge', vertices: [va.idx, vb.idx], face: tri.face, uv: [mouseU, mouseV] };
+        }
+      }
+
+      // Face hit (center)
+      const centerU = (u0 + u1 + u2) / 3;
+      const centerV = (v0 + v1 + v2) / 3;
+      const faceDist = Math.sqrt((centerU - mouseU) ** 2 + (centerV - mouseV) ** 2);
+      if (faceDist < bestDist) {
+        bestDist = faceDist;
+        bestHit = { mesh: tri.mesh, type: 'face', face: tri.face, uv: [centerU, centerV] };
+      }
+    }
+  }
 
   return bestHit;
 }
@@ -7544,38 +7639,80 @@ async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.85;
 
-  for(let m = 0; m < meshes.length; m++){
-    const child = meshes[m];
-    ctx.strokeStyle = MESH_COLORS[m % MESH_COLORS.length];
+  // Use island detection to render each island with a distinct color
+  const allIslands = getAllIslands();
+
+  // Generate distinct colors for islands using HSV hue rotation
+  const islandColors = allIslands.map((_, i) => {
+    const hue = (i * 137.508) % 360; // Golden angle for good color distribution
+    return hsvToRgb(hue, 0.7, 0.9);
+  });
+
+  let totalTriangles = 0;
+  for (const isl of allIslands) {
+    totalTriangles += isl.faces.size;
+  }
+
+  let processedTriangles = 0;
+
+  for (let islIdx = 0; islIdx < allIslands.length; islIdx++) {
+    const isl = allIslands[islIdx];
+    const child = isl.mesh;
     const uvAttr = child.geometry.attributes.uv;
     const idx = child.geometry.index;
-    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+    if (!uvAttr || !isFinite(uvAttr.count)) continue;
+
     const getUV = i => {
       const vi = idx ? idx.getX(i) : i;
-      return [uvAttr.getX(vi) * size, (1 - uvAttr.getY(vi)) * size]; // UV origin is bottom-left, canvas is top-left
+      return [uvAttr.getX(vi) * size, (1 - uvAttr.getY(vi)) * size];
     };
 
+    const color = islandColors[islIdx];
+    ctx.strokeStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+
     let path = new Path2D();
-    for(let t = 0; t < triCount; t++){
-      const a = getUV(t * 3), b = getUV(t * 3 + 1), c = getUV(t * 3 + 2);
+    for (const faceIdx of isl.faces) {
+      const a = getUV(faceIdx * 3), b = getUV(faceIdx * 3 + 1), c = getUV(faceIdx * 3 + 2);
       path.moveTo(a[0], a[1]);
       path.lineTo(b[0], b[1]);
       path.lineTo(c[0], c[1]);
       path.closePath();
 
-      if((t + 1) % UV_CHUNK_TRIS === 0){
+      processedTriangles++;
+      if (processedTriangles % UV_CHUNK_TRIS === 0) {
         ctx.stroke(path);
         path = new Path2D();
-        await nextFrame(); // let the browser paint/handle input before continuing
+        if(onProgress) onProgress(processedTriangles / totalTriangles);
+        await nextFrame();
       }
     }
     ctx.stroke(path);
-
-    if(onProgress) onProgress((m + 1) / meshes.length);
+    if(onProgress) onProgress(processedTriangles / totalTriangles);
     await nextFrame();
   }
+
   ctx.globalAlpha = 1;
   return canvas;
+}
+
+// HSV to RGB helper for island colors
+function hsvToRgb(h, s, v) {
+  const i = Math.floor(h / 60) % 6;
+  const f = h / 60 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  let r, g, b;
+  switch (i) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
 // Store base 2D canvas for overlay redraws
@@ -7835,6 +7972,12 @@ function draw2DOverlayNow() {
   if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
     draw2DSelectionHighlights(ctx, size);
   }
+
+  // Draw 2D gizmo when a transform tool is active and there's a selection
+  if (currentRoot && activeTool && ['move', 'rotate', 'scale'].includes(activeTool) &&
+      (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
+    draw2DGizmo(ctx, size);
+  }
 }
 
 // Helper: draw a chunk of triangles for the current overlay mode
@@ -8052,6 +8195,182 @@ function draw2DSelectionHighlights(ctx, size) {
       }
     }
   }
+}
+
+// 2D Gizmo rendering for transform tools (move, rotate, scale)
+function draw2DGizmo(ctx, size) {
+  if (!currentRoot) return;
+
+  // Compute selection center in UV space
+  let centerU = 0, centerV = 0;
+  let count = 0;
+
+  // Get center from selected vertices (most precise)
+  if (selection.vertices.size > 0) {
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      currentRoot.traverse(child => {
+        if (!child.isMesh || child.uuid !== meshId) return;
+        const data = getUVData(child);
+        if (!data) return;
+        const { uvAttr } = data;
+        const vi = parseInt(vertIdx);
+        centerU += uvAttr.getX(vi);
+        centerV += uvAttr.getY(vi);
+        count++;
+      });
+    }
+  }
+
+  // Fallback to faces if no vertices selected
+  if (count === 0 && selection.faces.size > 0) {
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      currentRoot.traverse(child => {
+        if (!child.isMesh || child.uuid !== meshId) return;
+        const data = getUVData(child);
+        if (!data) return;
+        const { uvAttr, idx } = data;
+        const t = parseInt(faceIdx);
+        const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+        const v0 = idx ? idx.getX(i0) : i0;
+        const v1 = idx ? idx.getX(i1) : i1;
+        const v2 = idx ? idx.getX(i2) : i2;
+        centerU += (uvAttr.getX(v0) + uvAttr.getX(v1) + uvAttr.getX(v2)) / 3;
+        centerV += (uvAttr.getY(v0) + uvAttr.getY(v1) + uvAttr.getY(v2)) / 3;
+        count++;
+      });
+    }
+  }
+
+  // Fallback to island centers
+  if (count === 0 && selection.islands.size > 0) {
+    const islands = getAllIslands();
+    for (const isl of islands) {
+      if (!selection.islands.has(isl.id)) continue;
+      if (isl.center) {
+        centerU += isl.center.x;
+        centerV += isl.center.y;
+        count++;
+      }
+    }
+  }
+
+  if (count === 0) return;
+
+  centerU /= count;
+  centerV /= count;
+
+  const cx = centerU * size;
+  const cy = (1 - centerV) * size; // Flip Y for canvas
+
+  const gizmoSize = Math.max(30, size * 0.08); // 8% of canvas size, min 30px
+  const handleSize = 10;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  if (activeTool === 'move') {
+    // Move gizmo: crosshair with drag handles
+    ctx.strokeStyle = '#50E8F4';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 3]);
+
+    // Crosshair lines
+    ctx.beginPath();
+    ctx.moveTo(-gizmoSize, 0);
+    ctx.lineTo(gizmoSize, 0);
+    ctx.moveTo(0, -gizmoSize);
+    ctx.lineTo(0, gizmoSize);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    // Axis labels
+    ctx.fillStyle = '#50E8F4';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('U', gizmoSize + 8, 4);
+    ctx.fillText('V', -4, -gizmoSize - 4);
+
+    // Drag handles at ends
+    ctx.fillStyle = 'rgba(80, 232, 244, 0.9)';
+    ctx.beginPath();
+    ctx.arc(gizmoSize, 0, handleSize, 0, Math.PI * 2);
+    ctx.arc(-gizmoSize, 0, handleSize, 0, Math.PI * 2);
+    ctx.arc(0, gizmoSize, handleSize, 0, Math.PI * 2);
+    ctx.arc(0, -gizmoSize, handleSize, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else if (activeTool === 'rotate') {
+    // Rotate gizmo: circle with rotation handle
+    ctx.strokeStyle = '#FFD166';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+
+    // Circle
+    ctx.beginPath();
+    ctx.arc(0, 0, gizmoSize, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    // Rotation handle (tangent)
+    const handleAngle = -Math.PI / 4; // 45 degrees
+    const hx = Math.cos(handleAngle) * gizmoSize;
+    const hy = Math.sin(handleAngle) * gizmoSize;
+
+    ctx.strokeStyle = '#FFD166';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx - Math.sin(handleAngle) * 15, hy + Math.cos(handleAngle) * 15);
+    ctx.lineTo(hx + Math.sin(handleAngle) * 15, hy - Math.cos(handleAngle) * 15);
+    ctx.stroke();
+
+    // Handle circle
+    ctx.fillStyle = '#FFD166';
+    ctx.beginPath();
+    ctx.arc(hx, hy, handleSize, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Center point
+    ctx.fillStyle = '#50E8F4';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else if (activeTool === 'scale') {
+    // Scale gizmo: box with corner handles
+    const half = gizmoSize;
+
+    ctx.strokeStyle = '#00FFB3';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 3]);
+
+    // Box outline
+    ctx.strokeRect(-half, -half, half * 2, half * 2);
+
+    ctx.setLineDash([]);
+
+    // Corner handles
+    ctx.fillStyle = 'rgba(0, 255, 179, 0.9)';
+    const corners = [
+      [-half, -half], [half, -half],
+      [half, half], [-half, half]
+    ];
+    for (const [x, y] of corners) {
+      ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+    }
+
+    // Center point
+    ctx.fillStyle = '#50E8F4';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 document.getElementById('uv-2d-download').addEventListener('click', () => {
