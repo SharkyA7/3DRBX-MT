@@ -1832,6 +1832,419 @@ ToolRegistry.registerTool('relax', {
   label: 'Relax',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/></svg>'
 });
+
+// ============================================================================
+// PHASE 5: UV EDITING TOOLS
+// ============================================================================
+
+// --- Pin / Unpin UV Vertices ---
+function pinUnpinTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts } = sel;
+  const action = params.action ?? 'pin'; // 'pin' or 'unpin'
+
+  // Store pinned state in vertex data (using a custom attribute or map)
+  if (!mesh.userData.pinnedVerts) mesh.userData.pinnedVerts = new Set();
+
+  for (const key of selectedVerts) {
+    const [, vi] = key.split(':').map(Number);
+    if (action === 'pin') {
+      mesh.userData.pinnedVerts.add(vi);
+    } else {
+      mesh.userData.pinnedVerts.delete(vi);
+    }
+  }
+
+  updateSelectionGizmo();
+  requestRender();
+
+  st(`✓ ${action === 'pin' ? 'Pinned' : 'Unpinned'} ${selectedVerts.size} vertices`, 'ok');
+  return { diffs: [] }; // No UV changes, just selection state
+}
+
+ToolRegistry.registerTool('pin-unpin', {
+  fn: pinUnpinTool,
+  params: [
+    { name: 'action', type: 'select', label: 'Action', default: 'pin',
+      options: [{ value: 'pin', label: 'Pin vertices' }, { value: 'unpin', label: 'Unpin vertices' }] }
+  ],
+  description: 'Pin or unpin selected UV vertices to prevent movement during relax/pack',
+  section: 'uv',
+  tooltip: 'Pin/Unpin Vertices',
+  label: 'Pin/Unpin',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1010 10"/><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="3"/></svg>'
+});
+
+// --- Weld UV Vertices (merge selected vertices at same position) ---
+function weldUVTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const threshold = params.threshold ?? 0.001;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Welding UV vertices…', 'loading');
+
+  let weldedCount = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    // Collect selected vertices
+    const selectedVerts = new Set();
+    for (const key of selection.vertices) {
+      const [meshId, vertIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      selectedVerts.add(parseInt(vertIdx));
+    }
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      const t = parseInt(faceIdx);
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      selectedVerts.add(v0); selectedVerts.add(v1); selectedVerts.add(v2);
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          for (const v of isl.vertices) selectedVerts.add(v);
+        }
+      }
+    }
+
+    if (selectedVerts.size < 2) return;
+
+    uvAttr.array = uvAttr.array.slice();
+
+    // Group nearby vertices
+    const visited = new Set();
+    for (const vi of selectedVerts) {
+      if (visited.has(vi)) continue;
+
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+
+      // Find all selected vertices within threshold
+      const cluster = [vi];
+      for (const vj of selectedVerts) {
+        if (vj === vi || visited.has(vj)) continue;
+        const du = uvAttr.getX(vj) - u;
+        const dv = uvAttr.getY(vj) - v;
+        if (Math.sqrt(du * du + dv * dv) <= threshold) {
+          cluster.push(vj);
+        }
+      }
+
+      if (cluster.length > 1) {
+        // Compute average position
+        let sumU = 0, sumV = 0;
+        for (const vk of cluster) {
+          sumU += uvAttr.getX(vk);
+          sumV += uvAttr.getY(vk);
+        }
+        const avgU = sumU / cluster.length;
+        const avgV = sumV / cluster.length;
+
+        // Apply to all vertices in cluster
+        for (const vk of cluster) {
+          uvAttr.setX(vk, avgU);
+          uvAttr.setY(vk, avgV);
+          visited.add(vk);
+        }
+        weldedCount += cluster.length - 1;
+      }
+    }
+
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Weld UV');
+
+  st(`✓ Welded ${weldedCount} vertices`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('weld', {
+  fn: weldUVTool,
+  params: [
+    { name: 'threshold', type: 'number', label: 'Threshold', min: 0.0001, max: 0.1, step: 0.0001, default: 0.001, unit: 'UV' }
+  ],
+  description: 'Merge selected UV vertices within threshold distance',
+  section: 'uv',
+  tooltip: 'Weld Vertices',
+  label: 'Weld',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="4"/></svg>'
+});
+
+// --- Stitch UV Edges (sew boundary edges together) ---
+function stitchUVTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const threshold = params.threshold ?? 0.001;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Stitching UV edges…', 'loading');
+
+  let stitchedCount = 0;
+
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    // Find boundary edges from selected faces/islands
+    const selectedFaces = new Set();
+    for (const key of selection.faces) {
+      const [meshId, faceIdx] = key.split(':');
+      if (meshId !== child.uuid) continue;
+      selectedFaces.add(parseInt(faceIdx));
+    }
+    if (selection.islands.size > 0) {
+      const islands = getAllIslands();
+      for (const isl of islands) {
+        if (selection.islands.has(isl.id) && isl.mesh === child) {
+          for (const f of isl.faces) selectedFaces.add(f);
+        }
+      }
+    }
+    if (selectedFaces.size === 0) return;
+
+    // Build edge-to-face map
+    const edgeFaces = new Map(); // edgeKey -> [faceIndices]
+    for (const t of selectedFaces) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+
+      const edges = [
+        { key: v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`, a: v0, b: v1 },
+        { key: v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`, a: v1, b: v2 },
+        { key: v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`, a: v2, b: v0 }
+      ];
+
+      for (const e of edges) {
+        if (!edgeFaces.has(e.key)) edgeFaces.set(e.key, []);
+        edgeFaces.get(e.key).push({ face: t, a: e.a, b: e.b });
+      }
+    }
+
+    // Find boundary edges (edges belonging to only 1 selected face)
+    const boundaryEdges = [];
+    for (const [key, faces] of edgeFaces) {
+      if (faces.length === 1) {
+        boundaryEdges.push({ key, face: faces[0].face, a: faces[0].a, b: faces[0].b });
+      }
+    }
+
+    if (boundaryEdges.length < 2) return;
+
+    // Match boundary edges with similar length/position
+    uvAttr.array = uvAttr.array.slice();
+    const matched = new Set();
+
+    for (let i = 0; i < boundaryEdges.length; i++) {
+      if (matched.has(i)) continue;
+      const e1 = boundaryEdges[i];
+      const u1a = uvAttr.getX(e1.a), v1a = uvAttr.getY(e1.a);
+      const u1b = uvAttr.getX(e1.b), v1b = uvAttr.getY(e1.b);
+      const len1 = Math.hypot(u1b - u1a, v1b - v1a);
+
+      for (let j = i + 1; j < boundaryEdges.length; j++) {
+        if (matched.has(j)) continue;
+        const e2 = boundaryEdges[j];
+        const u2a = uvAttr.getX(e2.a), v2a = uvAttr.getY(e2.a);
+        const u2b = uvAttr.getX(e2.b), v2b = uvAttr.getY(e2.b);
+        const len2 = Math.hypot(u2b - u2a, v2b - v2a);
+
+        // Check if edges have similar length and are close
+        if (Math.abs(len1 - len2) <= threshold) {
+          const dist = Math.hypot((u1a + u1b)/2 - (u2a + u2b)/2, (v1a + v1b)/2 - (v2a + v2b)/2);
+          if (dist <= threshold * 5) {
+            // Stitch: align vertices
+            const midU = ((u1a + u1b) + (u2a + u2b)) / 4;
+            const midV = ((v1a + v1b) + (v2a + v2b)) / 4;
+
+            // Move both edge vertices to midpoint
+            uvAttr.setX(e1.a, u1a - (u1a - midU)); uvAttr.setY(e1.a, v1a - (v1a - midV));
+            uvAttr.setX(e1.b, u1b - (u1b - midU)); uvAttr.setY(e1.b, v1b - (v1b - midV));
+            uvAttr.setX(e2.a, u2a - (u2a - midU)); uvAttr.setY(e2.a, v2a - (v2a - midV));
+            uvAttr.setX(e2.b, u2b - (u2b - midU)); uvAttr.setY(e2.b, v2b - (v2b - midV));
+
+            matched.add(i); matched.add(j);
+            stitchedCount++;
+            break;
+          }
+        }
+      }
+    }
+
+    uvAttr.needsUpdate = true;
+  });
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Stitch UV');
+
+  st(`✓ Stitched ${stitchedCount} edge pairs`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('stitch', {
+  fn: stitchUVTool,
+  params: [
+    { name: 'threshold', type: 'number', label: 'Threshold', min: 0.0001, max: 0.1, step: 0.0001, default: 0.001, unit: 'UV' }
+  ],
+  description: 'Sew together boundary UV edges of selected islands',
+  section: 'uv',
+  tooltip: 'Stitch Edges',
+  label: 'Stitch',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 12l4 4 6-6"/><path d="M16 12l4 4 6-6"/></svg>'
+});
+
+// --- Normalize UV Scale (uniform scale islands to consistent texel density) ---
+function normalizeUVTool(sel, params, meshData) {
+  if (!currentRoot) return { diffs: [] };
+
+  const targetDensity = params.targetDensity ?? 512; // texels per unit
+  const mode = params.mode ?? 'average'; // 'average', 'max', 'min', 'custom'
+  const customScale = params.customScale ?? 1;
+
+  const beforeSnapshot = UVHistory.captureSnapshot();
+  st('⚙ Normalizing UV scale…', 'loading');
+
+  const islands = getAllIslands();
+  if (islands.length === 0) {
+    st('✗ No UV islands found', 'err');
+    return { diffs: [] };
+  }
+
+  // Calculate current texel density for each island (assuming 1024x1024 texture)
+  const textureSize = 1024;
+  const densities = [];
+
+  for (const isl of islands) {
+    const data = getUVData(isl.mesh);
+    if (!data) continue;
+    const { uvAttr, idx, posAttr } = data;
+    if (!posAttr) continue;
+
+    // Compute 3D surface area of island
+    let area3D = 0;
+    for (const f of isl.faces) {
+      const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      const p0 = new THREE.Vector3(posAttr.getX(v0), posAttr.getY(v0), posAttr.getZ(v0));
+      const p1 = new THREE.Vector3(posAttr.getX(v1), posAttr.getY(v1), posAttr.getZ(v1));
+      const p2 = new THREE.Vector3(posAttr.getX(v2), posAttr.getY(v2), posAttr.getZ(v2));
+      const ab = p1.clone().sub(p0);
+      const ac = p2.clone().sub(p0);
+      area3D += ab.cross(ac).length() * 0.5;
+    }
+
+    // Compute UV area
+    let areaUV = 0;
+    for (const f of isl.faces) {
+      const i0 = f * 3, i1 = f * 3 + 1, i2 = f * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      const u0 = uvAttr.getX(v0), v0_ = uvAttr.getY(v0);
+      const u1 = uvAttr.getX(v1), v1_ = uvAttr.getY(v1);
+      const u2 = uvAttr.getX(v2), v2_ = uvAttr.getY(v2);
+      areaUV += Math.abs((u1 - u0) * (v2_ - v0_) - (u2 - u0) * (v1_ - v0_)) * 0.5;
+    }
+
+    if (areaUV > 0) {
+      const density = Math.sqrt(textureSize * textureSize * areaUV / area3D);
+      densities.push({ island: isl, density });
+    }
+  }
+
+  if (densities.length === 0) return { diffs: [] };
+
+  // Determine target scale
+  let targetScale;
+  if (mode === 'average') {
+    targetScale = densities.reduce((sum, d) => sum + d.density, 0) / densities.length;
+  } else if (mode === 'max') {
+    targetScale = Math.max(...densities.map(d => d.density));
+  } else if (mode === 'min') {
+    targetScale = Math.min(...densities.map(d => d.density));
+  } else {
+    targetScale = targetDensity;
+  }
+
+  // Apply scaling to each island
+  for (const { island, density } of densities) {
+    if (density === 0) continue;
+    const scale = targetScale / density;
+
+    const data = getUVData(island.mesh);
+    if (!data) continue;
+    const { uvAttr, idx } = data;
+
+    uvAttr.array = uvAttr.array.slice();
+
+    // Scale around island center
+    const centerU = (island.min_uv.x + island.max_uv.x) / 2;
+    const centerV = (island.min_uv.y + island.max_uv.y) / 2;
+
+    for (const vi of island.vertices) {
+      const u = uvAttr.getX(vi);
+      const v = uvAttr.getY(vi);
+      uvAttr.setX(vi, centerU + (u - centerU) * scale);
+      uvAttr.setY(vi, centerV + (v - centerV) * scale);
+    }
+    uvAttr.needsUpdate = true;
+  }
+
+  if (current3DMode === 'checker') updateCheckerTexture();
+  if (document.getElementById('uv2d-modal').classList.contains('visible')) buildUV2DInModal();
+  islandCache = null;
+
+  const afterSnapshot = UVHistory.captureSnapshot();
+  UVHistory.pushTransform(beforeSnapshot, afterSnapshot, 'Normalize UV Scale');
+
+  st(`✓ Normalized ${densities.length} islands (target: ${targetScale.toFixed(0)} texels/unit)`, 'ok');
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('normalize', {
+  fn: normalizeUVTool,
+  params: [
+    { name: 'mode', type: 'select', label: 'Mode', default: 'average',
+      options: [{ value: 'average', label: 'Average density' }, { value: 'max', label: 'Max density' }, { value: 'min', label: 'Min density' }, { value: 'custom', label: 'Custom target' }] },
+    { name: 'targetDensity', type: 'number', label: 'Target density', min: 16, max: 4096, step: 16, default: 512, unit: 'texels/unit' }
+  ],
+  description: 'Normalize UV scale across islands for consistent texel density',
+  section: 'uv',
+  tooltip: 'Normalize Scale',
+  label: 'Normalize',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>'
+});
+
 ToolRegistry.registerTool('unwrap', {
   fn: (sel, params, meshData) => applyUnwrapUV(sel, meshData),
   params: [
