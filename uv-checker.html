@@ -6144,6 +6144,97 @@ function endTransform() {
   }
 }
 
+// Rotate selected UV vertices around pivot
+function rotateSelectionUV(angleRad) {
+  if (!currentRoot) return;
+  if (!transformSnapshot) return;
+
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+
+  // Apply transform to selected vertices
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    uvAttr.array = uvAttr.array.slice(); // Force update
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const key = `${child.uuid}:${i}`;
+      if (selection.vertices.has(key)) {
+        const snap = transformSnapshot.get(key);
+        if (snap) {
+          // Rotate around selection center (0.5, 0.5)
+          const u = snap.u - 0.5;
+          const v = snap.v - 0.5;
+          uvAttr.setX(i, u * cos - v * sin + 0.5);
+          uvAttr.setY(i, u * sin + v * cos + 0.5);
+        }
+      }
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  // Update 3D view (checker texture coordinates)
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  // Update 2D UV map if open
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+  if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
+    buildUV2DInPanel();
+  }
+
+  requestRender();
+}
+
+// Scale selected UV vertices around pivot
+function scaleSelectionUV(scaleU, scaleV) {
+  if (!currentRoot) return;
+  if (!transformSnapshot) return;
+
+  // Apply transform to selected vertices
+  currentRoot.traverse(child => {
+    if (!child.isMesh) return;
+    const data = getUVData(child);
+    if (!data) return;
+    const { uvAttr, idx } = data;
+
+    uvAttr.array = uvAttr.array.slice(); // Force update
+
+    for (let i = 0; i < uvAttr.count; i++) {
+      const key = `${child.uuid}:${i}`;
+      if (selection.vertices.has(key)) {
+        const snap = transformSnapshot.get(key);
+        if (snap) {
+          // Scale around selection center (0.5, 0.5)
+          const u = (snap.u - 0.5) * scaleU + 0.5;
+          const v = (snap.v - 0.5) * scaleV + 0.5;
+          uvAttr.setX(i, u);
+          uvAttr.setY(i, v);
+        }
+      }
+    }
+    uvAttr.needsUpdate = true;
+  });
+
+  // Update 3D view (checker texture coordinates)
+  if (current3DMode === 'checker') {
+    updateCheckerTexture();
+  }
+
+  // Update 2D UV map if open
+  const uv2dPanel = document.getElementById('uv-2d-panel');
+  if (uv2dPanel && !uv2dPanel.classList.contains('collapsed')) {
+    buildUV2DInPanel();
+  }
+
+  requestRender();
+}
+
 
 // Selection mode from toolbar
 function setSelectionMode(mode) {
@@ -11996,66 +12087,235 @@ function bindUV2DSelectionEvents(canvas) {
   dragBox = null;
   const multiSelect = () => document.getElementById('opt-multi-select')?.checked;
 
+  // Interaction state for Step 3
+  let pressTimer = null;
+  let pressStart = { u: 0, v: 0, x: 0, y: 0, time: 0 };
+  let isPaintSelecting = false;
+  let lastTapTime = 0;
+  let lastTapPos = { u: 0, v: 0 };
+  let activePointers = new Map(); // For multi-touch pan/zoom
+  let initialPinchDist = 0;
+  let initialCanvasTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+
+  // 2D Canvas transform state (for pan/zoom)
+  let canvasTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+
   function getUVFromPointer(e) {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left - canvasTransform.offsetX) / canvasTransform.scale;
+    const y = (e.clientY - rect.top - canvasTransform.offsetY) / canvasTransform.scale;
     const u = x / canvas.width;
     const v = 1 - y / canvas.height; // Flip Y since canvas origin is top-left
-    return { u, v, x, y };
+    return { u, v, x, y, rawX: e.clientX - rect.left, rawY: e.clientY - rect.top };
+  }
+
+  function applyCanvasTransform(ctx) {
+    ctx.save();
+    ctx.translate(canvasTransform.offsetX, canvasTransform.offsetY);
+    ctx.scale(canvasTransform.scale, canvasTransform.scale);
+  }
+
+  function resetCanvasTransform() {
+    canvasTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+    draw2DOverlay();
+  }
+
+  // Sync selection to 3D viewport (bidirectional)
+  function syncSelectionTo3D() {
+    if (!currentRoot) return;
+    updateSelectionGizmo();
+    updateSelectionStatus();
+    requestRender();
+    draw2DOverlay();
+  }
+
+  // Wrap gesture in UVHistory
+  function wrapHistory(operationName, fn) {
+    const beforeSnapshot = UVHistory.captureSnapshot();
+    const result = fn();
+    const afterSnapshot = UVHistory.captureSnapshot();
+    // Push as a single history entry
+    UVHistory.pushSnapshot(operationName);
+    return result;
   }
 
   canvas.onpointerdown = (e) => {
     if (e.button === 2) return; // Right click handled separately via oncontextmenu
-    const { u, v, x, y } = getUVFromPointer(e);
+
+    const { u, v, x, y, rawX, rawY } = getUVFromPointer(e);
     lastMouseUV = { u, v };
+
+    // Track pointer for multi-touch
+    activePointers.set(e.pointerId, { x: rawX, y: rawY, u, v });
 
     // Set pointer capture so we get move/up even if pointer leaves canvas
     try { canvas.setPointerCapture(e.pointerId); } catch {}
 
+    // Multi-touch: two-finger pan/pinch
+    if (activePointers.size >= 2) {
+      isPaintSelecting = false;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+
+      // Calculate initial pinch distance for zoom
+      const pointers = Array.from(activePointers.values());
+      const dx = pointers[0].x - pointers[1].x;
+      const dy = pointers[0].y - pointers[1].y;
+      initialPinchDist = Math.sqrt(dx * dx + dy * dy);
+      initialCanvasTransform = { ...canvasTransform };
+      return;
+    }
+
     if (e.shiftKey && activeTool === 'select') {
       // Box selection
       isDragging = true;
-      dragStart = { x, y };
-      dragBox = { x1: x, y1: y, x2: x, y2: y };
+      dragStart = { x: rawX, y: rawY };
+      dragBox = { x1: rawX, y1: rawY, x2: rawX, y2: rawY };
       canvas.style.cursor = 'crosshair';
-    } else if (activeTool === 'select') {
-      // Single click selection
-      const hit = raycastUV(u, v);
-      if (hit) {
-        if (!multiSelect()) clearSelection();
-        handleSelectionHit(hit);
-      } else if (!multiSelect()) {
-        clearSelection();
+      return;
+    }
+
+    if (activeTool === 'select') {
+      const now = performance.now();
+      const dt = now - lastTapTime;
+      const du = u - lastTapPos.u;
+      const dv = v - lastTapPos.v;
+      const dist = Math.sqrt(du * du + dv * dv);
+
+      // Double-tap detection (300ms, same position within threshold)
+      if (dt < 300 && dist < 0.01) {
+        // Double-tap: select entire island
+        const hit = raycastUV(u, v);
+        if (hit && hit.mesh) {
+          wrapHistory('Double-tap Island Select', () => {
+            const isl = findIslandForVertex(hit.mesh, hit.vertex);
+            if (isl) {
+              if (!multiSelect()) clearSelection();
+              for (const vi of isl.vertices) {
+                selection.vertices.add(`${isl.mesh.uuid}:${vi}`);
+              }
+            }
+          });
+          syncSelectionTo3D();
+        }
+        lastTapTime = 0; // Prevent triple-tap
+        return;
       }
-    } else if (['move', 'rotate', 'scale'].includes(activeTool)) {
-      // Start transform
+
+      // Single tap - start hold timer for paint-select
+      lastTapTime = now;
+      lastTapPos = { u, v };
+      pressStart = { u, v, x: rawX, y: rawY, time: now };
+
+      pressTimer = setTimeout(() => {
+        // 350ms hold: enter paint-select mode
+        isPaintSelecting = true;
+        canvas.style.cursor = 'crosshair';
+        const hit = raycastUV(u, v);
+        if (hit) {
+          if (!multiSelect()) clearSelection();
+          handleSelectionHit(hit);
+          syncSelectionTo3D();
+        }
+        pressTimer = null;
+      }, 350);
+      return;
+    }
+
+    if (['move', 'rotate', 'scale'].includes(activeTool)) {
+      // Start transform (quick drag after tap)
       startTransform();
       isTransforming = true;
       transformStart = { u, v };
+      return;
     }
   };
 
   canvas.onpointermove = (e) => {
-    const { u, v, x, y } = getUVFromPointer(e);
+    const { u, v, x, y, rawX, rawY } = getUVFromPointer(e);
     lastMouseUV = { u, v };
 
+    // Update active pointer position
+    if (activePointers.has(e.pointerId)) {
+      activePointers.set(e.pointerId, { x: rawX, y: rawY, u, v });
+    }
+
+    // Multi-touch pan/zoom
+    if (activePointers.size >= 2) {
+      const pointers = Array.from(activePointers.values());
+
+      if (pointers.length === 2) {
+        // Pinch zoom
+        const dx = pointers[0].x - pointers[1].x;
+        const dy = pointers[0].y - pointers[1].y;
+        const currentDist = Math.sqrt(dx * dx + dy * dy);
+
+        if (initialPinchDist > 0) {
+          const scaleFactor = currentDist / initialPinchDist;
+          const newScale = Math.max(0.25, Math.min(5, initialCanvasTransform.scale * scaleFactor));
+
+          // Zoom toward center point between fingers
+          const centerX = (pointers[0].x + pointers[1].x) / 2;
+          const centerY = (pointers[0].y + pointers[1].y) / 2;
+
+          canvasTransform.scale = newScale;
+          canvasTransform.offsetX = initialCanvasTransform.offsetX + (centerX - initialCanvasTransform.offsetX) * (1 - scaleFactor);
+          canvasTransform.offsetY = initialCanvasTransform.offsetY + (centerY - initialCanvasTransform.offsetY) * (1 - scaleFactor);
+
+          draw2DOverlay();
+        }
+      }
+      return;
+    }
+
+    // Single pointer interactions
     if (isDragging && dragBox) {
-      dragBox.x2 = x;
-      dragBox.y2 = y;
-      draw2DOverlay(); // Redraw with selection box
+      // Box selection drag
+      dragBox.x2 = rawX;
+      dragBox.y2 = rawY;
+      draw2DOverlay();
+    } else if (isPaintSelecting) {
+      // Paint-select: add to selection while dragging
+      const hit = raycastUV(u, v);
+      if (hit) {
+        handleSelectionHit(hit);
+        syncSelectionTo3D();
+      }
     } else if (isTransforming && activeTool !== 'select') {
+      // Transform gizmo drag
       const deltaU = u - transformStart.u;
       const deltaV = v - transformStart.v;
       if (activeTool === 'move') {
         transformSelectionUV(deltaU, deltaV);
         transformStart = { u, v };
+        syncSelectionTo3D();
+      } else if (activeTool === 'rotate') {
+        // Rotate around selection center
+        const angle = Math.atan2(deltaV, deltaU) - Math.atan2(transformStart.v - 0.5, transformStart.u - 0.5);
+        rotateSelectionUV(angle);
+        transformStart = { u, v };
+        syncSelectionTo3D();
+      } else if (activeTool === 'scale') {
+        // Scale from selection center
+        const scale = 1 + deltaU * 2; // Simplified scale factor
+        scaleSelectionUV(scale, scale);
+        transformStart = { u, v };
+        syncSelectionTo3D();
       }
-      // Rotate/Scale would need more complex implementation
+    } else if (activeTool === 'select' && pressTimer) {
+      // Check if pointer moved too much (cancel hold timer)
+      const dx = rawX - pressStart.x;
+      const dy = rawY - pressStart.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 8) { // 8px threshold
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
     }
   };
 
   canvas.onpointerup = (e) => {
+    // Remove pointer from tracking
+    activePointers.delete(e.pointerId);
+
     if (isDragging && dragBox) {
       // Complete box selection
       const rect = canvas.getBoundingClientRect();
@@ -12064,33 +12324,88 @@ function bindUV2DSelectionEvents(canvas) {
       const y1 = 1 - Math.max(dragBox.y1, dragBox.y2) / canvas.height; // Flip Y
       const y2 = 1 - Math.min(dragBox.y1, dragBox.y2) / canvas.height;
 
-      if (!multiSelect()) clearSelection();
-      boxSelectUV(x1, y1, x2, y2);
+      wrapHistory('Box Select', () => {
+        if (!multiSelect()) clearSelection();
+        boxSelectUV(x1, y1, x2, y2);
+      });
+      syncSelectionTo3D();
 
       isDragging = false;
       dragBox = null;
       canvas.style.cursor = 'default';
       draw2DOverlay();
+    } else if (isPaintSelecting) {
+      // End paint-select
+      isPaintSelecting = false;
+      canvas.style.cursor = 'default';
+      wrapHistory('Paint Select', () => {}); // Selections already added during drag
+      syncSelectionTo3D();
     } else if (isTransforming) {
+      // End transform
       endTransform();
       isTransforming = false;
+      wrapHistory(`${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)} UV`, () => {});
+      syncSelectionTo3D();
+    } else if (pressTimer) {
+      // Tap (not hold, not double-tap) - single click selection
+      clearTimeout(pressTimer);
+      pressTimer = null;
+
+      const { u, v } = getUVFromPointer(e);
+      const hit = raycastUV(u, v);
+      if (hit) {
+        wrapHistory('Tap Select', () => {
+          if (!multiSelect()) clearSelection();
+          handleSelectionHit(hit);
+        });
+        syncSelectionTo3D();
+      } else if (!multiSelect()) {
+        wrapHistory('Clear Selection', () => {
+          clearSelection();
+        });
+        syncSelectionTo3D();
+      }
     }
+
     try { canvas.releasePointerCapture(e.pointerId); } catch {}
   };
 
   canvas.onpointercancel = (e) => {
+    activePointers.delete(e.pointerId);
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     isDragging = false;
     dragBox = null;
     isTransforming = false;
+    isPaintSelecting = false;
     canvas.style.cursor = 'default';
     try { canvas.releasePointerCapture(e.pointerId); } catch {}
   };
 
   canvas.onlostpointercapture = (e) => {
+    activePointers.delete(e.pointerId);
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     isDragging = false;
     dragBox = null;
     isTransforming = false;
+    isPaintSelecting = false;
     canvas.style.cursor = 'default';
+  };
+
+  // Wheel zoom (desktop)
+  canvas.onwheel = (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.25, Math.min(5, canvasTransform.scale * zoomFactor));
+
+    canvasTransform.offsetX = mouseX - (mouseX - canvasTransform.offsetX) * (newScale / canvasTransform.scale);
+    canvasTransform.offsetY = mouseY - (mouseY - canvasTransform.offsetY) * (newScale / canvasTransform.scale);
+    canvasTransform.scale = newScale;
+
+    draw2DOverlay();
   };
 
   // Keep oncontextmenu for right-click context menu
@@ -12098,7 +12413,6 @@ function bindUV2DSelectionEvents(canvas) {
     e.preventDefault();
     // Context menu for selection options
     if (selection.vertices.size > 0 || selection.faces.size > 0 || selection.islands.size > 0) {
-      // Could show a context menu here
       selectConnected();
     }
   };

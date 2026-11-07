@@ -174,6 +174,35 @@ ToolRegistry additions:
 
 Files changed: `uv-checker.html` (CSS, HTML, JS), `check-scripts.js` (modal list + regex), `public/uv-checker.html` (synced copy).
 
+## 19. 2D Canvas Renderer — Step 2 (uv-checker.html)
+Core rendering and picking infrastructure for the 2D UV panel.
+
+**Island rendering** (`buildUVLayoutCanvas`):
+- Uses `getAllIslands()` to get all UV islands across all meshes
+- Each island rendered with a distinct color via HSV hue rotation (golden angle 137.508° for good perceptual distribution)
+- `hsvToRgb()` helper converts HSV to RGB for canvas drawing
+- Progress callback reports per-island progress for smooth UI
+
+**Gizmo rendering** (`draw2DGizmo`):
+- Called from `draw2DOverlayNow` when a transform tool (move/rotate/scale) is active and there's a selection
+- Computes selection center from vertices → faces → islands (fallback priority)
+- **Move tool**: Crosshair with U/V axis labels and 4 drag handles (N/E/S/W)
+- **Rotate tool**: Circle with tangent rotation handle at 45°
+- **Scale tool**: Box with 4 corner handles
+- All gizmos scale with canvas (8% of size, min 30px), centered on selection
+- Colors match 3D gizmo theme: cyan (move), amber (rotate), green (scale)
+
+**Spatial hash for O(1) picking** (replaces linear `raycastUV`):
+- 50×50 grid covering 0–1 UV space (cell size = 0.02)
+- `buildUVSpatialHash()` builds `Map<cellKey, triangle[]>` keyed by `"gx,gy"`
+- Each triangle inserted into all cells its UV bounding box overlaps
+- `raycastUV()` now: builds hash if needed → finds cell for mouse UV → tests only triangles in that cell (plus 8 neighbors if empty)
+- `raycastUVInTriangles()` does barycentric + vertex/edge/face proximity tests
+- Cache invalidated on model change (`currentRoot.uuid` version check)
+- Reduces pick cost from O(all triangles) to O(triangles in cell) ≈ O(1) for typical models
+
+Files changed: `uv-checker.html` (buildUVLayoutCanvas, draw2DGizmo, spatial hash + raycastUV), `public/uv-checker.html` (synced copy).
+
 ## RBXM decoder status (2026-11-05)
 
 Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.
