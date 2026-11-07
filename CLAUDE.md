@@ -65,6 +65,54 @@ If you cannot run the browser test, say so explicitly. Do not claim "it works" w
 - If you are unsure whether a change is safe, stop and ask me before changing the code.
 - Final answer must list: files changed, what was broken or added, and the result of every check in section 7.
 
+## 10. Phase 0 Tool Infrastructure (uv-checker.html)
+- **ToolRegistry** — central map `name -> { fn, params, description, section, tooltip, label, icon }` with `registerTool()`, `registerSection()`, `getTool()`, `getToolsInSection()`, `getAllSections()`, `executeTool()`.
+- **Selection abstraction** — `getSelection(mesh)` returns `{ mesh, meshId, uvAttr, idx, selectedVerts/Edges/Faces/Islands, getUV, setUV, hasSelection }`; `getAllSelections()` returns array for all meshes.
+- **Base tool pattern** — tools return `{ diffs: [{ vertexIndex, oldUV: [u,v], newUV: [u,v] }] }`; caller pushes via `UVHistory.pushDiff(diffs, operationName)`.
+- **Parameter panel** — `createParameterPanel(toolName, params, onApply, onCancel, onLivePreview)` builds Apply/Cancel panel with sliders/selects/checkboxes in right sidebar.
+- **Web Worker pool** — `WorkerPool.runInWorker(name, code, data, transferables)` for heavy solvers; `terminateAll()` on unload.
+- **Collapsible tool groups** — `registerToolGroup(sectionName, { title, order, tools: [...] })`; `buildToolGroupsFromRegistry()` rebuilds sidebar from registry.
+- **Default sections**: `selection` (order 1), `uv` (2), `view` (3), `file` (4). Existing tools registered at init.
+- **PWA integration** — `isFullMode()` returns true on localhost for testing; PWA-only tools (`data-pwa-only`) lock outside standalone mode.
+
+## 11. Phase 1 Core Selection Tools (uv-checker.html)
+Registered in ToolRegistry under `selection` section:
+- **select-connected** — expand selection to connected elements (iterations parameter)
+- **invert-selection** — invert current UV selection
+- **select-border** — select boundary edges/vertices of UV islands (checkboxes for vertices/edges/faces, replace mode)
+- **select-similar** — select faces with similar UV angle/area to selection (thresholds, by-angle/by-area toggles)
+- **select-sharp-edges** — select UV edges above angle threshold (angle in degrees, include borders, replace mode)
+- **grow-selection** / **shrink-selection** — expand/contract selection by N iterations (replace mode)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; update gizmo & status on change; return `{diffs:[]}` for UVHistory integration (selection-only ops).
+
+## 12. Phase 2 Basic Transforms (uv-checker.html)
+Registered in ToolRegistry under `uv` section:
+- **move-uv** — translate selected UV vertices by U/V offset (deltaU, deltaV, applyToIslands)
+- **rotate-uv** — rotate selected UV vertices around pivot (angle in degrees, pivotU/pivotV, pivotToSelection)
+- **scale-uv** — scale selected UV vertices around pivot (scaleU/scaleV, uniform, pivotU/pivotV, pivotToSelection)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[...]}` for UVHistory integration; work with existing gizmo system (translate/rotate/scale modes); update gizmo & status on change.
+
+## 13. Phase 3 UV Unwrapping Operations (uv-checker.html)
+Registered in ToolRegistry under `uv` section:
+- **auto-unwrap** — full mesh auto-unwrap using LSCM (Least Squares Conformal Maps) or ABF (Angle Based Flattening) with margin, pin boundary options
+- **smart-unwrap** — smart projection unwrap grouping faces by 3D normal direction, planar projection per group (angle limit, margin)
+- **project-from-view** — project UVs from current camera view (camera-space NDC projection)
+- **project-cubic** — cubic/box projection from object-space bounding box (±X, ±Y, ±Z faces)
+- **project-spherical** — spherical projection (longitude/latitude) with margin, align to object/world space
+- **project-cylindrical** — cylindrical projection around X/Y/Z axis with margin
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (snapshot-based); update checker/2D views, invalidate island cache; helper functions `projectFacesPlanar`, `unwrapIslandLSCM` added.
+
+## 14. Phase 4 UV Packing Operations (uv-checker.html)
+Registered in ToolRegistry under `uv` section:
+- **repack** — re-run MaxRects with configurable parameters (padding, sort by area/perimeter/none, 90° rotation, heuristic: short/long side fit, best area fit, contact point)
+- **pack-to-bounds** — fit all islands within custom UV bounds [minU, minV, maxU, maxV] with padding and maintain-aspect-ratio option
+- **pack-selected** — pack only selected islands (padding, sort by area/perimeter/none, iterations)
+
+All tools: parameter panels with live preview, Apply/Cancel, finger-sized controls; return `{diffs:[]}` for UVHistory integration (snapshot-based); update checker/2D views, invalidate island cache.
+
 ## RBXM decoder status (2026-11-05)
 
 Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.
