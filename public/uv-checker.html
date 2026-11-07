@@ -2447,6 +2447,151 @@ ToolRegistry.registerTool('shrink-selection', {
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/></svg>'
 });
 
+// ============================================================================
+// PHASE 2: BASIC TRANSFORMS (Move, Rotate, Scale)
+// ============================================================================
+
+// --- Move UV Tool ---
+function moveUVTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts } = sel;
+  const du = params.deltaU ?? 0;
+  const dv = params.deltaV ?? 0;
+
+  if (du === 0 && dv === 0) return { diffs: [] };
+
+  // Capture before state for diff
+  const diffs = [];
+  for (const key of selectedVerts) {
+    const [, vi] = key.split(':').map(Number);
+    const [oldU, oldV] = sel.getUV(vi);
+    const newU = oldU + du;
+    const newV = oldV + dv;
+    if (!isFinite(newU) || !isFinite(newV)) continue;
+    sel.setUV(vi, newU, newV);
+    diffs.push({ vertexIndex: vi, oldUV: [oldU, oldV], newUV: [newU, newV] });
+  }
+
+  uvAttr.needsUpdate = true;
+  updateSelectionGizmo();
+  requestRender();
+
+  return { diffs };
+}
+
+ToolRegistry.registerTool('move-uv', {
+  fn: moveUVTool,
+  params: [
+    { name: 'deltaU', type: 'number', label: 'ΔU', min: -1, max: 1, step: 0.01, default: 0 },
+    { name: 'deltaV', type: 'number', label: 'ΔV', min: -1, max: 1, step: 0.01, default: 0 },
+    { name: 'applyToIslands', type: 'checkbox', label: 'Apply to full islands', default: false }
+  ],
+  description: 'Translate selected UV vertices by U/V offset',
+  section: 'uv',
+  tooltip: 'Move UV (G)',
+  label: 'Move UV',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>'
+});
+
+// --- Rotate UV Tool ---
+function rotateUVTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts } = sel;
+  const angleDeg = params.angle ?? 0;
+  const angleRad = angleDeg * Math.PI / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  const pivotU = params.pivotU ?? 0.5;
+  const pivotV = params.pivotV ?? 0.5;
+
+  if (angleDeg === 0) return { diffs: [] };
+
+  // Capture before state for diff
+  const diffs = [];
+  for (const key of selectedVerts) {
+    const [, vi] = key.split(':').map(Number);
+    const [oldU, oldV] = sel.getUV(vi);
+    const u = oldU - pivotU;
+    const v = oldV - pivotV;
+    const newU = u * cos - v * sin + pivotU;
+    const newV = u * sin + v * cos + pivotV;
+    if (!isFinite(newU) || !isFinite(newV)) continue;
+    sel.setUV(vi, newU, newV);
+    diffs.push({ vertexIndex: vi, oldUV: [oldU, oldV], newUV: [newU, newV] });
+  }
+
+  uvAttr.needsUpdate = true;
+  updateSelectionGizmo();
+  requestRender();
+
+  return { diffs };
+}
+
+ToolRegistry.registerTool('rotate-uv', {
+  fn: rotateUVTool,
+  params: [
+    { name: 'angle', type: 'number', label: 'Angle (°)', min: -180, max: 180, step: 1, default: 0, unit: 'deg' },
+    { name: 'pivotU', type: 'number', label: 'Pivot U', min: -5, max: 5, step: 0.01, default: 0.5 },
+    { name: 'pivotV', type: 'number', label: 'Pivot V', min: -5, max: 5, step: 0.01, default: 0.5 },
+    { name: 'pivotToSelection', type: 'checkbox', label: 'Pivot to selection center', default: true }
+  ],
+  description: 'Rotate selected UV vertices around pivot point',
+  section: 'uv',
+  tooltip: 'Rotate UV (R)',
+  label: 'Rotate UV',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 12a11 11 0 01-22 0 11 11 0 0022 0"/><path d="M23 12l-4 4"/><path d="M23 12l-4-4"/></svg>'
+});
+
+// --- Scale UV Tool ---
+function scaleUVTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts } = sel;
+  const scaleU = params.scaleU ?? 1;
+  const scaleV = params.scaleV ?? 1;
+  const pivotU = params.pivotU ?? 0.5;
+  const pivotV = params.pivotV ?? 0.5;
+
+  if (scaleU === 1 && scaleV === 1) return { diffs: [] };
+
+  // Capture before state for diff
+  const diffs = [];
+  for (const key of selectedVerts) {
+    const [, vi] = key.split(':').map(Number);
+    const [oldU, oldV] = sel.getUV(vi);
+    const newU = pivotU + (oldU - pivotU) * scaleU;
+    const newV = pivotV + (oldV - pivotV) * scaleV;
+    if (!isFinite(newU) || !isFinite(newV)) continue;
+    sel.setUV(vi, newU, newV);
+    diffs.push({ vertexIndex: vi, oldUV: [oldU, oldV], newUV: [newU, newV] });
+  }
+
+  uvAttr.needsUpdate = true;
+  updateSelectionGizmo();
+  requestRender();
+
+  return { diffs };
+}
+
+ToolRegistry.registerTool('scale-uv', {
+  fn: scaleUVTool,
+  params: [
+    { name: 'scaleU', type: 'number', label: 'Scale U', min: -5, max: 5, step: 0.01, default: 1 },
+    { name: 'scaleV', type: 'number', label: 'Scale V', min: -5, max: 5, step: 0.01, default: 1 },
+    { name: 'uniform', type: 'checkbox', label: 'Uniform scale', default: true },
+    { name: 'pivotU', type: 'number', label: 'Pivot U', min: -5, max: 5, step: 0.01, default: 0.5 },
+    { name: 'pivotV', type: 'number', label: 'Pivot V', min: -5, max: 5, step: 0.01, default: 0.5 },
+    { name: 'pivotToSelection', type: 'checkbox', label: 'Pivot to selection center', default: true }
+  ],
+  description: 'Scale selected UV vertices around pivot point',
+  section: 'uv',
+  tooltip: 'Scale UV (S)',
+  label: 'Scale UV',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/><rect x="7" y="7" width="10" height="10"/></svg>'
+});
+
 // Refresh all views that depend on UVs
 function refreshAllViews() {
   if (current3DMode === 'checker') updateCheckerTexture();
