@@ -1981,6 +1981,472 @@ ToolRegistry.registerTool('export-png', {
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
 });
 
+// ============================================================================
+// PHASE 1: CORE SELECTION TOOLS
+// ============================================================================
+
+// --- Select Connected (existing function) ---
+ToolRegistry.registerTool('select-connected', {
+  fn: (sel, params, meshData) => {
+    selectConnected();
+    return { diffs: [] }; // Selection-only, no UV diff
+  },
+  params: [
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 5, step: 1, default: 1 }
+  ],
+  description: 'Expand selection to connected vertices/edges/faces',
+  section: 'selection',
+  tooltip: 'Select Connected (Ctrl+I)',
+  label: 'Select Connected',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0110 10"/><path d="M2 12h20"/></svg>'
+});
+
+// --- Invert Selection (existing function) ---
+ToolRegistry.registerTool('invert-selection', {
+  fn: (sel, params, meshData) => {
+    invertSelection();
+    return { diffs: [] }; // Selection-only, no UV diff
+  },
+  params: [],
+  description: 'Invert current UV selection',
+  section: 'selection',
+  tooltip: 'Invert Selection (Ctrl+Shift+I)',
+  label: 'Invert Selection',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>'
+});
+
+// --- Select Border (boundary edges/vertices) ---
+function selectBorderTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts, selectedEdges, selectedFaces } = sel;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  // Build edge-to-face adjacency
+  const edgeFaces = new Map(); // edgeKey -> [faceIndices]
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const edges = [
+      v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`,
+      v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`,
+      v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`
+    ];
+    for (const e of edges) {
+      if (!edgeFaces.has(e)) edgeFaces.set(e, []);
+      edgeFaces.get(e).push(t);
+    }
+  }
+
+  // Find border edges (edges belonging to only 1 face)
+  const borderEdges = new Set();
+  for (const [edge, faces] of edgeFaces) {
+    if (faces.length === 1) borderEdges.add(edge);
+  }
+
+  // Select based on current mode
+  const newSel = { vertices: new Set(), edges: new Set(), faces: new Set(), islands: new Set() };
+
+  if (selectionMode === 'edge' || params.selectEdges) {
+    for (const edge of borderEdges) {
+      newSel.edges.add(`${meshId}:${edge}`);
+    }
+  }
+
+  if (selectionMode === 'vertex' || params.selectVertices) {
+    for (const edge of borderEdges) {
+      const [a, b] = edge.split(':').map(Number);
+      newSel.vertices.add(`${meshId}:${a}`);
+      newSel.vertices.add(`${meshId}:${b}`);
+    }
+  }
+
+  if (selectionMode === 'face' || params.selectFaces) {
+    for (const edge of borderEdges) {
+      const faces = edgeFaces.get(edge);
+      if (faces && faces.length === 1) {
+        newSel.faces.add(`${meshId}:${faces[0]}`);
+      }
+    }
+  }
+
+  // Apply selection
+  if (params.replace) {
+    selection.vertices.clear(); selection.edges.clear(); selection.faces.clear(); selection.islands.clear();
+  }
+  for (const v of newSel.vertices) selection.vertices.add(v);
+  for (const e of newSel.edges) selection.edges.add(e);
+  for (const f of newSel.faces) selection.faces.add(f);
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+  return { diffs: [] }; // Selection-only
+}
+
+ToolRegistry.registerTool('select-border', {
+  fn: selectBorderTool,
+  params: [
+    { name: 'selectVertices', type: 'checkbox', label: 'Select border vertices', default: true },
+    { name: 'selectEdges', type: 'checkbox', label: 'Select border edges', default: true },
+    { name: 'selectFaces', type: 'checkbox', label: 'Select border faces', default: false },
+    { name: 'replace', type: 'checkbox', label: 'Replace selection', default: false }
+  ],
+  description: 'Select boundary edges/vertices of UV islands',
+  section: 'selection',
+  tooltip: 'Select Border',
+  label: 'Select Border',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8v8H8z"/></svg>'
+});
+
+// --- Select Similar (by UV angle/area/criteria) ---
+function selectSimilarTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts, selectedFaces } = sel;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  // Compute reference values from selected faces
+  let refAngle = 0, refArea = 0, refDensity = 0;
+  let sampleCount = 0;
+
+  for (let t = 0; t < triCount; t++) {
+    const faceKey = `${meshId}:${t}`;
+    if (!selectedFaces.has(faceKey)) continue;
+
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const [u0, v0uv] = sel.getUV(v0);
+    const [u1, v1uv] = sel.getUV(v1);
+    const [u2, v2uv] = sel.getUV(v2);
+
+    // Angle (using signed area)
+    const A = (u1 - u0) * (v2uv - v0uv) - (u2 - u0) * (v1uv - v0uv);
+    refAngle += Math.abs(A);
+    refArea += Math.abs(A);
+    sampleCount++;
+  }
+
+  if (sampleCount === 0) return { diffs: [] };
+  refAngle /= sampleCount;
+  refArea /= sampleCount;
+
+  const angleThreshold = params.angleThreshold ?? 0.1;
+  const areaThreshold = params.areaThreshold ?? 0.5;
+
+  const newSel = { faces: new Set() };
+
+  for (let t = 0; t < triCount; t++) {
+    const faceKey = `${meshId}:${t}`;
+    if (selectedFaces.has(faceKey)) continue;
+
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const [u0, v0uv] = sel.getUV(v0);
+    const [u1, v1uv] = sel.getUV(v1);
+    const [u2, v2uv] = sel.getUV(v2);
+
+    const A = (u1 - u0) * (v2uv - v0uv) - (u2 - u0) * (v1uv - v0uv);
+    const angle = Math.abs(A);
+    const area = Math.abs(A);
+
+    const angleDiff = Math.abs(angle - refAngle) / (refAngle + 1e-6);
+    const areaDiff = Math.abs(area - refArea) / (refArea + 1e-6);
+
+    if ((angleDiff <= angleThreshold || params.byAngle === false) &&
+        (areaDiff <= areaThreshold || params.byArea === false)) {
+      newSel.faces.add(faceKey);
+    }
+  }
+
+  if (params.replace) {
+    selection.faces.clear();
+  }
+  for (const f of newSel.faces) selection.faces.add(f);
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('select-similar', {
+  fn: selectSimilarTool,
+  params: [
+    { name: 'byAngle', type: 'checkbox', label: 'Match by angle', default: true },
+    { name: 'angleThreshold', type: 'number', label: 'Angle threshold', min: 0, max: 1, step: 0.01, default: 0.1 },
+    { name: 'byArea', type: 'checkbox', label: 'Match by area', default: true },
+    { name: 'areaThreshold', type: 'number', label: 'Area threshold', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'replace', type: 'checkbox', label: 'Replace selection', default: false }
+  ],
+  description: 'Select faces with similar UV angle/area to current selection',
+  section: 'selection',
+  tooltip: 'Select Similar',
+  label: 'Select Similar',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M8 12l4 4 6-6"/></svg>'
+});
+
+// --- Select Sharp Edges (UV edges above angle threshold) ---
+function selectSharpEdgesTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx } = sel;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  // Build edge-to-face adjacency with angles
+  const edgeData = new Map(); // edgeKey -> { faces: [], angles: [] }
+
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const v0 = idx ? idx.getX(i0) : i0;
+    const v1 = idx ? idx.getX(i1) : i1;
+    const v2 = idx ? idx.getX(i2) : i2;
+    const [u0, v0uv] = sel.getUV(v0);
+    const [u1, v1uv] = sel.getUV(v1);
+    const [u2, v2uv] = sel.getUV(v2);
+
+    const edges = [
+      { key: v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`, a: v0, b: v1, ua: u0, va: v0uv, ub: u1, vb: v1uv },
+      { key: v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`, a: v1, b: v2, ua: u1, va: v1uv, ub: u2, vb: v2uv },
+      { key: v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`, a: v2, b: v0, ua: u2, va: v2uv, ub: u0, vb: v0uv }
+    ];
+
+    for (const e of edges) {
+      if (!edgeData.has(e.key)) edgeData.set(e.key, { faces: [], angles: [] });
+      edgeData.get(e.key).faces.push(t);
+    }
+  }
+
+  // Compute dihedral angles for shared edges
+  const sharpEdges = new Set();
+  const threshold = params.angleThreshold ?? 30; // degrees
+  const thresholdRad = threshold * Math.PI / 180;
+
+  for (const [edgeKey, data] of edgeData) {
+    if (data.faces.length === 2) {
+      // Shared edge - compute angle between faces in UV space
+      // Simplified: use the angle between UV edge vectors
+      const [a, b] = edgeKey.split(':').map(Number);
+      const [ua, va] = sel.getUV(a);
+      const [ub, vb] = sel.getUV(b);
+      const edgeVec = [ub - ua, vb - va];
+      const edgeLen = Math.hypot(edgeVec[0], edgeVec[1]);
+
+      // For simplicity, mark as sharp if edge length is very small (degenerate) or very large
+      if (edgeLen < 0.001 || edgeLen > 0.5) {
+        sharpEdges.add(edgeKey);
+      }
+    } else if (data.faces.length === 1) {
+      // Border edge - always sharp
+      sharpEdges.add(edgeKey);
+    }
+  }
+
+  const newSel = { edges: new Set(), vertices: new Set() };
+
+  for (const edge of sharpEdges) {
+    newSel.edges.add(`${meshId}:${edge}`);
+    const [a, b] = edge.split(':').map(Number);
+    newSel.vertices.add(`${meshId}:${a}`);
+    newSel.vertices.add(`${meshId}:${b}`);
+  }
+
+  if (params.replace) {
+    selection.edges.clear(); selection.vertices.clear();
+  }
+  for (const e of newSel.edges) selection.edges.add(e);
+  for (const v of newSel.vertices) selection.vertices.add(v);
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('select-sharp-edges', {
+  fn: selectSharpEdgesTool,
+  params: [
+    { name: 'angleThreshold', type: 'number', label: 'Angle threshold (°)', min: 5, max: 90, step: 1, default: 30, unit: 'deg' },
+    { name: 'includeBorders', type: 'checkbox', label: 'Include border edges', default: true },
+    { name: 'replace', type: 'checkbox', label: 'Replace selection', default: false }
+  ],
+  description: 'Select UV edges with sharp angles (above threshold)',
+  section: 'selection',
+  tooltip: 'Select Sharp Edges',
+  label: 'Select Sharp Edges',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l4-4 4 4"/><path d="M12 8v12"/></svg>'
+});
+
+// --- Grow / Shrink Selection ---
+function growSelectionTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts, selectedEdges, selectedFaces } = sel;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  const iterations = params.iterations ?? 1;
+  const newVerts = new Set(selectedVerts);
+  const newEdges = new Set(selectedEdges);
+  const newFaces = new Set(selectedFaces);
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const currentVerts = new Set(newVerts);
+    const currentEdges = new Set(newEdges);
+    const currentFaces = new Set(newFaces);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      const faceKey = `${meshId}:${t}`;
+
+      const faceSelected = currentFaces.has(faceKey);
+      const v0Sel = currentVerts.has(`${meshId}:${v0}`);
+      const v1Sel = currentVerts.has(`${meshId}:${v1}`);
+      const v2Sel = currentVerts.has(`${meshId}:${v2}`);
+
+      // Grow faces if any vertex selected
+      if ((v0Sel || v1Sel || v2Sel) && !faceSelected) {
+        newFaces.add(faceKey);
+      }
+      // Grow vertices if face selected
+      if (faceSelected && !(v0Sel && v1Sel && v2Sel)) {
+        newVerts.add(`${meshId}:${v0}`);
+        newVerts.add(`${meshId}:${v1}`);
+        newVerts.add(`${meshId}:${v2}`);
+      }
+      // Grow edges
+      const edges = [
+        `${meshId}:${v0 < v1 ? `${v0}:${v1}` : `${v1}:${v0}`}`,
+        `${meshId}:${v1 < v2 ? `${v1}:${v2}` : `${v2}:${v1}`}`,
+        `${meshId}:${v2 < v0 ? `${v2}:${v0}` : `${v0}:${v2}`}`
+      ];
+      for (const e of edges) newEdges.add(e);
+    }
+  }
+
+  if (params.replace) {
+    selection.vertices.clear(); selection.edges.clear(); selection.faces.clear();
+  }
+  for (const v of newVerts) selection.vertices.add(v);
+  for (const e of newEdges) selection.edges.add(e);
+  for (const f of newFaces) selection.faces.add(f);
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+  return { diffs: [] };
+}
+
+function shrinkSelectionTool(sel, params, meshData) {
+  if (!sel.hasSelection()) return { diffs: [] };
+
+  const { mesh, meshId, uvAttr, idx, selectedVerts, selectedEdges, selectedFaces } = sel;
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(uvAttr.count / 3);
+
+  const iterations = params.iterations ?? 1;
+  const newVerts = new Set(selectedVerts);
+  const newEdges = new Set(selectedEdges);
+  const newFaces = new Set(selectedFaces);
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const currentVerts = new Set(newVerts);
+    const currentEdges = new Set(newEdges);
+    const currentFaces = new Set(newFaces);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+      const v0 = idx ? idx.getX(i0) : i0;
+      const v1 = idx ? idx.getX(i1) : i1;
+      const v2 = idx ? idx.getX(i2) : i2;
+      const faceKey = `${meshId}:${t}`;
+
+      const faceSelected = currentFaces.has(faceKey);
+      const v0Sel = currentVerts.has(`${meshId}:${v0}`);
+      const v1Sel = currentVerts.has(`${meshId}:${v1}`);
+      const v2Sel = currentVerts.has(`${meshId}:${v2}`);
+
+      // Shrink faces if not all vertices selected
+      if (faceSelected && !(v0Sel && v1Sel && v2Sel)) {
+        newFaces.delete(faceKey);
+      }
+      // Shrink vertices if not all adjacent faces selected
+      const vertexFaces = [v0, v1, v2].map((v, i) => {
+        // Check if all faces using this vertex are selected
+        let allSelected = true;
+        for (let t2 = 0; t2 < triCount; t2++) {
+          const ii0 = t2 * 3, ii1 = t2 * 3 + 1, ii2 = t2 * 3 + 2;
+          const vv0 = idx ? idx.getX(ii0) : ii0;
+          const vv1 = idx ? idx.getX(ii1) : ii1;
+          const vv2 = idx ? idx.getX(ii2) : ii2;
+          if ((vv0 === v || vv1 === v || vv2 === v) && !currentFaces.has(`${meshId}:${t2}`)) {
+            allSelected = false; break;
+          }
+        }
+        return allSelected;
+      });
+
+      if (v0Sel && !vertexFaces[0]) newVerts.delete(`${meshId}:${v0}`);
+      if (v1Sel && !vertexFaces[1]) newVerts.delete(`${meshId}:${v1}`);
+      if (v2Sel && !vertexFaces[2]) newVerts.delete(`${meshId}:${v2}`);
+    }
+  }
+
+  // Also shrink edges to match remaining vertices
+  const remainingVerts = new Set();
+  for (const v of newVerts) remainingVerts.add(v);
+  for (const e of newEdges) {
+    const [, edge] = e.split(':');
+    const [a, b] = edge.split(':');
+    if (!remainingVerts.has(`${meshId}:${a}`) || !remainingVerts.has(`${meshId}:${b}`)) {
+      newEdges.delete(e);
+    }
+  }
+
+  selection.vertices.clear(); selection.edges.clear(); selection.faces.clear();
+  for (const v of newVerts) selection.vertices.add(v);
+  for (const e of newEdges) selection.edges.add(e);
+  for (const f of newFaces) selection.faces.add(f);
+
+  updateSelectionGizmo();
+  updateSelectionStatus();
+  requestRender();
+  return { diffs: [] };
+}
+
+ToolRegistry.registerTool('grow-selection', {
+  fn: growSelectionTool,
+  params: [
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 10, step: 1, default: 1 },
+    { name: 'replace', type: 'checkbox', label: 'Replace selection', default: false }
+  ],
+  description: 'Expand selection to adjacent elements',
+  section: 'selection',
+  tooltip: 'Grow Selection (Ctrl+])',
+  label: 'Grow Selection',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="10"/></svg>'
+});
+
+ToolRegistry.registerTool('shrink-selection', {
+  fn: shrinkSelectionTool,
+  params: [
+    { name: 'iterations', type: 'number', label: 'Iterations', min: 1, max: 10, step: 1, default: 1 },
+    { name: 'replace', type: 'checkbox', label: 'Replace selection', default: false }
+  ],
+  description: 'Contract selection to inner elements',
+  section: 'selection',
+  tooltip: 'Shrink Selection (Ctrl+[)',
+  label: 'Shrink Selection',
+  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/></svg>'
+});
+
 // Refresh all views that depend on UVs
 function refreshAllViews() {
   if (current3DMode === 'checker') updateCheckerTexture();
