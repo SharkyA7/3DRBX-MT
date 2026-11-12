@@ -191,10 +191,11 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   display:grid;
   grid-template-rows:
     var(--top-bar-h)
-    1fr
+    minmax(0, 1fr)
     var(--uv-2d-h)
     var(--bottom-bar-h);
-  min-height:100dvh;
+  height:100dvh;
+  overflow:hidden;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
   padding-left: var(--safe-left);
@@ -203,7 +204,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .app-root.uv-2d-collapsed{
   grid-template-rows:
     var(--top-bar-h)
-    1fr
+    minmax(0, 1fr)
     var(--uv-2d-h-collapsed)
     var(--bottom-bar-h);
 }
@@ -228,7 +229,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .top-bar-select{background:var(--s1);border:1px solid var(--border2);border-radius:6px;color:var(--white);font-family:var(--font-ui);font-size:11px;padding:6px 10px;cursor:pointer;}
 
 /* Main Layout */
-.main-layout{display:flex;flex:1;overflow:hidden;position:relative;}
+.main-layout{display:flex;flex:1;overflow:hidden;position:relative;min-height:0;}
 
 /* Left Sidebar - Tools */
 .left-sidebar{
@@ -303,6 +304,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   background:var(--s1);border-bottom:1px solid var(--border);
   cursor:row-resize;touch-action:none;
   user-select:none;
+  padding: 0 var(--safe-left) 0 var(--safe-right);
 }
 .uv-2d-panel-handle::before{
   content:'';width:40px;height:4px;background:var(--border2);border-radius:2px;
@@ -314,6 +316,59 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 }
 .uv-2d-panel.collapsed .uv-2d-panel-handle::before{
   background:var(--accent);
+}
+
+/* Mobile/Tablet: 2D panel becomes bottom-sheet */
+@media (max-width: 768px) {
+  .uv-2d-panel {
+    position: fixed;
+    left: calc(0px + var(--safe-left));
+    right: calc(0px + var(--safe-right));
+    bottom: calc(0px + var(--safe-bottom));
+    z-index: 2000;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+    transition: transform var(--anim-normal) var(--ease-out), height var(--anim-normal) var(--ease-out);
+    box-shadow: 0 -8px 32px rgba(0,0,0,.4);
+    height: var(--uv-2d-h);
+    min-height: var(--uv-2d-h-collapsed);
+    max-height: calc(100vh - var(--top-bar-h) - var(--safe-bottom) - 56px);
+    display: flex;
+    flex-direction: column;
+  }
+  .uv-2d-panel.open {
+    transform: translateY(0);
+  }
+  .uv-2d-panel.collapsed {
+    transform: translateY(100%);
+  }
+  .uv-2d-panel.collapsed.open {
+    transform: translateY(0);
+  }
+  .uv-2d-panel-handle {
+    cursor: grab;
+    height: 44px;
+  }
+  .uv-2d-panel-handle:active {
+    cursor: grabbing;
+  }
+  .uv-2d-panel-handle::before {
+    margin-top: 8px;
+  }
+  .uv-2d-panel-content {
+    max-height: calc(var(--uv-2d-h) - 60px);
+  }
+  .app-root {
+    grid-template-rows: var(--top-bar-h) minmax(0, 1fr) var(--bottom-bar-h);
+  }
+  .uv-2d-panel-canvas-wrap {
+    margin: 0;
+    border-radius: 0;
+    border: 1px solid var(--border2);
+  }
+  .app-root.uv-2d-collapsed {
+    grid-template-rows: var(--top-bar-h) minmax(0, 1fr) var(--bottom-bar-h);
+  }
 }
 .uv-2d-panel-header{
   display:flex;align-items:center;justify-content:space-between;
@@ -332,10 +387,18 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
 .uv-2d-panel-content{
   flex:1;overflow:auto;padding:12px 16px;background:#0a0a0a;
   display:flex;flex-direction:column;gap:12px;
-}
+  padding-bottom: calc(12px + var(--safe-bottom));
+  padding-left: calc(16px + var(--safe-left));
+  padding-right: calc(16px + var(--safe-right));
 .uv-2d-panel-canvas-wrap{
-  flex:1;aspect-ratio:1;background:#0a0a0a;border:1px solid var(--border2);border-radius:8px;
-  overflow:hidden;position:relative;min-height:0;
+  flex: 1 1 auto;
+  min-height: 180px;
+  aspect-ratio: 1;
+  background: #0a0a0a;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  overflow: hidden;
+}
 }
 .uv-2d-panel-canvas-wrap canvas{
   width:100%;height:100%;display:block;touch-action:none;
@@ -636,6 +699,229 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
   .top-bar-btn{padding:6px 8px;font-size:10px;}
   .bottom-bar{height:44px;padding:0 10px;}
 }
+/* ============================================================================
+   2D UV Panel - New Compact Styles
+   ============================================================================ */
+
+.uv-2d-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uv-2d-panel-info,
+.uv-2d-warn-toggle {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.uv-2d-panel-info:hover,
+.uv-2d-warn-toggle:hover {
+  background: var(--s2);
+  color: var(--accent);
+}
+
+/* Dismissible warning banner */
+.uv-2d-panel-warn-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,209,102,.08);
+  border: 1px solid rgba(255,209,102,.35);
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--amber);
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.uv-2d-panel-warn-banner .uv-2d-warn-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.uv-2d-panel-warn-banner b {
+  color: var(--white);
+}
+
+.uv-2d-warn-dismiss {
+  background: none;
+  border: none;
+  color: var(--amber);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+
+.uv-2d-warn-dismiss:hover {
+  background: rgba(255,209,102,.2);
+  color: var(--white);
+}
+
+/* Compact toolbar */
+.uv-2d-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.uv-2d-toolbar-left,
+.uv-2d-toolbar-center,
+.uv-2d-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uv-2d-toolbar-center {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0 4px;
+}
+
+.uv-2d-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.uv-2d-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border2);
+  margin: 0 4px;
+}
+
+.uv-2d-panel-toolbar .btn-outline {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.uv-2d-panel-toolbar .btn-outline.active {
+  background: rgba(80,232,244,.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.uv-2d-panel-toolbar .btn-outline:not(.active):hover {
+  background: var(--s2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.uv-2d-panel-toolbar .btn {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+/* Info popover for legend */
+.uv-2d-info-popover {
+  position: fixed;
+  z-index: 3000;
+  background: var(--s0);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 220px;
+  max-width: 300px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  animation: fadeIn var(--anim-fast) var(--ease-out);
+}
+
+.uv-2d-info-popover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 20px;
+  border: 8px solid transparent;
+  border-bottom-color: var(--border);
+}
+
+.uv-2d-info-popover::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 20px;
+  border: 7px solid transparent;
+  border-bottom-color: var(--s0);
+}
+
+.uv-2d-info-popover b {
+  color: var(--white);
+}
+
+.uv-2d-info-popover-title {
+  font-family: var(--font-px);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border2);
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .uv-2d-panel-toolbar {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  
+  .uv-2d-toolbar-center {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+  
+  .uv-2d-toolbar-left,
+  .uv-2d-toolbar-right {
+    flex: 1;
+  }
+  
+  .uv-2d-toolbar-left {
+    justify-content: flex-start;
+  }
+  
+  .uv-2d-toolbar-right {
+    justify-content: flex-end;
+  }
+  
+  .uv-2d-panel-warn-banner {
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+}
 </style>
 </head>
 <body>
@@ -883,55 +1169,71 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       </div>
     </aside>
   </div>
-
   <!-- 2D UV Panel (persistent) -->
   <div class="uv-2d-panel" id="uv-2d-panel" role="region" aria-label="2D UV Map">
-    <div class="uv-2d-panel-handle" id="uv-2d-panel-handle" aria-label="Drag to resize 2D UV panel, tap to collapse/expand"></div>
-    <div class="uv-2d-panel-header">
-      <span class="uv-2d-panel-title">2D UV MAP</span>
-      <button class="uv-2d-panel-close" id="uv-2d-panel-close" aria-label="Collapse 2D UV panel">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="uv-2d-panel-content">
-      <div id="uv-2d-progress-wrap" style="display:none;margin-bottom:12px">
-        <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
-        <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
-      </div>
-      <div class="uv-2d-panel-canvas-wrap">
-        <canvas id="uv-2d-canvas"></canvas>
-      </div>
-      <div class="uv-2d-panel-controls">
-        <div class="toggle-row" style="margin-top:0">
-          <button class="btn" id="uv-2d-download">⬇ DOWNLOAD PNG</button>
-        </div>
-        <div id="uv-2d-overlay-controls" style="display:none;margin-top:10px">
-          <div class="uv-2d-panel-control-row">
-            <span class="uv-2d-panel-control-label">Overlay:</span>
-            <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" style="padding:6px 10px;font-size:11px">None</button>
-            <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" style="padding:6px 10px;font-size:11px">Problems</button>
-            <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" style="padding:6px 10px;font-size:11px">Texel Density</button>
-            <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" style="padding:6px 10px;font-size:11px">Overlap</button>
-          </div>
-          <div class="uv-2d-panel-control-row">
-            <span class="uv-2d-panel-control-label">BG:</span>
-            <button class="btn-outline active" id="uv-2d-bg-black" data-bg="black" style="padding:6px 10px;font-size:11px" title="Black background">⬛ Black</button>
-            <button class="btn-outline" id="uv-2d-bg-white" data-bg="white" style="padding:6px 10px;font-size:11px" title="White background">⬜ White</button>
-            <button class="btn-outline" id="uv-2d-bg-transparent" data-bg="transparent" style="padding:6px 10px;font-size:11px" title="Transparent background">☐ Transparent</button>
-            <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" style="padding:6px 10px;font-size:11px" title="Transparent with dark grid">☑ Trans+Dark</button>
-          </div>
+      <div class="uv-2d-panel-handle" id="uv-2d-panel-handle" aria-label="Drag to resize 2D UV panel, tap to collapse/expand"></div>
+      <div class="uv-2d-panel-header">
+        <span class="uv-2d-panel-title">2D UV MAP</span>
+        <div class="uv-2d-panel-header-actions">
+          <button class="uv-2d-panel-info" id="uv-2d-panel-info" aria-label="Show legend and info" title="Legend & Info">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </button>
+          <button class="uv-2d-panel-maximize" id="uv-2d-maximize" aria-label="Maximize 2D UV panel" title="Maximize">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>
+          </button>
+          <button class="uv-2d-panel-close" id="uv-2d-panel-close" aria-label="Collapse 2D UV panel">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
       </div>
-      <div class="uv-2d-panel-warn">
-        ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
-      </div>
-      <div class="uv-2d-panel-legend">
-        Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.
+      <div class="uv-2d-panel-content">
+        <div id="uv-2d-progress-wrap" style="display:none;margin-bottom:8px">
+          <div class="progress-track"><div class="progress-fill" id="uv-2d-progress-fill"></div></div>
+          <div class="hint" id="uv-2d-progress-label">Building UV layout… 0%</div>
+        </div>
+        <!-- Photosensitivity warning banner (dismissible) -->
+        <div class="uv-2d-panel-warn uv-2d-panel-warn-banner" id="uv-2d-warn-banner" style="display:none;">
+          <span class="uv-2d-warn-text">
+            ⚠ <b>Visual warning:</b> dense meshes can produce tightly overlapping line patterns that look like they're shimmering or moving. If you're sensitive to strobing/flickering patterns (e.g. photosensitive epilepsy or migraines), avoid staring at this image for long — glance at it in short intervals instead, or view it zoomed in on one area at a time.
+          </span>
+          <button class="uv-2d-warn-dismiss" id="uv-2d-warn-dismiss" aria-label="Dismiss warning">✕</button>
+        </div>
+        <!-- Compact toolbar row: Download + Overlay/BG/Renderer controls -->
+        <div class="uv-2d-panel-toolbar" id="uv-2d-toolbar">
+          <div class="uv-2d-toolbar-left">
+            <button class="btn" id="uv-2d-download" title="Download PNG">⬇</button>
+          </div>
+          <div class="uv-2d-toolbar-center" id="uv-2d-overlay-controls">
+            <div class="uv-2d-toolbar-group">
+              <button class="btn-outline active" id="uv-2d-overlay-none" data-overlay="none" title="No overlay">None</button>
+              <button class="btn-outline" id="uv-2d-overlay-problems" data-overlay="problems" title="Show problems">⚠</button>
+              <button class="btn-outline" id="uv-2d-overlay-texel" data-overlay="texel" title="Texel density">📐</button>
+              <button class="btn-outline" id="uv-2d-overlay-overlap" data-overlay="overlap" title="Show overlaps">⧉</button>
+            </div>
+            <div class="uv-2d-toolbar-divider"></div>
+            <div class="uv-2d-toolbar-group">
+              <button class="btn-outline active" id="uv-2d-bg-black" data-bg="black" title="Black background">⬛</button>
+              <button class="btn-outline" id="uv-2d-bg-white" data-bg="white" title="White background">⬜</button>
+              <button class="btn-outline" id="uv-2d-bg-transparent" data-bg="transparent" title="Transparent background">☐</button>
+              <button class="btn-outline" id="uv-2d-bg-transdark" data-bg="transdark" title="Transparent with dark grid">☑</button>
+            </div>
+            <div class="uv-2d-toolbar-divider"></div>
+            <div class="uv-2d-toolbar-group">
+              <button class="btn-outline" id="uv-2d-renderer-canvas" data-renderer="canvas" title="Canvas 2D rendering">🖌</button>
+              <button class="btn-outline active" id="uv-2d-renderer-webgl" data-renderer="webgl" title="WebGL hardware-accelerated rendering" style="display:none">⚡</button>
+            </div>
+          </div>
+          <div class="uv-2d-toolbar-right">
+            <button class="uv-2d-warn-toggle" id="uv-2d-warn-toggle" aria-label="Show photosensitivity warning" title="Photosensitivity info">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="uv-2d-panel-canvas-wrap">
+          <canvas id="uv-2d-canvas"></canvas>
+        </div>
       </div>
     </div>
-  </div>
-
-  <!-- Bottom Bar -->
   <footer class="bottom-bar" role="statusbar">
     <div class="bottom-bar-left">
       <span id="status-triangles" style="display:none">Triangles: —</span>
@@ -942,8 +1244,7 @@ h1 span.hl{color:var(--accent);text-shadow:0 0 30px rgba(80,232,244,.6);}
       <button class="bottom-bar-tab" id="tab-options" data-sheet="options" title="Options">⚙ Options</button>
       <button class="bottom-bar-tab" id="tab-layers" data-sheet="layers" title="Layers">📋 Layers</button>
     </div>
-  </footer>
-
+</footer>
 </div>
 
   <!-- Guide Tool Modal -->
@@ -7700,9 +8001,11 @@ function rgbToHex(r, g, b) {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
 
-async function buildUVLayoutCanvas(root, size = 1024, onProgress){
+async function buildUVLayoutCanvas(root, size = 1024, onProgress, targetCanvas = null){
   if (!root) throw new Error('No root object provided');
-  const canvas = document.createElement('canvas');
+
+  // Use provided canvas (can be OffscreenCanvas) or create new one
+  const canvas = targetCanvas || document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Failed to get canvas 2D context');
@@ -7787,6 +8090,23 @@ async function buildUVLayoutCanvas(root, size = 1024, onProgress){
   return canvas;
 }
 
+// Check OffscreenCanvas support
+const hasOffscreenCanvas = typeof OffscreenCanvas !== 'undefined';
+let uv2DOffscreenCanvas = null;
+let uv2DUseOffscreen = false;
+
+// WebGL 2D renderer support
+const hasWebGL2D = (() => {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch (e) { return false; }
+})();
+let uv2DWebGLContext = null;
+let uv2DWebGLProgram = null;
+let uv2DWebGLBuffers = null;
+let uv2DUseWebGL = false;
+
 // HSV to RGB helper for island colors
 function hsvToRgb(h, s, v) {
   const i = Math.floor(h / 60) % 6;
@@ -7808,6 +8128,212 @@ function hsvToRgb(h, s, v) {
 
 // Store base 2D canvas for overlay redraws
 let uv2DBaseCanvas = null;
+
+// WebGL 2D renderer: context, program, buffers
+function initUV2DWebGL(canvas) {
+  if (!hasWebGL2D) return null;
+  try {
+    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, preserveDrawingBuffer: false }) ||
+               canvas.getContext('experimental-webgl', { alpha: true, antialias: false, preserveDrawingBuffer: false });
+    if (!gl) return null;
+
+    // Vertex shader: pass position and color
+    const vsSource = `
+      attribute vec2 a_position;
+      attribute vec4 a_color;
+      uniform vec2 u_resolution;
+      varying vec4 v_color;
+      void main() {
+        vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
+        clipSpace.y *= -1.0;
+        gl_Position = vec4(clipSpace, 0.0, 1.0);
+        v_color = a_color;
+      }
+    `;
+
+    // Fragment shader: output color
+    const fsSource = `
+      precision mediump float;
+      varying vec4 v_color;
+      void main() {
+        gl_FragColor = v_color;
+      }
+    `;
+
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('[UV Checker] Shader compile error:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    }
+
+    function createProgram(gl, vs, fs) {
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('[UV Checker] Program link error:', gl.getProgramInfoLog(program));
+        return null;
+      }
+      return program;
+    }
+
+    const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) return null;
+
+    const program = createProgram(gl, vs, fs);
+    if (!program) return null;
+
+    const buffers = {
+      position: gl.createBuffer(),
+      color: gl.createBuffer(),
+      index: gl.createBuffer(),
+    };
+
+    const attributes = {
+      position: gl.getAttribLocation(program, 'a_position'),
+      color: gl.getAttribLocation(program, 'a_color'),
+    };
+
+    const uniforms = {
+      resolution: gl.getUniformLocation(program, 'u_resolution'),
+    };
+
+    return { gl, program, buffers, attributes, uniforms };
+  } catch (e) {
+    console.error('[UV Checker] WebGL init failed:', e);
+    return null;
+  }
+}
+
+function destroyUV2DWebGL() {
+  if (uv2DWebGLContext && uv2DWebGLContext.gl) {
+    const gl = uv2DWebGLContext.gl;
+    if (uv2DWebGLProgram) gl.deleteProgram(uv2DWebGLProgram);
+    if (uv2DWebGLBuffers) {
+      gl.deleteBuffer(uv2DWebGLBuffers.position);
+      gl.deleteBuffer(uv2DWebGLBuffers.color);
+      gl.deleteBuffer(uv2DWebGLBuffers.index);
+    }
+  }
+  uv2DWebGLContext = null;
+  uv2DWebGLProgram = null;
+  uv2DWebGLBuffers = null;
+  uv2DUseWebGL = false;
+}
+
+// WebGL 2D renderer: draw triangles via WebGL
+function draw2DOverlayWebGL(triangles, mode, size, medianDensity, meshMedianDensities, lodPixelThreshold = 0) {
+  if (!uv2DWebGLContext || !uv2DWebGLProgram || !uv2DWebGLBuffers) return false;
+
+  const { gl, program, buffers, attributes, uniforms } = uv2DWebGLContext;
+
+  gl.useProgram(program);
+  gl.uniform2f(uniforms.resolution, size, size);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // Build vertex data
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  let vertexIndex = 0;
+
+  function triangleAreaPx(tri) {
+    const x0 = tri.u0 * size, y0 = (1 - tri.v0) * size;
+    const x1 = tri.u1 * size, y1 = (1 - tri.v1) * size;
+    const x2 = tri.u2 * size, y2 = (1 - tri.v2) * size;
+    return Math.abs((x0*(y1-y2) + x1*(y2-y0) + x2*(y0-y1)) / 2);
+  }
+
+  function colorToArray(r, g, b, a = 1) {
+    return [r/255, g/255, b/255, a];
+  }
+
+  if (mode === 'problems') {
+    for (const tri of triangles) {
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
+      let color = null;
+      if (tri.flipped && problemFilters.flipped) color = colorToArray(255, 68, 102, 0.6);
+      else if (tri.zeroArea && problemFilters.zeroArea) color = colorToArray(255, 209, 102, 0.6);
+      else if (tri.outside && problemFilters.outside) color = colorToArray(80, 232, 244, 0.6);
+      if (!color) continue;
+
+      positions.push(tri.u0 * size, (1 - tri.v0) * size);
+      positions.push(tri.u1 * size, (1 - tri.v1) * size);
+      positions.push(tri.u2 * size, (1 - tri.v2) * size);
+      colors.push(...color, ...color, ...color);
+      indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2);
+      vertexIndex += 3;
+    }
+  } else if (mode === 'texel') {
+    // Group by mesh for texel mode
+    const trianglesByMesh = {};
+    for (const tri of triangles) {
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
+      if (!trianglesByMesh[tri.meshIndex]) trianglesByMesh[tri.meshIndex] = [];
+      trianglesByMesh[tri.meshIndex].push(tri);
+    }
+
+    for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
+      const refDensity = texelNormalizeGlobal ? medianDensity : (meshMedianDensities[meshIdx] ?? computeMedianDensity(tris));
+      const safeRefDensity = refDensity > 0 ? refDensity : 1;
+      for (const tri of tris) {
+        const ratio = safeRefDensity > 0 ? tri.texelDensity / safeRefDensity : 1;
+        const [r, g, b] = colorForRatio(ratio);
+        const color = colorToArray(r, g, b, 0.7);
+
+        positions.push(tri.u0 * size, (1 - tri.v0) * size);
+        positions.push(tri.u1 * size, (1 - tri.v1) * size);
+        positions.push(tri.u2 * size, (1 - tri.v2) * size);
+        colors.push(...color, ...color, ...color);
+        indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2);
+        vertexIndex += 3;
+      }
+    }
+  } else if (mode === 'overlap') {
+    for (const tri of triangles) {
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
+      if (!tri.overlap) continue;
+      const color = colorToArray(255, 68, 102, 0.7);
+
+      positions.push(tri.u0 * size, (1 - tri.v0) * size);
+      positions.push(tri.u1 * size, (1 - tri.v1) * size);
+      positions.push(tri.u2 * size, (1 - tri.v2) * size);
+      colors.push(...color, ...color, ...color);
+      indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2);
+      vertexIndex += 3;
+    }
+  }
+
+  if (positions.length === 0) return true;
+
+  // Upload buffers
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STREAM_DRAW);
+  gl.enableVertexAttribArray(attributes.position);
+  gl.vertexAttribPointer(attributes.position, 2, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.color);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STREAM_DRAW);
+  gl.enableVertexAttribArray(attributes.color);
+  gl.vertexAttribPointer(attributes.color, 4, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.index);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STREAM_DRAW);
+
+  // Draw
+  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+
+  return true;
+}
 
 // 2D Overlay controls
 document.querySelectorAll('[data-overlay]').forEach(btn => {
@@ -7841,6 +8367,25 @@ document.querySelectorAll('[data-bg]').forEach(btn => {
   });
 });
 
+// 2D Renderer controls (Canvas 2D vs WebGL)
+document.querySelectorAll('[data-renderer]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const renderer = btn.dataset.renderer;
+    if (renderer === 'webgl' && !hasWebGL2D) {
+      st('WebGL not supported in this browser', 'err');
+      return;
+    }
+    uv2DUseWebGL = (renderer === 'webgl');
+    document.querySelectorAll('[data-renderer]').forEach(b => b.classList.toggle('active', b.dataset.renderer === renderer));
+    // Show/hide WebGL button based on support
+    document.getElementById('uv-2d-renderer-webgl').style.display = hasWebGL2D ? 'inline-block' : 'none';
+    draw2DOverlay();
+  });
+});
+
+// Show/hide WebGL button based on support
+document.getElementById('uv-2d-renderer-webgl').style.display = hasWebGL2D ? 'inline-block' : 'none';
+
 // draw2DOverlayNow() does the actual drawing. draw2DOverlay() below coalesces calls via RAF.
 let draw2DChunkState = null; // { triangles, mode, paths, index, startTime, meshMedianDensities }
 
@@ -7852,12 +8397,16 @@ function clearDraw2DChunkState() {
   draw2DChunkState = null;
 }
 
-function draw2DOverlayNow() {
+async function draw2DOverlayNow() {
   const dest = document.getElementById('uv-2d-canvas');
   if (!dest) return;
   const ctx = dest.getContext('2d');
   if (!ctx) return;
   const size = dest.width;
+
+  // Performance: adaptive chunk size based on frame budget (target 16ms for 60fps)
+  const TARGET_FRAME_MS = 16;
+  let chunkStartTime = performance.now();
 
   // Apply background
   if (current2DBg === 'black') {
@@ -7869,10 +8418,8 @@ function draw2DOverlayNow() {
     ctx.fillRect(0, 0, size, size);
     drawGrid(ctx, size);
   } else if (current2DBg === 'transparent') {
-    // Fully transparent - no background, no grid
     ctx.clearRect(0, 0, size, size);
   } else if (current2DBg === 'transdark') {
-    // Transparent with dark grid
     ctx.clearRect(0, 0, size, size);
     drawGrid(ctx, size);
   }
@@ -7896,10 +8443,55 @@ function draw2DOverlayNow() {
     return;
   }
 
-  // High triangle count: chunk overlay drawing across frames (>150k triangles)
+  // High triangle count: chunk overlay drawing across frames
   const triCount = allTriangles.length;
   const CHUNK_THRESHOLD = 150000;
-  const CHUNK_SIZE = 50000; // triangles per frame
+  // Adaptive chunk size: start with 50000, adjust based on frame time
+  const CHUNK_SIZE_BASE = 50000;
+  const CHUNK_SIZE = draw2DChunkState?.adaptiveChunkSize || CHUNK_SIZE_BASE;
+
+  // LOD: For very large models (>500k triangles), skip small triangles at default zoom
+  const USE_LOD = triCount > 500000 && !draw2DChunkState?.disableLOD;
+  const lodPixelThreshold = USE_LOD ? 0.5 : 0; // Skip triangles smaller than 0.5px
+
+  // Check if we should use WebGL renderer
+  const useWebGL = uv2DUseWebGL && uv2DWebGLContext && uv2DWebGLProgram &&
+                   triCount > 50000 && (current2DOverlay === 'problems' || current2DOverlay === 'texel' || current2DOverlay === 'overlap');
+
+  // If using WebGL, we need to render to an offscreen canvas first, then transfer
+  let webGLTargetCtx = ctx;
+  let webGLTargetCanvas = dest;
+  let webGLNeedsTransfer = false;
+
+  if (useWebGL) {
+    // Use the OffscreenCanvas that has WebGL context
+    if (uv2DOffscreenCanvas) {
+      webGLTargetCtx = uv2DOffscreenCanvas.getContext('2d');
+      webGLTargetCanvas = uv2DOffscreenCanvas;
+      webGLNeedsTransfer = true;
+      // Draw background and base to offscreen canvas
+      if (current2DBg === 'black') {
+        webGLTargetCtx.fillStyle = '#0a0a0a';
+        webGLTargetCtx.fillRect(0, 0, size, size);
+        drawGrid(webGLTargetCtx, size);
+      } else if (current2DBg === 'white') {
+        webGLTargetCtx.fillStyle = '#ffffff';
+        webGLTargetCtx.fillRect(0, 0, size, size);
+        drawGrid(webGLTargetCtx, size);
+      } else if (current2DBg === 'transparent') {
+        webGLTargetCtx.clearRect(0, 0, size, size);
+      } else if (current2DBg === 'transdark') {
+        webGLTargetCtx.clearRect(0, 0, size, size);
+        drawGrid(webGLTargetCtx, size);
+      }
+      if (uv2DBaseCanvas) {
+        webGLTargetCtx.drawImage(uv2DBaseCanvas, 0, 0);
+      }
+    } else {
+      // No offscreen canvas, fall back to Canvas 2D
+      useWebGL = false;
+    }
+  }
 
   // Reset chunk state if overlay mode changed or no analysis results
   if (draw2DChunkState && (draw2DChunkState.mode !== current2DOverlay || !analysisResults || !allTriangles || allTriangles.length === 0)) {
@@ -7927,17 +8519,105 @@ function draw2DOverlayNow() {
         index: 0,
         startTime: performance.now(),
         paths: {},
-        meshMedianDensities: meshMedianDensities
+        meshMedianDensities: meshMedianDensities,
+        adaptiveChunkSize: CHUNK_SIZE_BASE,
+        disableLOD: false
       };
       st(`Rendering 2D overlay (${triCount} triangles)…`, 'info');
     }
 
-    // Process one chunk
-    const chunkEnd = Math.min(draw2DChunkState.index + CHUNK_SIZE, triCount);
-    draw2DChunk(chunkEnd, ctx, size, medianDensity);
-    draw2DChunkState.index = chunkEnd;
+    if (useWebGL) {
+      // WebGL path: render all remaining triangles at once (GPU is fast)
+      const success = draw2DOverlayWebGL(allTriangles, current2DOverlay, size, medianDensity, draw2DChunkState.meshMedianDensities, lodPixelThreshold);
+      if (success) {
+        draw2DChunkState.index = triCount; // Mark as complete
+      } else {
+        // WebGL failed, fall back to Canvas 2D
+        uv2DUseWebGL = false;
+        useWebGL = false;
+        document.getElementById('uv-2d-renderer-canvas').click();
+      }
+    } else {
+      // Canvas 2D path (chunked)
+      const chunkEnd = Math.min(draw2DChunkState.index + draw2DChunkState.adaptiveChunkSize, triCount);
+      draw2DChunk(chunkEnd, ctx, size, medianDensity, lodPixelThreshold);
+      draw2DChunkState.index = chunkEnd;
+    }
 
     // Draw drag selection box (always drawn)
+    if (dragBox) {
+      const drawCtx = useWebGL ? webGLTargetCtx : ctx;
+      drawCtx.strokeStyle = '#50E8F4';
+      drawCtx.lineWidth = 2;
+      drawCtx.setLineDash([8, 4]);
+      drawCtx.strokeRect(dragBox.x1, dragBox.y1, dragBox.x2 - dragBox.x1, dragBox.y2 - dragBox.y1);
+      drawCtx.setLineDash([]);
+    }
+
+    // Draw selection highlights
+    if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
+      const drawCtx = useWebGL ? webGLTargetCtx : ctx;
+      draw2DSelectionHighlights(drawCtx, size);
+    }
+
+    // Draw 2D gizmo when a transform tool is active and there's a selection
+    if (currentRoot && activeTool && ['move', 'rotate', 'scale'].includes(activeTool) &&
+        (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
+      const drawCtx = useWebGL ? webGLTargetCtx : ctx;
+      draw2DGizmo(drawCtx, size);
+    }
+
+    if (useWebGL) {
+      // WebGL path: transfer offscreen canvas to DOM canvas
+      if (webGLNeedsTransfer) {
+        try {
+          const bitmap = await uv2DOffscreenCanvas.transferToImageBitmap();
+          dest.width = bitmap.width;
+          dest.height = bitmap.height;
+          const destCtx = dest.getContext('2d');
+          destCtx.transferFromImageBitmap(bitmap);
+        } catch (e) {
+          console.error('[UV Checker] WebGL bitmap transfer failed:', e);
+        }
+      }
+
+      // Done with WebGL rendering
+      const elapsed = (performance.now() - draw2DChunkState.startTime).toFixed(0);
+      st(`2D overlay ready (${triCount} triangles, ${elapsed}ms) [WebGL]`, 'ok');
+      clearDraw2DChunkState();
+      return;
+    }
+
+    if (!draw2DChunkState) return; // May have been cleared by WebGL fallback
+
+    // Adaptive chunk sizing: if frame took >12ms, reduce chunk size; if <8ms, increase
+    const frameTime = performance.now() - chunkStartTime;
+    if (frameTime > 12) {
+      draw2DChunkState.adaptiveChunkSize = Math.max(10000, Math.floor(draw2DChunkState.adaptiveChunkSize * 0.7));
+    } else if (frameTime < 8 && draw2DChunkState.adaptiveChunkSize < CHUNK_SIZE_BASE * 2) {
+      draw2DChunkState.adaptiveChunkSize = Math.min(CHUNK_SIZE_BASE * 2, Math.floor(draw2DChunkState.adaptiveChunkSize * 1.3));
+    }
+
+    if (draw2DChunkState.index < triCount) {
+      // Schedule next chunk
+      requestAnimationFrame(() => {
+        try { draw2DOverlayNow(); } catch (err) { clearDraw2DChunkState(); throw err; }
+      });
+      return;
+    } else {
+      // Done chunking
+      const elapsed = (performance.now() - draw2DChunkState.startTime).toFixed(0);
+      st(`2D overlay ready (${triCount} triangles, ${elapsed}ms)`, 'ok');
+      clearDraw2DChunkState();
+      return;
+    }
+  } else {
+    // Not chunking - reset state if it was set
+    clearDraw2DChunkState();
+  }
+
+  // Normal (non-chunked) drawing path
+  if (current2DOverlay === 'problems') {
     if (dragBox) {
       ctx.strokeStyle = '#50E8F4';
       ctx.lineWidth = 2;
@@ -7949,6 +8629,14 @@ function draw2DOverlayNow() {
     // Draw selection highlights
     if (currentRoot && (selection.vertices.size > 0 || selection.edges.size > 0 || selection.faces.size > 0 || selection.islands.size > 0)) {
       draw2DSelectionHighlights(ctx, size);
+    }
+
+    // Adaptive chunk sizing: if frame took >12ms, reduce chunk size; if <8ms, increase
+    const frameTime = performance.now() - chunkStartTime;
+    if (frameTime > 12) {
+      draw2DChunkState.adaptiveChunkSize = Math.max(10000, Math.floor(draw2DChunkState.adaptiveChunkSize * 0.7));
+    } else if (frameTime < 8 && draw2DChunkState.adaptiveChunkSize < CHUNK_SIZE_BASE * 2) {
+      draw2DChunkState.adaptiveChunkSize = Math.min(CHUNK_SIZE_BASE * 2, Math.floor(draw2DChunkState.adaptiveChunkSize * 1.3));
     }
 
     if (draw2DChunkState.index < triCount) {
@@ -8072,20 +8760,29 @@ function draw2DOverlayNow() {
 }
 
 // Helper: draw a chunk of triangles for the current overlay mode
-function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
+function draw2DChunk(chunkEnd, ctx, size, medianDensity, lodPixelThreshold = 0) {
   if (!draw2DChunkState) return;
   if (!ctx) return;
   const { triangles, mode, index, paths, meshMedianDensities } = draw2DChunkState;
   if (!triangles || !Array.isArray(triangles) || index >= triangles.length) return;
 
+  // LOD helper: compute triangle area in pixels, skip if below threshold
+  function triangleAreaPx(tri) {
+    const x0 = tri.u0 * size, y0 = (1 - tri.v0) * size;
+    const x1 = tri.u1 * size, y1 = (1 - tri.v1) * size;
+    const x2 = tri.u2 * size, y2 = (1 - tri.v2) * size;
+    return Math.abs((x0*(y1-y2) + x1*(y2-y0) + x2*(y0-y1)) / 2);
+  }
+
   if (mode === 'problems') {
     ctx.globalAlpha = 0.6;
-    // Create per-chunk paths - don't accumulate across chunks
     const flippedPath = new Path2D();
     const zeroAreaPath = new Path2D();
     const outsidePath = new Path2D();
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
+      // LOD: skip tiny triangles
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
       if (tri.flipped && problemFilters.flipped) {
         flippedPath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
         flippedPath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
@@ -8110,19 +8807,17 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
   } else if (mode === 'texel') {
     ctx.globalAlpha = 0.7;
 
-    // Group by mesh for this chunk only
     const trianglesByMesh = {};
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
       if (!trianglesByMesh[tri.meshIndex]) trianglesByMesh[tri.meshIndex] = [];
       trianglesByMesh[tri.meshIndex].push(tri);
     }
 
-    // Create temporary bucket paths for THIS CHUNK ONLY - don't accumulate across chunks
     const bucketPaths = new Map();
 
     for (const [meshIdx, tris] of Object.entries(trianglesByMesh)) {
-      // Use precomputed mesh median density, not chunk's triangles
       const refDensity = texelNormalizeGlobal ? medianDensity : (meshMedianDensities[meshIdx] ?? computeMedianDensity(tris));
       const safeRefDensity = refDensity > 0 ? refDensity : 1;
       for (const tri of tris) {
@@ -8137,7 +8832,6 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
         path.closePath();
       }
     }
-    // Draw only this chunk's paths
     for (const [bucketKey, path] of bucketPaths) {
       const [r, g, b] = bucketKey.split(',').map(Number);
       ctx.fillStyle = `rgb(${r},${g},${b})`;
@@ -8147,10 +8841,10 @@ function draw2DChunk(chunkEnd, ctx, size, medianDensity) {
   } else if (mode === 'overlap') {
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = '#FF4466';
-    // Create per-chunk path - don't accumulate across chunks
     const overlapPath = new Path2D();
     for (let i = index; i < chunkEnd; i++) {
       const tri = triangles[i];
+      if (lodPixelThreshold > 0 && triangleAreaPx(tri) < lodPixelThreshold) continue;
       if (!tri.overlap) continue;
       overlapPath.moveTo(tri.u0 * size, (1 - tri.v0) * size);
       overlapPath.lineTo(tri.u1 * size, (1 - tri.v1) * size);
@@ -8916,7 +9610,8 @@ function registerSWUpdatePrompt() {
 document.addEventListener('DOMContentLoaded', registerSWUpdatePrompt);
 
 function showApp() {
-  document.getElementById('app-root').style.display = 'flex';
+  // clear the inline display:none from the markup so the CSS grid applies
+  document.getElementById('app-root').style.display = '';
   initScene().catch(err => {
     console.error('[UV Checker] initScene failed:', err);
     if (window.__uvShowRecovery) window.__uvShowRecovery('Scene init failed: ' + (err && err.message ? err.message : err));
@@ -11061,14 +11756,95 @@ function collapseUV2DPanel() {
   const appRoot = document.getElementById('app-root');
   panel.classList.add('collapsed');
   appRoot.classList.add('uv-2d-collapsed');
+  // Clean up WebGL resources
+  destroyUV2DWebGL();
 }
 
-// 2D Panel drag-to-resize logic
+// 2D Panel drag-to-resize logic with snap points, maximize, and persistence
 (function initUV2DPanelResize() {
   const handle = document.getElementById('uv-2d-panel-handle');
   const panel = document.getElementById('uv-2d-panel');
   const appRoot = document.getElementById('app-root');
+  const maximizeBtn = document.getElementById('uv-2d-maximize');
+  const canvas = document.getElementById('uv-2d-canvas');
   if (!handle || !panel || !appRoot) return;
+
+  const collapsedHeight = 40; // matches --uv-2d-h-collapsed
+  const normalHeight = 300;   // matches --uv-2d-h default
+  const snapThreshold = 40;   // px from snap point to trigger snap
+  let isMaximized = false;
+
+  // Calculate maximum available panel height (viewport minus top/bottom bars and small sliver)
+  function getMaxPanelHeight() {
+    const topBarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top-bar-h')) || 48;
+    const bottomBarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar-h')) || 48;
+    const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0;
+    const visualViewport = window.visualViewport;
+    const viewportHeight = visualViewport ? visualViewport.height : window.innerHeight;
+    // Bottom-sheet mode (≤768px) uses fixed position with max-height: calc(100vh - topBar - safeBottom - 56px)
+    // Desktop mode uses grid layout with available = viewportHeight - topBar - bottomBar - 56px
+    const isBottomSheet = window.matchMedia('(max-width: 768px)').matches;
+    let available;
+    if (isBottomSheet) {
+      available = viewportHeight - topBarH - safeBottom - 56;
+    } else {
+      available = viewportHeight - topBarH - bottomBarH - 56;
+    }
+    return Math.max(collapsedHeight, available);
+  }
+
+  // Save panel height to localStorage
+  function savePanelHeight(height, maximized) {
+    try {
+      localStorage.setItem('uv-2d-panel-height', String(height));
+      localStorage.setItem('uv-2d-panel-maximized', String(maximized));
+    } catch (e) {}
+  }
+
+  // Load panel height from localStorage, clamped to current viewport
+  function loadPanelHeight() {
+    try {
+      const saved = parseFloat(localStorage.getItem('uv-2d-panel-height'));
+      const wasMaximized = localStorage.getItem('uv-2d-panel-maximized') === 'true';
+      const maxAvail = getMaxPanelHeight();
+      if (!isNaN(saved) && saved >= collapsedHeight && saved <= maxAvail) {
+        return { height: saved, maximized: wasMaximized };
+      }
+      if (wasMaximized) return { height: maxAvail, maximized: true };
+    } catch (e) {}
+    return { height: normalHeight, maximized: false };
+  }
+
+  // Apply panel height and update UI
+  function applyPanelHeight(height, maximized) {
+    isMaximized = maximized;
+    document.documentElement.style.setProperty('--uv-2d-h', height + 'px');
+    appRoot.style.gridTemplateRows = `
+      var(--top-bar-h)
+      minmax(0, 1fr)
+      ${height}px
+      var(--bottom-bar-h)
+    `;
+    if (maximizeBtn) {
+      maximizeBtn.setAttribute('aria-label', maximized ? 'Restore 2D UV panel' : 'Maximize 2D UV panel');
+      maximizeBtn.setAttribute('title', maximized ? 'Restore' : 'Maximize');
+      // Toggle icon between expand/minimize
+      maximizeBtn.innerHTML = maximized
+        ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 01-2 2H3M3 21v-3a2 2 0 00-2-2h3M21 3h-3a2 2 0 00-2 2v3M21 21h-3a2 2 0 01-2-2v-3"/></svg>' // minimize icon
+        : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>'; // maximize icon
+    }
+    savePanelHeight(height, maximized);
+  }
+
+  // Snap height to nearest snap point
+  function snapHeight(height) {
+    const maxAvail = getMaxPanelHeight();
+    // Snap points: collapsed (40), normal (300), maximized (maxAvail)
+    if (Math.abs(height - collapsedHeight) <= snapThreshold) return { height: collapsedHeight, maximized: false };
+    if (Math.abs(height - normalHeight) <= snapThreshold) return { height: normalHeight, maximized: false };
+    if (Math.abs(height - maxAvail) <= snapThreshold) return { height: maxAvail, maximized: true };
+    return { height, maximized: false };
+  }
 
   let startY = 0;
   let startHeight = 0;
@@ -11077,11 +11853,12 @@ function collapseUV2DPanel() {
   function onPointerMove(e) {
     if (!isDragging) return;
     const deltaY = startY - e.clientY; // negative = drag up = increase height
-    const newHeight = Math.max(120, Math.min(window.innerHeight * 0.6, startHeight + deltaY));
+    const maxAvailable = getMaxPanelHeight();
+    const newHeight = Math.max(collapsedHeight, Math.min(maxAvailable, startHeight + deltaY));
     document.documentElement.style.setProperty('--uv-2d-h', newHeight + 'px');
     appRoot.style.gridTemplateRows = `
       var(--top-bar-h)
-      1fr
+      minmax(0, 1fr)
       ${newHeight}px
       var(--bottom-bar-h)
     `;
@@ -11090,6 +11867,10 @@ function collapseUV2DPanel() {
     if (!isDragging) return;
     isDragging = false;
     handle.classList.remove('dragging');
+    // Snap to nearest point on release
+    const currentHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uv-2d-h')) || normalHeight;
+    const snapped = snapHeight(currentHeight);
+    applyPanelHeight(snapped.height, snapped.maximized);
     document.removeEventListener('pointermove', onPointerMove);
     document.removeEventListener('pointerup', onPointerUp);
     document.removeEventListener('pointercancel', onPointerUp);
@@ -11099,7 +11880,7 @@ function collapseUV2DPanel() {
     if (e.button === 2) return;
     isDragging = true;
     startY = e.clientY;
-    startHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uv-2d-h')) || 300;
+    startHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uv-2d-h')) || normalHeight;
     handle.classList.add('dragging');
     handle.setPointerCapture(e.pointerId);
     document.addEventListener('pointermove', onPointerMove);
@@ -11107,7 +11888,20 @@ function collapseUV2DPanel() {
     document.addEventListener('pointercancel', onPointerUp);
   });
 
-  // Tap handle to toggle collapse/expand
+  // Maximize/restore button handler
+  if (maximizeBtn) {
+    maximizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const maxAvail = getMaxPanelHeight();
+      if (isMaximized) {
+        applyPanelHeight(normalHeight, false);
+      } else {
+        applyPanelHeight(maxAvail, true);
+      }
+    });
+  }
+
+  // Tap handle to toggle collapse/expand (double-tap)
   let lastTap = 0;
   handle.addEventListener('pointerup', (e) => {
     if (isDragging) return; // was a drag, not a tap
@@ -11115,10 +11909,35 @@ function collapseUV2DPanel() {
     if (now - lastTap < 300) {
       // Double-tap: fully expand or collapse
       const panel = document.getElementById('uv-2d-panel');
-      if (panel.classList.contains('collapsed')) expandUV2DPanel(); else collapseUV2DPanel();
+      if (panel.classList.contains('collapsed')) {
+        expandUV2DPanel();
+      } else {
+        collapseUV2DPanel();
+      }
+      isMaximized = false; // collapse/expand resets maximize state
     }
     lastTap = now;
   });
+
+  // ResizeObserver for canvas to keep it sharp and square-fit
+  if (canvas && 'ResizeObserver' in window) {
+    const resizeObserver = new ResizeObserver(() => {
+      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+        // Trigger a redraw if the canvas size changed
+        if (typeof draw2DOverlay === 'function') draw2DOverlay();
+      }
+    });
+    resizeObserver.observe(canvas);
+  }
+
+  // Restore saved panel height on load
+  const saved = loadPanelHeight();
+  if (saved.maximized) {
+    // If saved as maximized, recalculate max for current viewport
+    applyPanelHeight(getMaxPanelHeight(), true);
+  } else {
+    applyPanelHeight(saved.height, false);
+  }
 })();
 
 async function buildUV2DInPanel() {
@@ -11146,20 +11965,56 @@ async function buildUV2DInPanel() {
   }
 
   try {
-    const src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
-      const p = Math.round(pct * 100);
-      progressFill.style.width = p + '%';
-      progressLabel.textContent = `Building UV layout… ${p}%`;
-    });
+    // Use OffscreenCanvas when available for better performance
+    uv2DUseOffscreen = hasOffscreenCanvas;
+    let src;
 
-    // Store base canvas for overlays
-    uv2DBaseCanvas = document.createElement('canvas');
-    uv2DBaseCanvas.width = src.width;
-    uv2DBaseCanvas.height = src.height;
-    uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
+    if (uv2DUseOffscreen) {
+      uv2DOffscreenCanvas = new OffscreenCanvas(1024, 1024);
+      src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
+        const p = Math.round(pct * 100);
+        progressFill.style.width = p + '%';
+        progressLabel.textContent = `Building UV layout… ${p}%`;
+      }, uv2DOffscreenCanvas);
 
-    dest.width = src.width; dest.height = src.height;
-    dest.getContext('2d').drawImage(src, 0, 0);
+      // Transfer to DOM canvas for display
+      const bitmap = await uv2DOffscreenCanvas.transferToImageBitmap();
+      dest.width = bitmap.width;
+      dest.height = bitmap.height;
+      const ctx = dest.getContext('2d');
+      ctx.transferFromImageBitmap(bitmap);
+
+      // Store base as regular canvas for overlay operations
+      uv2DBaseCanvas = document.createElement('canvas');
+      uv2DBaseCanvas.width = 1024;
+      uv2DBaseCanvas.height = 1024;
+      uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
+
+      // Initialize WebGL context on OffscreenCanvas for high-performance overlay rendering
+      if (hasWebGL2D && !uv2DWebGLContext) {
+        uv2DWebGLContext = initUV2DWebGL(uv2DOffscreenCanvas);
+        if (uv2DWebGLContext) {
+          uv2DUseWebGL = true;
+        }
+      }
+    } else {
+      // Fallback to regular canvas
+      src = await buildUVLayoutCanvas(currentRoot, 1024, pct => {
+        const p = Math.round(pct * 100);
+        progressFill.style.width = p + '%';
+        progressLabel.textContent = `Building UV layout… ${p}%`;
+      });
+
+      // Store base canvas for overlays
+      uv2DBaseCanvas = document.createElement('canvas');
+      uv2DBaseCanvas.width = src.width;
+      uv2DBaseCanvas.height = src.height;
+      uv2DBaseCanvas.getContext('2d').drawImage(src, 0, 0);
+
+      dest.width = src.width; dest.height = src.height;
+      dest.getContext('2d').drawImage(src, 0, 0);
+    }
+
     dest.style.display = 'block';
     progressWrap.style.display = 'none';
     overlayControls.style.display = 'block';
@@ -11174,15 +12029,212 @@ async function buildUV2DInPanel() {
     document.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('active', b.dataset.bg === 'black'));
     draw2DOverlay();
 
+    initUV2DPanelFeatures();
   } catch (err) {
     progressLabel.textContent = '✗ Failed to build UV layout: ' + err.message;
     progressFill.style.width = '0%';
+    // Fallback to regular canvas if OffscreenCanvas fails
+    if (uv2DUseOffscreen) {
+      uv2DUseOffscreen = false;
+      uv2DOffscreenCanvas = null;
+      buildUV2DInPanel(); // Retry with regular canvas
+    }
   }
 }
 
 // ============================================================================
 // RBXM IMPORT MODAL
 // ============================================================================
+
+// ============================================================================
+// 2D UV PANEL - NEW FEATURES
+// ============================================================================
+
+// Dismissible photosensitivity warning with localStorage persistence
+function initUV2DWarning() {
+  const warnBanner = document.getElementById('uv-2d-warn-banner');
+  const warnDismiss = document.getElementById('uv-2d-warn-dismiss');
+  const warnToggle = document.getElementById('uv-2d-warn-toggle');
+  
+  if (!warnBanner || !warnDismiss || !warnToggle) return;
+  
+  // Check if user has dismissed the warning before
+  const dismissed = localStorage.getItem('uv2dWarningDismissed') === 'true';
+  
+  // Show warning on first build (not dismissed)
+  if (!dismissed) {
+    warnBanner.style.display = 'flex';
+  }
+  
+  // Dismiss handler
+  warnDismiss.addEventListener('click', () => {
+    warnBanner.style.display = 'none';
+    localStorage.setItem('uv2dWarningDismissed', 'true');
+  });
+  
+  // Toggle handler (reopen warning)
+  warnToggle.addEventListener('click', () => {
+    warnBanner.style.display = warnBanner.style.display === 'none' ? 'flex' : 'none';
+    if (warnBanner.style.display === 'flex') {
+      localStorage.setItem('uv2dWarningDismissed', 'false');
+    }
+  });
+}
+
+// Info tooltip/popover for legend
+function initUV2DInfoPopover() {
+  const infoBtn = document.getElementById('uv-2d-panel-info');
+  let popover = null;
+  
+  if (!infoBtn) return;
+  
+  const legendContent = `Flattened UV layout — every triangle edge from every mesh, plotted in 0–1 UV space (one color per mesh). This is the raw unwrap, independent of the 3D checker preview above.`;
+  
+  function showPopover() {
+    if (popover) return;
+    
+    popover = document.createElement('div');
+    popover.className = 'uv-2d-info-popover';
+    popover.innerHTML = `
+      <div class="uv-2d-info-popover-title">2D UV MAP LEGEND</div>
+      <div>${legendContent}</div>
+    `;
+    document.body.appendChild(popover);
+    
+    // Position popover near the info button
+    const rect = infoBtn.getBoundingClientRect();
+    popover.style.left = `${rect.left + rect.width / 2 - 120}px`;
+    popover.style.top = `${rect.top - popover.offsetHeight - 12}px`;
+    
+    // Close on click outside
+    function closePopover(e) {
+      if (!popover.contains(e.target) && e.target !== infoBtn) {
+        hidePopover();
+        document.removeEventListener('click', closePopover);
+      }
+    }
+    setTimeout(() => document.addEventListener('click', closePopover), 0);
+  }
+  
+  function hidePopover() {
+    if (popover) {
+      popover.remove();
+      popover = null;
+    }
+  }
+  
+  infoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (popover) {
+      hidePopover();
+    } else {
+      showPopover();
+    }
+  });
+}
+
+// ResizeObserver for canvas sizing
+function initUV2DResizeObserver() {
+  const canvasWrap = document.querySelector('.uv-2d-panel-canvas-wrap');
+  const canvas = document.getElementById('uv-2d-canvas');
+  
+  if (!canvasWrap || !canvas) return;
+  
+  // Ensure canvas matches wrap size
+  function resizeCanvas() {
+    const rect = canvasWrap.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Set canvas display size
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    
+    // Set canvas actual resolution
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    
+    // Scale context for high DPI
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    
+    // Redraw overlay
+    if (typeof draw2DOverlay === 'function') {
+      draw2DOverlay();
+    }
+  }
+  
+  // Initial resize
+  resizeCanvas();
+  
+  // Observe size changes
+  const resizeObserver = new ResizeObserver(() => {
+    resizeCanvas();
+  });
+  
+  resizeObserver.observe(canvasWrap);
+  
+  // Also observe window resize for DPR changes
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+  });
+  
+  // Store observer for cleanup if needed
+  window.uv2dResizeObserver = resizeObserver;
+}
+
+// Initialize all new 2D panel features
+function initUV2DPanelFeatures() {
+  initUV2DWarning();
+  initUV2DInfoPopover();
+  initUV2DResizeObserver();
+  
+  // Bind toolbar controls (overlay, bg, renderer)
+  bindUV2DToolbarControls();
+}
+
+// Bind toolbar controls (overlay, bg, renderer buttons)
+function bindUV2DToolbarControls() {
+  // Overlay buttons
+  document.querySelectorAll('[data-overlay]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-overlay]').forEach(b => b.classList.toggle('active', b === btn));
+      if (typeof set2DOverlay === 'function') {
+        set2DOverlay(btn.dataset.overlay);
+      }
+    });
+  });
+  
+  // Background buttons
+  document.querySelectorAll('[data-bg]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('active', b === btn));
+      if (typeof set2DBg === 'function') {
+        set2DBg(btn.dataset.bg);
+      }
+    });
+  });
+  
+  // Renderer buttons
+  document.querySelectorAll('[data-renderer]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-renderer]').forEach(b => b.classList.toggle('active', b === btn));
+      if (typeof set2DRenderer === 'function') {
+        set2DRenderer(btn.dataset.renderer);
+      }
+    });
+  });
+  
+  // Download PNG button
+  const downloadBtn = document.getElementById('uv-2d-download');
+  if (downloadBtn && typeof downloadUV2DPNG === 'function') {
+    downloadBtn.addEventListener('click', downloadUV2DPNG);
+  }
+}
+
+// Call initUV2DPanelFeatures after buildUV2DInPanel completes
+// This will be added to the end of buildUV2DInPanel
 
 let rbxmImportFile = null;
 let rbxmImportResults = null;
@@ -12068,6 +13120,24 @@ function processGLTFResult(gltf, blobUrlMap, imageFiles) {
 
 // Overlay & background handlers registered once at module init (lines 3022-3051)
 
+// Haptic feedback helper using Vibration API
+function hapticFeedback(pattern = 'light') {
+  if (!navigator.vibrate) return;
+  try {
+    switch (pattern) {
+      case 'light': navigator.vibrate(5); break;
+      case 'medium': navigator.vibrate(15); break;
+      case 'heavy': navigator.vibrate(30); break;
+      case 'double': navigator.vibrate([10, 50, 10]); break;
+      case 'success': navigator.vibrate([15, 30, 15]); break;
+      case 'error': navigator.vibrate([50, 50, 50]); break;
+      default: navigator.vibrate(pattern);
+    }
+  } catch (e) {
+    // Vibration API may be disabled or not supported
+  }
+}
+
 // Bind pointer events for UV selection on 2D canvas (touch + mouse + pen)
 function bindUV2DSelectionEvents(canvas) {
   // Remove existing listeners
@@ -12197,6 +13267,7 @@ function bindUV2DSelectionEvents(canvas) {
           });
           syncSelectionTo3D();
         }
+        hapticFeedback('double');
         lastTapTime = 0; // Prevent triple-tap
         return;
       }
@@ -12216,6 +13287,7 @@ function bindUV2DSelectionEvents(canvas) {
           handleSelectionHit(hit);
           syncSelectionTo3D();
         }
+        hapticFeedback('medium');
         pressTimer = null;
       }, 350);
       return;
@@ -12226,6 +13298,7 @@ function bindUV2DSelectionEvents(canvas) {
       startTransform();
       isTransforming = true;
       transformStart = { u, v };
+      hapticFeedback('light');
       return;
     }
   };
@@ -12333,6 +13406,7 @@ function bindUV2DSelectionEvents(canvas) {
       isDragging = false;
       dragBox = null;
       canvas.style.cursor = 'default';
+      hapticFeedback('success');
       draw2DOverlay();
     } else if (isPaintSelecting) {
       // End paint-select
@@ -12340,12 +13414,14 @@ function bindUV2DSelectionEvents(canvas) {
       canvas.style.cursor = 'default';
       wrapHistory('Paint Select', () => {}); // Selections already added during drag
       syncSelectionTo3D();
+      hapticFeedback('light');
     } else if (isTransforming) {
       // End transform
       endTransform();
       isTransforming = false;
       wrapHistory(`${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)} UV`, () => {});
       syncSelectionTo3D();
+      hapticFeedback('success');
     } else if (pressTimer) {
       // Tap (not hold, not double-tap) - single click selection
       clearTimeout(pressTimer);
@@ -12359,11 +13435,13 @@ function bindUV2DSelectionEvents(canvas) {
           handleSelectionHit(hit);
         });
         syncSelectionTo3D();
+        hapticFeedback('light');
       } else if (!multiSelect()) {
         wrapHistory('Clear Selection', () => {
           clearSelection();
         });
         syncSelectionTo3D();
+        hapticFeedback('error');
       }
     }
 

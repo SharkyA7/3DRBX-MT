@@ -3,6 +3,30 @@ from functools import wraps
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
 from urllib.parse import urlparse, urljoin, urlencode
+
+
+def extract_asset_id(raw_id: str) -> int:
+    """Extract numeric asset ID from various Roblox URL formats.
+    Accepts: rbxassetid://N, N (digits), roblox.com/asset/?id=N, assetdelivery.roblox.com/v1/asset/?id=N
+    Returns int ID or raises ValueError.
+    Never fetches caller-supplied URLs.
+    """
+    if not raw_id:
+        raise ValueError("empty id")
+    # Strict regex: only extract numeric ID from known patterns
+    # rbxassetid://123456
+    m = re.match(r'^rbxassetid://(\d+)$', raw_id.strip())
+    if m:
+        return int(m.group(1))
+    # Bare digits
+    m = re.match(r'^(\d+)$', raw_id.strip())
+    if m:
+        return int(m.group(1))
+    # roblox.com/asset/?id=123456 (and variations)
+    m = re.search(r'[?&]id=(\d+)', raw_id)
+    if m:
+        return int(m.group(1))
+    raise ValueError(f"Invalid asset ID format: {raw_id[:50]}")
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import base64
@@ -195,6 +219,102 @@ def _parse_v4(data: bytes) -> "RobloxMesh":
     return RobloxMesh(vertices=vertices, normals=normals, uvs=uvs, faces=faces, version="4.0x")
 
 
+def _parse_v6(data: bytes) -> "RobloxMesh":
+    """Version 6.00 — chunked format.
+    After 'version 6.00\\n': chunks of [type[8], uint32 chunkVersion, uint32 size, data]
+    Known chunks: COREMESH v1, LODS, SKINNING, FACS, HSRAVIS.
+    Skip unknown chunks by size.
+    """
+    pos = data.index(b"\n") + 1  # skip version line
+
+    # Parse all chunks
+    chunks = []
+    while pos + 16 <= len(data):
+        chunk_type = data[pos:pos+8].rstrip(b"\x00")
+        chunk_version = struct.unpack_from("<I", data, pos + 8)[0]
+        chunk_size = struct.unpack_from("<I", data, pos + 12)[0]
+        chunk_data_start = pos + 16
+        chunk_data_end = chunk_data_start + chunk_size
+
+        if chunk_data_end > len(data):
+            raise ValueError(f"Chunk {chunk_type.decode('ascii', errors='replace')} size {chunk_size} exceeds remaining data")
+
+        chunks.append({
+            'type': chunk_type,
+            'version': chunk_version,
+            'size': chunk_size,
+            'data': data[chunk_data_start:chunk_data_end],
+        })
+        pos = chunk_data_end
+
+    # Find COREMESH v1 chunk (geometry)
+    coremesh_chunk = None
+    lods_chunk = None
+    for chunk in chunks:
+        if chunk['type'] == b'COREMESH' and chunk['version'] == 1:
+            coremesh_chunk = chunk
+        elif chunk['type'] == b'LODS':
+            lods_chunk = chunk
+        # SKINNING, FACS, HSRAVIS - parse-and-skip (ignored for geometry)
+
+    if not coremesh_chunk:
+        raise ValueError("COREMESH v1 chunk not found in v6 mesh")
+
+    # Parse COREMESH v1 chunk data
+    # Structure similar to v4 but in chunk: header + vertices + faces + LOD offsets
+    cdata = coremesh_chunk['data']
+    if len(cdata) < 24:
+        raise ValueError("COREMESH chunk too small for header")
+
+    header_size = struct.unpack_from("<H", cdata, 0)[0]
+    num_verts = struct.unpack_from("<I", cdata, 4)[0]
+    num_faces = struct.unpack_from("<I", cdata, 8)[0]
+    num_lods = struct.unpack_from("<H", cdata, 12)[0]
+
+    vstart = header_size
+    if vstart + num_verts * 40 > len(cdata):
+        raise ValueError("COREMESH vertex data truncated")
+
+    vertices, normals, uvs = [], [], []
+    p = vstart
+    for _ in range(num_verts):
+        px, py, pz, nx, ny, nz, tu, tv, tw = struct.unpack_from("<9f", cdata, p)
+        vertices.append((px, py, pz))
+        normals.append((nx, ny, nz))
+        uvs.append((tu, 1.0 - tv))
+        p += 40
+
+    # Faces
+    if p + num_faces * 12 > len(cdata):
+        raise ValueError("COREMESH face data truncated")
+    faces_all = []
+    for _ in range(num_faces):
+        a, b, c = struct.unpack_from("<3I", cdata, p)
+        faces_all.append((a, b, c))
+        p += 12
+
+    # LOD offsets from COREMESH chunk (cumulative boundaries)
+    lod_offsets = []
+    if p + num_lods * 4 <= len(cdata):
+        for _ in range(num_lods):
+            lod_offsets.append(struct.unpack_from("<I", cdata, p)[0])
+            p += 4
+
+    # Override with LODS chunk if present (may have different LOD structure)
+    if lods_chunk and len(lods_chunk['data']) >= num_lods * 4:
+        lod_offsets = []
+        for i in range(num_lods):
+            lod_offsets.append(struct.unpack_from("<I", lods_chunk['data'], i * 4)[0])
+
+    # Select LOD0 (highest detail)
+    if len(lod_offsets) >= 2:
+        faces = faces_all[lod_offsets[0]:lod_offsets[1]]
+    else:
+        faces = faces_all
+
+    return RobloxMesh(vertices=vertices, normals=normals, uvs=uvs, faces=faces, version="6.00")
+
+
 def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
     """
     Deteksi versi dan parse mesh Roblox.
@@ -219,6 +339,9 @@ def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
             # Raising here surfaces the real v4 parse failure instead of silently
             # producing garbage geometry from a mismatched parser.
             raise ValueError(f"v4 parse failed: {type(e).__name__}: {e}") from e
+    elif "version 6." in header:
+        # v6.00 - chunked format (COREMESH, LODS, SKINNING, FACS, HSRAVIS)
+        mesh = _parse_v6(data)
     elif "version 3." in header:
         try:
             mesh = _parse_v3(data)
@@ -5403,12 +5526,41 @@ def model_info():
                 parsed = parse_rbxmx(data)
             except Exception as e:
                 return jsonify({"error": f"Gagal parse XML: {str(e)}", "supported": False}), 422
+            # XML models (classic accessories) - return early with parsed data
+            # parse_rbxmx already returns complete manifest with parts, meshIds, textureIds
             meshpart_count = parsed["meshPartCount"]
             part_count = parsed["partCount"]
             union_count = parsed["unionCount"]
-            total_parts = meshpart_count + part_count
-            pre_parts = parsed["parts"]
+            total_parts_all = meshpart_count + part_count + union_count
             animation_classes_found = parsed.get("animationClassesFound", [])
+
+            reasons = []
+            if animation_classes_found:
+                reasons.append(
+                    f"This is an animation asset ({', '.join(animation_classes_found)} detected), not a static model — "
+                    "3D Model Assets can only render MeshPart/Part/Union. The rig embedded in this asset "
+                    "is just a dummy used to preview the animation, so rendering it would just produce a scattered pile of boxes. "
+                    "If this is a character, try the Avatar feature instead."
+                )
+            if total_parts_all > 100:
+                reasons.append(f"Asset terlalu kompleks ({total_parts_all} parts, maksimum 100) — Cuh... itu terlalu banyak mesh, aku nggak sanggup handle itu 😅")
+            if total_parts_all == 0 and not animation_classes_found:
+                reasons.append("Tidak ada MeshPart/Part/Union - asset ini mungkin bukan 3D Model (cek tipe asset)")
+
+            supported = (0 < total_parts_all <= 500) and not animation_classes_found
+
+            return jsonify({
+                "assetId": file_id,
+                "supported": supported,
+                "reasons": reasons,
+                "meshPartCount": meshpart_count,
+                "partCount": part_count,
+                "unionCount": union_count,
+                "totalParts": total_parts_all,
+                "parts": parsed["parts"],
+                "isAnimationAsset": bool(animation_classes_found),
+                "animationClassesFound": animation_classes_found
+            })
         else:
             try:
                 chunks, num_types, num_instances = parse_chunks(data)
@@ -5567,11 +5719,10 @@ def model_mesh():
     if not raw_id:
         return jsonify({"error": "meshId required"}), 400
 
-    # meshId bisa berupa "rbxassetid://123456" atau angka polos
+    # Extract numeric asset ID from rbxassetid://N, digits, roblox.com/asset/?id=N, assetdelivery.roblox.com/v1/asset/?id=N
     try:
-        clean_id = raw_id.replace("rbxassetid://", "").strip()
-        mesh_asset_id = int(clean_id)
-    except ValueError:
+        mesh_asset_id = extract_asset_id(raw_id)
+    except ValueError as e:
         return jsonify({"error": "meshId tidak valid"}), 400
 
     try:
@@ -5584,16 +5735,45 @@ def model_mesh():
         if not raw.startswith(b"version"):
             return jsonify({"error": "Bukan format .mesh yang dikenali"}), 422
 
+        # Sniff version from header line
+        version_header = raw[:16].decode("utf-8", errors="replace")
+        mesh_version = "unknown"
+        if "version 1." in version_header:
+            mesh_version = "1.x"
+        elif "version 2." in version_header:
+            mesh_version = "2.x"
+        elif "version 3." in version_header:
+            mesh_version = "3.x"
+        elif "version 4." in version_header:
+            mesh_version = "4.x"
+        elif "version 5." in version_header:
+            mesh_version = "5.x"
+        elif "version 6." in version_header:
+            mesh_version = "6.x"
+        elif "version 7." in version_header:
+            mesh_version = "7.x"
+
+        app.logger.info(f"Mesh {mesh_asset_id}: detected version {mesh_version} (header: {version_header.strip()})")
+
         mesh = parse_mesh(raw, name=f"mesh_{mesh_asset_id}")
         obj_text = mesh_to_obj(mesh, mtl_name=f"mesh_{mesh_asset_id}")
 
-        return jsonify({
+        resp = jsonify({
             "meshAssetId": mesh_asset_id,
             "vertexCount": len(mesh.vertices),
             "faceCount": len(mesh.faces),
             "meshVersion": mesh.version,
             "obj": obj_text
         })
+        resp.headers["X-Mesh-Version"] = mesh_version
+        return resp
+    except ValueError as e:
+        # Unsupported version or decode failure - return structured error without internal details
+        status = 415 if "tidak dikenal" in str(e) or "unknown" in str(e).lower() else 422
+        return jsonify({
+            "error_code": "unsupported_mesh_version",
+            "version": mesh_version
+        }), status
     except Exception as e:
         return handle_roblox_error(e, "model_mesh")
 
@@ -5868,10 +6048,11 @@ def model_mesh_union():
     if not raw_id:
         return jsonify({"error": "assetId required"}), 400
 
-    m = re.search(r"(\d{4,})", raw_id)
-    if not m:
+    # Extract numeric asset ID from rbxassetid://N, digits, roblox.com/asset/?id=N, assetdelivery.roblox.com/v1/asset/?id=N
+    try:
+        asset_id = extract_asset_id(raw_id)
+    except ValueError as e:
         return jsonify({"error": "assetId tidak valid"}), 400
-    asset_id = int(m.group(1))
 
     try:
         s = get_scraper()
@@ -5911,18 +6092,46 @@ def model_mesh_union():
         try:
             mesh_data = parse_csgmdl(mesh_bytes)
         except ValueError as e:
-            return jsonify({"error": f"Gagal parse CSGMDL: {str(e)}"}), 422
+            # Unsupported CSGMDL version or decode failure - return structured error without internal details
+            status = 415 if "tidak dikenal" in str(e) or "unknown" in str(e).lower() else 422
+            # Sniff version from magic for error response
+            magic = mesh_bytes[:10] if len(mesh_bytes) >= 10 else b""
+            version_str = "unknown"
+            if magic == b"\x15\x7d\x29\x15\x75\x6c\x35\x04\x34\x69":
+                version_str = "CSGMDL V5"
+            elif magic == b"\x15\x7d\x29\x15\x75\x6c\x34\x04\x34\x69":
+                version_str = "CSGMDL V4"
+            elif magic == b"\x15\x7d\x29\x15\x75\x6c\x32\x04\x34\x69":
+                version_str = "CSGMDL V2"
+            return jsonify({
+                "error_code": "unsupported_mesh_version",
+                "version": version_str
+            }), status
+
+        # Sniff CSGMDL version from magic
+        csgmdl_version = mesh_data["version"]
+        if csgmdl_version == "V5":
+            version_str = "CSGMDL V5"
+        elif csgmdl_version == "V4":
+            version_str = "CSGMDL V4"
+        elif csgmdl_version == "V2":
+            version_str = "CSGMDL V2"
+        else:
+            version_str = csgmdl_version
+
+        app.logger.info(f"Union {asset_id}: detected CSGMDL version {version_str}")
 
         obj_text = csgmdl_to_obj(mesh_data, name=f"union_{asset_id}")
 
-        return jsonify({
+        resp = jsonify({
             "assetId": asset_id,
             "csgmdlVersion": mesh_data["version"],
             "vertexCount": mesh_data["vertex_count"],
             "faceCount": mesh_data["face_count"],
             "obj": obj_text
         })
-
+        resp.headers["X-Mesh-Version"] = version_str
+        return resp
     except Exception as e:
         return handle_roblox_error(e, "model_mesh_union")
 

@@ -203,6 +203,59 @@ Core rendering and picking infrastructure for the 2D UV panel.
 
 Files changed: `uv-checker.html` (buildUVLayoutCanvas, draw2DGizmo, spatial hash + raycastUV), `public/uv-checker.html` (synced copy).
 
+## 20. 2D Interaction Layer — Step 3 (uv-checker.html)
+Full pointer/touch interaction for the 2D UV panel.
+
+**Tap select** (single click):
+- Uses spatial hash `raycastUV` for O(1) pick
+- Returns vertex/edge/face/island hit with UV coordinates
+- `handleSelectionHit()` adds to selection (respects multi-select modifier)
+
+**Double-tap** (300ms, <1% UV distance):
+- Selects entire island containing the hit vertex
+- Uses `findIslandForVertex()` to get island, adds all its vertices
+- Wrapped in `wrapHistory('Double-tap Island Select', ...)`
+
+**350ms hold → paint-select**:
+- Hold timer starts on pointerdown (cancelled if pointer moves >8px)
+- At 350ms: enters paint mode, cursor changes to crosshair
+- While held: `raycastUV` on each move adds hit to selection
+- `syncSelectionTo3D()` updates gizmo, status, 3D view live
+- Ends on pointerup, wrapped as single history entry
+
+**Quick drag → gizmo tool**:
+- If activeTool is move/rotate/scale: `startTransform()` on down
+- Drag applies delta via `transformSelectionUV` / `rotateSelectionUV` / `scaleSelectionUV`
+- `rotateSelectionUV(angleRad)` rotates around selection center (0.5, 0.5)
+- `scaleSelectionUV(scaleU, scaleV)` scales around center
+- `endTransform()` pushes to UVHistory, invalidates island cache
+
+**Two-finger pan/pinch** (canvas-only transform):
+- `activePointers` Map tracks all pointers by ID
+- 2+ pointers: pinch zoom toward midpoint, pan with single finger
+- `canvasTransform` { scale, offsetX, offsetY } applied in `draw2DOverlayNow`
+- Wheel zoom on desktop (same transform)
+- Does not affect UV data, only view
+
+**Bidirectional 2D↔3D sync**:
+- Shared `Selection` object (vertices/edges/faces/islands Sets)
+- `syncSelectionTo3D()` calls `updateSelectionGizmo()`, `updateSelectionStatus()`, `requestRender()`, `draw2DOverlay()`
+- Called after every selection change in 2D
+- 3D viewport selection already calls `draw2DOverlay()` on change
+
+**UVHistory per gesture**:
+- `wrapHistory(name, fn)` captures before/after snapshots
+- Box select, paint select, double-tap, transforms all single history entries
+- `endTransform()` uses `UVHistory.pushTransform()` for diff-based entry
+
+Files changed: `uv-checker.html` (bindUV2DSelectionEvents, rotateSelectionUV, scaleSelectionUV), `public/uv-checker.html` (synced copy).
+
+## 21. Development Server Rules
+- **Dev server URL**: http://localhost:8090/uv-checker.html — started with `./dev.sh`, stopped with Ctrl+C in its own terminal.
+- Never kill a process you didn't start in this session. Never touch `fcc-server`, `fcc-claude` or anything under `~/.local/share/uv/tools`.
+- For headless tests, start your own temporary server on a different port (e.g. 8091), run the test, then stop only that process by its PID.
+- Never register the service worker on localhost.
+
 ## RBXM decoder status (2026-11-05)
 
 Goal: RBXM -> (optional RBXMX debug view) -> OBJ + MTL + texture.
