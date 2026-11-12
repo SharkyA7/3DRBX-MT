@@ -88,14 +88,32 @@ Open browser: http://localhost:8000
 
 | Version | Format | Status |
 |---------|--------|--------|
-| v1.00 | ASCII | support|
-| v2.00 | Binary | support|
-| v3.00 | Binary + LOD | support|
-| v4.00 | Binary + Skinning | (geometry only) |
-| v5.00 | Binary + CSG/UNION| support |
-| v6.00 | Coming soon | Unavailable |
-| v7.00 | Coming soon | Unavailable |
-| v8.00 | Coming soon | Unavailable |
+| v1.00 | ASCII | ✅ Supported |
+| v2.00 | Binary (header + vertices + faces) | ✅ Supported |
+| v3.00 | Binary + LOD offsets | ✅ Supported |
+| v4.00 | Binary + LOD + skinning subsets | ✅ Supported (geometry + LOD0) |
+| v5.00 | Binary + CSG/UNION (PartOperationAsset) | ✅ Supported (mesh-union endpoint) |
+| v6.00 | Chunked (COREMESH v1, LODS, SKINNING, FACS, HSRAVIS) | ✅ Supported (geometry + LOD0) |
+| v7.00 | Chunked (COREMESH v2 + Draco compression) | ⚠️ Spike only (no pure Python Draco on PyPI) |
+
+### Mesh API Features
+
+| Feature | Endpoint | Description |
+|---------|----------|-------------|
+| Mesh version header | `/api/v2/model/mesh`, `/api/v2/model/mesh-union` | Returns `X-Mesh-Version` response header |
+| Structured errors | Both mesh endpoints | 415/422 with `{"error_code":"unsupported_mesh_version","version":"..."}` |
+| Strict ID parsing | Both mesh endpoints | Accepts `rbxassetid://N`, digits, `roblox.com/asset/?id=N`, `assetdelivery.roblox.com/v1/asset/?id=N` |
+| XML model support | `/api/v2/model/info` | Classic accessories (rbxmx) return early with parsed manifest |
+| Union/CSG geometry | `/api/v2/model/mesh-union` | Decodes CSGMDL V2/V4/V5 from PartOperationAsset |
+
+### Tooling
+
+| Script | Purpose |
+|--------|---------|
+| `tools/mesh_inspect.py` | Scan mesh files, print version histogram, byte accounting |
+| `tools/draco_spike.py` | Decode v7 COREMESH v2 Draco bitstream (template) |
+| `tools/mesh_test.py` | Validate all meshes (counts, bounds, NaNs, bbox) |
+
 ---
 
 ## Important: API Key Security
