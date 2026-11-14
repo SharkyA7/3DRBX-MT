@@ -278,3 +278,8 @@ Open items:
 4. Not yet tested: other mesh versions, SpecialMesh models, unions (geometry in SharedString), skipping Transparency 1.0 parts, scale from part Size vs InitialSize.
 
 Next step: get a second RBXM with several MeshParts (catalog accessory or Studio "Save to File"), run rbxm_check.py --all --sstr on it, then run our decoder and compare.
+## Current focus (read after every /compact)
+- Priority: Roblox mesh version support (backend decoder + the main app's catalog/avatar export path).
+- The UV editor (uv-checker.html and public/uv-checker.html) is PAUSED. Do not edit it unless I explicitly ask.
+- Before editing any frontend file, say which file you plan to change and why, and wait for my OK.
+- Never read or print secrets or API keys.

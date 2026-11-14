@@ -315,6 +315,67 @@ def _parse_v6(data: bytes) -> "RobloxMesh":
     return RobloxMesh(vertices=vertices, normals=normals, uvs=uvs, faces=faces, version="6.00")
 
 
+def _parse_v7_draco_bitstream(data: bytes) -> dict:
+    """Version 7.00 — chunked format with COREMESH v2 (Draco compressed).
+    Returns dict with Draco bitstream (base64) and metadata.
+    Does NOT decode Draco — client-side WASM handles decode.
+    """
+    pos = data.index(b"\n") + 1  # skip version line
+
+    # Parse all chunks (same chunk format as v6)
+    chunks = []
+    while pos + 16 <= len(data):
+        chunk_type = data[pos:pos+8].rstrip(b"\x00")
+        chunk_version = struct.unpack_from("<I", data, pos + 8)[0]
+        chunk_size = struct.unpack_from("<I", data, pos + 12)[0]
+        chunk_data_start = pos + 16
+        chunk_data_end = chunk_data_start + chunk_size
+
+        if chunk_data_end > len(data):
+            raise ValueError(f"Chunk {chunk_type.decode('ascii', errors='replace')} size {chunk_size} exceeds remaining data")
+
+        chunks.append({
+            'type': chunk_type,
+            'version': chunk_version,
+            'size': chunk_size,
+            'data': data[chunk_data_start:chunk_data_end],
+        })
+        pos = chunk_data_end
+
+    # Find COREMESH v2 chunk (Draco compressed geometry)
+    coremesh_v2_chunk = None
+    for chunk in chunks:
+        if chunk['type'] == b'COREMESH' and chunk['version'] == 2:
+            coremesh_v2_chunk = chunk
+            break
+
+    if not coremesh_v2_chunk:
+        raise ValueError("COREMESH v2 chunk not found in v7 mesh")
+
+    # Extract Draco bitstream from COREMESH v2
+    # Structure: uint32 dracoSize + draco bitstream
+    cdata = coremesh_v2_chunk['data']
+    if len(cdata) < 4:
+        raise ValueError("COREMESH v2 chunk too small for dracoSize")
+
+    draco_size = struct.unpack_from("<I", cdata, 0)[0]
+    draco_bitstream = cdata[4:4+draco_size]
+
+    if len(draco_bitstream) != draco_size:
+        raise ValueError(f"Draco bitstream size mismatch: expected {draco_size}, got {len(draco_bitstream)}")
+
+    # Encode as base64 for JSON transport
+    import base64
+    draco_b64 = base64.b64encode(draco_bitstream).decode('ascii')
+
+    return {
+        'version': '7.00',
+        'draco_bitstream_b64': draco_b64,
+        'draco_size': draco_size,
+        'chunks_found': [f"{c['type'].decode('ascii', errors='replace')} v{c['version']} ({c['size']} bytes)" for c in chunks],
+    }
+
+
 def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
     """
     Deteksi versi dan parse mesh Roblox.
@@ -342,6 +403,10 @@ def parse_mesh(data: bytes, name: str = "mesh") -> RobloxMesh:
     elif "version 6." in header:
         # v6.00 - chunked format (COREMESH, LODS, SKINNING, FACS, HSRAVIS)
         mesh = _parse_v6(data)
+    elif "version 7." in header:
+        # v7.00 - chunked format with COREMESH v2 (Draco compressed)
+        # Return dict with Draco bitstream for client-side WASM decode
+        return _parse_v7_draco_bitstream(data)
     elif "version 3." in header:
         try:
             mesh = _parse_v3(data)
@@ -2713,6 +2778,10 @@ def _get_wrap_layers(file_id, s):
 
 def _convert_cage_mesh(stem, mesh_id, s):
     raw_mesh = fetch_asset_raw_bytes(mesh_id, s)
+    # v7 mesh guard: return structured error instead of crashing on dict
+    version_header = raw_mesh[:16].decode("utf-8", errors="replace")
+    if "version 7." in version_header:
+        raise ValueError("unsupported_mesh_version")
     mesh = parse_mesh(raw_mesh, name=stem)
     return mesh_to_obj(mesh), len(mesh.vertices), len(mesh.faces)
 
@@ -3019,6 +3088,11 @@ def catalog_download_full():
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             try:
+                # v7 mesh guard: return structured error instead of crashing on dict
+                version_header = raw[:16].decode("utf-8", errors="replace")
+                if "version 7." in version_header:
+                    return jsonify({"error_code": "unsupported_mesh_version", "version": "7.00"}), 415
+
                 mesh  = parse_mesh(raw, name=safe)
                 obj_t = mesh_to_obj(mesh, mtl_name=safe)
 
@@ -5754,6 +5828,26 @@ def model_mesh():
             mesh_version = "7.x"
 
         app.logger.info(f"Mesh {mesh_asset_id}: detected version {mesh_version} (header: {version_header.strip()})")
+
+        # Handle v7 separately - return Draco bitstream for client-side WASM decode
+        # ONLY when ?accept=draco is provided (opt-in for backward compatibility)
+        if "version 7." in version_header:
+            accept_draco = (request.args.get("accept", "").lower() == "draco")
+            if not accept_draco:
+                return jsonify({
+                    "error_code": "unsupported_mesh_version",
+                    "version": mesh_version
+                }), 415
+            v7_data = _parse_v7_draco_bitstream(raw)
+            resp = jsonify({
+                "meshAssetId": mesh_asset_id,
+                "meshVersion": "7.00",
+                "draco_bitstream_b64": v7_data['draco_bitstream_b64'],
+                "draco_size": v7_data['draco_size'],
+                "chunks_found": v7_data['chunks_found'],
+            })
+            resp.headers["X-Mesh-Version"] = mesh_version
+            return resp
 
         mesh = parse_mesh(raw, name=f"mesh_{mesh_asset_id}")
         obj_text = mesh_to_obj(mesh, mtl_name=f"mesh_{mesh_asset_id}")
