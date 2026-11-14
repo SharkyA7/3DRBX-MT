@@ -94,7 +94,7 @@ Open browser: http://localhost:8000
 | v4.00 | Binary + LOD + skinning subsets | ✅ Supported (geometry + LOD0) |
 | v5.00 | Binary + CSG/UNION (PartOperationAsset) | ✅ Supported (mesh-union endpoint) |
 | v6.00 | Chunked (COREMESH v1, LODS, SKINNING, FACS, HSRAVIS) | ✅ Supported (geometry + LOD0) |
-| v7.00 | Chunked (COREMESH v2 + Draco compression) | ⚠️ Spike only (no pure Python Draco on PyPI) |
+| v7.00 | Chunked (COREMESH v2 + Draco compression) | ✅ Supported (Draco bitstream via `?accept=draco`, three.js decoder in browser) |
 
 ### Mesh API Features
 

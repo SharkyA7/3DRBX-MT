@@ -1,5 +1,5 @@
 import os, sys, json, gzip, time, collections, urllib.request
-key = os.environ.get("ROBLOX_API_KEY")
+key = "".join((os.environ.get("ROBLOX_API_KEY") or "").split())
 if not key: sys.exit("ROBLOX_API_KEY not set (enter it with read -s first)")
 def req(url, hdr=None):
     r = urllib.request.Request(url, headers=dict({"User-Agent": "mesh-corpus/1.0"}, **(hdr or {})))
@@ -17,7 +17,7 @@ for line in open(sys.argv[1]):
             if data[:2] == b"\x1f\x8b": data = gzip.decompress(data)
             open(out, "wb").write(data)
         except Exception as e:
-            hist["fail"] += 1; print(i, "FAIL", type(e).__name__); time.sleep(1); continue
+            hist["fail"] += 1; print(i, "FAIL", type(e).__name__, str(e).replace(key, "***")[:100]); time.sleep(1); continue
         time.sleep(1)
     head = data[:12].decode("ascii", "replace")
     hist[head] += 1; print(i, len(data), repr(head))

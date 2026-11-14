@@ -2778,6 +2778,10 @@ def _get_wrap_layers(file_id, s):
 
 def _convert_cage_mesh(stem, mesh_id, s):
     raw_mesh = fetch_asset_raw_bytes(mesh_id, s)
+    # v7 mesh guard: return structured error instead of crashing on dict
+    version_header = raw_mesh[:16].decode("utf-8", errors="replace")
+    if "version 7." in version_header:
+        raise ValueError("unsupported_mesh_version")
     mesh = parse_mesh(raw_mesh, name=stem)
     return mesh_to_obj(mesh), len(mesh.vertices), len(mesh.faces)
 
@@ -3084,6 +3088,11 @@ def catalog_download_full():
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
             try:
+                # v7 mesh guard: return structured error instead of crashing on dict
+                version_header = raw[:16].decode("utf-8", errors="replace")
+                if "version 7." in version_header:
+                    return jsonify({"error_code": "unsupported_mesh_version", "version": "7.00"}), 415
+
                 mesh  = parse_mesh(raw, name=safe)
                 obj_t = mesh_to_obj(mesh, mtl_name=safe)
 
@@ -5821,7 +5830,14 @@ def model_mesh():
         app.logger.info(f"Mesh {mesh_asset_id}: detected version {mesh_version} (header: {version_header.strip()})")
 
         # Handle v7 separately - return Draco bitstream for client-side WASM decode
+        # ONLY when ?accept=draco is provided (opt-in for backward compatibility)
         if "version 7." in version_header:
+            accept_draco = (request.args.get("accept", "").lower() == "draco")
+            if not accept_draco:
+                return jsonify({
+                    "error_code": "unsupported_mesh_version",
+                    "version": mesh_version
+                }), 415
             v7_data = _parse_v7_draco_bitstream(raw)
             resp = jsonify({
                 "meshAssetId": mesh_asset_id,

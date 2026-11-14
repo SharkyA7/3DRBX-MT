@@ -25,3 +25,4 @@ mio3_uv/
 .env*
 tmp/
 samples/meshes_raw/
+.venv/
