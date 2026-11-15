@@ -6277,8 +6277,6 @@ _CC_CODE_RE      = re.compile(r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
 _CC_MAX_CATALOGS = 20      # per Roblox account
 _CC_MAX_ITEMS    = 50      # per catalog
 _CC_MAX_NAME     = 40
-_CC_TOKEN_TTL    = 60      # seconds a verified token is remembered (keyed by hash)
-_cc_token_cache  = {}
 
 def _cc_db_ready():
     return bool(SUPABASE_URL and (SUPABASE_SERVICE_KEY or SUPABASE_KEY))
@@ -6342,38 +6340,24 @@ def _cc_clean_items(raw):
     return out, None
 
 def _cc_auth():
-    """Verify the Roblox Bearer token with Roblox itself. -> (user, error_response)
+    """Verify Flask session cookie -> (user, error_response)
     where user = {"id": "<roblox user id>", "name": "<username>"}."""
-    import hashlib
-    header = request.headers.get("Authorization", "")
-    if not header.startswith("Bearer "):
-        return None, _cc_err("Login Roblox diperlukan untuk ini.", 401, "login_required")
-    token = header[7:].strip()
-    if not token or len(token) > 4096:
-        return None, _cc_err("Sesi login tidak valid. Login lagi.", 401, "session_expired")
-    key = hashlib.sha256(token.encode()).hexdigest()      # never keep the token itself
-    now = time.time()
-    hit = _cc_token_cache.get(key)
-    if hit and hit[2] > now:
-        return {"id": hit[0], "name": hit[1]}, None
-    try:
-        r = requests.get(OAUTH_USERINFO_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10)
-    except Exception as e:
-        print(f"[custom-catalog] userinfo failed: {type(e).__name__}: {e}")
-        return None, _cc_err("Tidak bisa memverifikasi login ke Roblox. Coba lagi.", 503, "auth_unavailable")
-    if r.status_code in (401, 403):
-        return None, _cc_err("Sesi login kamu sudah berakhir. Login lagi.", 401, "session_expired")
-    if r.status_code != 200:
-        return None, _cc_err("Tidak bisa memverifikasi login ke Roblox. Coba lagi.", 503, "auth_unavailable")
-    info = r.json()
-    uid = str(info.get("sub", ""))
-    if not re.fullmatch(r"\d{1,20}", uid):
-        return None, _cc_err("Sesi login kamu sudah berakhir. Login lagi.", 401, "session_expired")
-    name = str(info.get("preferred_username") or info.get("name") or "")[:40]
-    if len(_cc_token_cache) > 500:
-        _cc_token_cache.clear()
-    _cc_token_cache[key] = (uid, name, now + _CC_TOKEN_TTL)
-    return {"id": uid, "name": name}, None
+    # CSRF/Origin check on state-changing methods
+    if request.method in ("POST", "PUT", "DELETE"):
+        origin = request.headers.get("Origin", "")
+        expected = os.getenv("APP_ORIGIN", "https://3drbx-mt.shafarois5.workers.dev")
+        if origin and origin != expected:
+            return None, _cc_err("Invalid origin.", 403, "invalid_origin")
+
+    user_id, err = get_current_user_id()
+    if err:
+        return None, _cc_err("Login Roblox diperlukan untuk ini.", 401, "session_expired")
+
+    # Fetch username for display (cached via get_current_user_id doesn't have it)
+    # We can get it from session directly
+    user = session.get("user", {})
+    username = user.get("username") or user.get("display_name") or "Roblox user"
+    return {"id": user_id, "name": username}, None
 
 def _cc_public(row, viewer_id):
     """What other people may see. owner_id is deliberately never included."""

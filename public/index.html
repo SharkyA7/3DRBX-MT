@@ -2949,38 +2949,14 @@ async function downloadCatalogImageVariant(variant){
 }
 
 // ── ROBLOX LOGIN (OAuth 2.0) ────────────────────────────────────────
-// The backend sends the user back to "/#oauth_success=1&access_token=..." (a URL
-// fragment, so it never reaches server logs). We read it once, keep it in
-// sessionStorage only (cleared when the tab closes), and wipe it from the
-// address bar. Only the Roblox user ID is ever sent on to our own endpoints.
-var OAUTH_KEY = 'rbx3d_oauth', oauthPopupTimer = null;
+// Flask signed cookie session only. No tokens in sessionStorage.
+// On load and ?auth=success we call GET /auth/me and render from it.
+// "Session ended" shown at most once when a previously authenticated session turns 401.
+var oauthPopupTimer = null;
+var oauthWasAuthed = false;   // tracks if we ever saw authenticated=true
 
 function oaT(idText, enText){
   return (typeof globalLang !== 'undefined' && globalLang === 'en') ? enText : idText;
-}
-function oauthGet(){
-  try{
-    const o = JSON.parse(sessionStorage.getItem(OAUTH_KEY) || 'null');
-    if(!o || !o.token) return null;
-    if(o.exp && Date.now() > o.exp){ sessionStorage.removeItem(OAUTH_KEY); return null; }
-    return o;
-  }catch(_){ return null; }
-}
-function oauthSet(o){ try{ sessionStorage.setItem(OAUTH_KEY, JSON.stringify(o)); }catch(_){} }
-// Headers for calls that need the logged-in user (used by Custom Catalog).
-function oauthAuthHeaders(){
-  const o = oauthGet();
-  return o ? { Authorization: 'Bearer ' + o.token } : {};
-}
-function oauthRender(){
-  const o = oauthGet();
-  const bar = document.getElementById('oauth-bar');
-  const name = document.getElementById('oauth-username');
-  const login = document.getElementById('btn-login-header');
-  if(bar)   bar.style.display = o ? 'flex' : 'none';
-  if(name)  name.textContent = o ? ('👤 ' + o.username) : '';
-  if(login) login.style.display = o ? 'none' : 'inline-flex';
-  if(typeof ccRenderAuth === 'function') ccRenderAuth();   // Custom Catalog shows/hides its login + "my catalogs" cards
 }
 
 // Short codes from the backend -> [Indonesian, English]. Unknown codes fall back
@@ -3028,114 +3004,91 @@ function closeOauthPopup(){
   const ov = document.getElementById('oauth-popup');
   if(ov) ov.style.display = 'none';
 }
-function oauthExpire(){
-  try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
-  oauthRender();
-  const m = OAUTH_ERRORS.session_expired;
-  oauthPopup('err', oaT('Sesi berakhir','Session ended'), [oaT(m[0], m[1])], 0, true);
+
+// Render UI from /auth/me response data
+function oauthRender(data){
+  const bar = document.getElementById('oauth-bar');
+  const name = document.getElementById('oauth-username');
+  const login = document.getElementById('btn-login-header');
+  const authed = data && data.authenticated === true;
+  if(bar)   bar.style.display = authed ? 'flex' : 'none';
+  if(name)  name.textContent = authed ? ('👤 ' + (data.username || data.display_name || 'Roblox user')) : '';
+  if(login) login.style.display = authed ? 'none' : 'inline-flex';
+  if(typeof ccRenderAuth === 'function') ccRenderAuth(authed, data);
 }
+
+// Fetch /auth/me and render; returns promise
+function oauthCheck(){
+  return fetch(`${BASE}/auth/me`, { credentials: 'include' })
+    .then(r => r.json())
+    .then(data => {
+      const authed = data && data.authenticated === true;
+      if(authed && !oauthWasAuthed){
+        oauthWasAuthed = true;  // first time we see a valid session
+        oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
+                   [oaT('Halo, ','Hi, '), {strong: data.username || data.display_name || 'Roblox user'}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
+                   6000, false);
+      }else if(!authed && oauthWasAuthed){
+        // was authenticated before, now not -> show "session ended" once
+        oauthWasAuthed = false;
+        const m = OAUTH_ERRORS.session_expired;
+        oauthPopup('err', oaT('Sesi berakhir','Session ended'), [oaT(m[0], m[1])], 0, true);
+      }
+      oauthRender(data);
+      if(typeof ccRenderAuth === 'function') ccRenderAuth(authed, data);
+      return data;
+    })
+    .catch(() => {
+      // network error: don't flip UI, keep previous state
+      return {authenticated: false};
+    });
+}
+
 function oauthLogout(){
-  try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
-  oauthRender();
-  fetch(`${BASE}/auth/logout`, { credentials: 'include' }).catch(()=>{});
-  oauthPopup('info', oaT('Logout berhasil','Logged out'),
-             [oaT('Kamu sudah keluar. Sampai jumpa lagi!','You are logged out. See you soon!')], 3500, false);
+  fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' })
+    .then(() => oauthCheck())  // re-check to confirm logged out
+    .then(data => {
+      if(!data.authenticated){
+        oauthPopup('info', oaT('Logout berhasil','Logged out'),
+                   [oaT('Kamu sudah keluar. Sampai jumpa lagi!','You are logged out. See you soon!')], 3500, false);
+      }
+    });
 }
-async function oauthVerify(){
-  if(!oauthGet()) return;
-  try{
-    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders(), credentials: 'include' });
-    if(r.status === 401) oauthExpire();      // Roblox no longer accepts the token
-  }catch(_){ /* offline: keep the session; it is re-checked when actually used */ }
-}
+
+// Init: check ?auth=success (new flow) or ?oauth_error (old flow cleanup), then /auth/me
 function oauthInit(){
-  const hadStored = (()=>{ try{ return !!sessionStorage.getItem(OAUTH_KEY); }catch(_){ return false; } })();
-  const hash  = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   const query = new URLSearchParams(location.search);
   let outcome = null;
 
-  if(hash.get('oauth_success') === '1' && hash.get('access_token')){
-    const expiresIn = Math.max(60, parseInt(hash.get('expires_in'), 10) || 3600);
-    oauthSet({
-      token: hash.get('access_token'),
-      username: hash.get('username') || 'Roblox user',
-      userId: hash.get('user_id') || '',
-      exp: Date.now() + expiresIn*1000 - 30000
-    });
-    outcome = { ok: true };
-    history.replaceState(null, '', location.pathname + location.search);   // wipe the token from the address bar
-  }else if(query.get('oauth_error')){
+  if(query.get('oauth_error')){
     outcome = { err: query.get('oauth_error') };
     query.delete('oauth_error');
     const qs = query.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   }else if(query.get('auth') === 'success'){
     // New Flask session flow: backend sets session cookie and redirects to ?auth=success
-    // Call /auth/me to pick up the session and mirror it into sessionStorage for UI
-    outcome = { ok: true, checkSession: true };
+    outcome = { checkSession: true };
     query.delete('auth');
     const qs = query.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   }
 
-  oauthRender();
+  // Initial auth check
+  oauthCheck();
 
-  if(outcome && outcome.ok){
-    if(outcome.checkSession){
-      // Verify Flask session via /auth/me (no Authorization header needed)
-      fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
-        if(data.authenticated && data.user_id){
-          oauthSet({
-            token: 'session',  // marker; actual auth is via cookie
-            username: data.username || data.display_name || 'Roblox user',
-            userId: data.user_id,
-            exp: Date.now() + 3600*1000 - 30000  // ~1 hour
-          });
-          oauthRender();
-          oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
-                     [oaT('Halo, ','Hi, '), {strong: data.username || data.display_name || 'Roblox user'}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
-                     6000, false);
-        }
-      }).catch(()=>{ /* session not ready yet */ });
-    }else{
-      const o = oauthGet();
-      oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
-                 [oaT('Halo, ','Hi, '), {strong: o.username}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
-                 6000, false);
-    }
+  if(outcome && outcome.checkSession){
+    // ?auth=success already triggered oauthCheck above; just show popup if authed
+    // (oauthCheck already shows success popup via oauthWasAuthed logic)
   }else if(outcome && outcome.err){
     const code = /^[\w-]{1,40}$/.test(outcome.err) ? outcome.err : 'unknown';
     const m = OAUTH_ERRORS[code];
     oauthPopup('err', oaT('Gagal otorisasi akun','Authorization failed'),
                [m ? oaT(m[0], m[1]) : oaT('Terjadi kesalahan saat login.','Something went wrong while logging in.'), ' (' + code + ')'],
                0, code !== 'not_configured');
-  }else if(hadStored && !oauthGet()){
-    oauthExpire();                            // a saved login timed out while the tab was closed/idle
-  }else if(oauthGet()){
-    oauthVerify();
   }
+  // No periodic timer — cookie is the source of truth
 }
 document.addEventListener('DOMContentLoaded', oauthInit);
-// Logged-in sessions end quietly when Roblox's token lifetime runs out: tell the user.
-// If sessionStorage expired but Flask session cookie might still be valid, re-check /auth/me.
-setInterval(()=>{
-  const bar = document.getElementById('oauth-bar');
-  if(bar && bar.style.display === 'flex' && !oauthGet()){
-    fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
-      if(!data.authenticated) oauthExpire();
-      else {
-        // Flask session still valid - refresh sessionStorage
-        oauthSet({
-          token: 'session',
-          username: data.username || data.display_name || 'Roblox user',
-          userId: data.user_id,
-          exp: Date.now() + 3600*1000 - 30000
-        });
-        oauthRender();
-      }
-    }).catch(() => oauthExpire());
-  }
-}, 30000);
 
 // ── CUSTOM CATALOG (build, save, share by code) ─────────────────────
 // Building a list and loading PUBLIC codes need no login. Saving needs the Roblox
@@ -3175,20 +3128,23 @@ function ccRestoreDraft(){
   }catch(_){}
 }
 
-// ── API helper: adds the Roblox token, turns failures into {error, code, status} ──
+// ── API helper: uses Flask session cookie (credentials: include), turns failures into {error, code, status} ──
 async function ccApi(method, path, body){
-  const headers = Object.assign({}, oauthAuthHeaders());
+  const headers = {};
   if(body) headers['Content-Type'] = 'application/json';
   let res;
   try{
-    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'include' });
   }catch(_){
     throw { error: oaT('Tidak bisa menghubungi server.','Could not reach the server.') };
   }
   let data = {};
   try{ data = await res.json(); }catch(_){}
   if(!res.ok){
-    if(res.status === 401 && data.code === 'session_expired' && typeof oauthExpire === 'function') oauthExpire();
+    if(res.status === 401 && data.code === 'session_expired'){
+      // session ended — trigger UI update via oauthCheck
+      oauthCheck();
+    }
     throw { error: data.error || res.statusText, code: data.code, status: res.status };
   }
   return data;
@@ -3329,7 +3285,6 @@ function ccShowResult(cat){
     : oaT('🔒 Privat: hanya kamu (setelah login Roblox) yang bisa membuka kode ini.','🔒 Private: only you (logged in with Roblox) can open this code.');
 }
 async function ccSave(){
-  if(!oauthGet()){ ccNeedLogin(); return; }
   const name = ccEl('cc-name').value.trim();
   if(!name){ st('cc-status', oaT('Isi nama katalog dulu.','Give the catalog a name first.'), 'err'); ccEl('cc-name').focus(); return; }
   if(!ccItems.length){ st('cc-status', oaT('Tambahkan minimal 1 item.','Add at least 1 item.'), 'err'); return; }
@@ -3347,6 +3302,7 @@ async function ccSave(){
     st('cc-status', oaT('✓ Tersimpan! Bagikan kodenya.','✓ Saved! Share the code.'), 'ok');
     ccLoadMine();
   }catch(e){
+    if(e.status === 401 && e.code === 'session_expired') ccNeedLogin();
     ccShowError('cc-status', e);
   }finally{
     btn.disabled = false;
@@ -3518,7 +3474,6 @@ function ccEditLoaded(){
 
 // ── my catalogs ──
 async function ccLoadMine(){
-  if(!oauthGet()) return;
   const list = ccEl('cc-mine-list');
   try{
     const data = await ccApi('GET', '/api/custom-catalogs');
@@ -3577,35 +3532,21 @@ async function ccDelete(code){
   }
 }
 
-// Login-dependent cards: called from oauthRender() and when the tab opens.
-// If sessionStorage empty but Flask session cookie might be valid, re-check /auth/me.
-function ccRenderAuth(){
+// Login-dependent cards: called from oauthRender(authed, data) and when the tab opens.
+// Receives auth state directly — no sessionStorage, no extra fetch.
+function ccRenderAuth(authed, data){
   const login = ccEl('cc-login-card'), mine = ccEl('cc-mine-card');
   if(!login || !mine) return;
-  const o = (typeof oauthGet === 'function') ? oauthGet() : null;
-  if(o){
+  if(authed){
     login.style.display = 'none';
     mine.style.display = 'block';
     const panel = ccEl('panel-custom');
     if(panel && panel.classList.contains('active')) ccLoadMine();
-    return;
+  }else{
+    login.style.display = 'block';
+    mine.style.display = 'none';
+    ccEl('cc-mine-list').textContent = '';
   }
-  // sessionStorage empty — verify Flask session via /auth/me
-  login.style.display = 'block';
-  mine.style.display = 'none';
-  ccEl('cc-mine-list').textContent = '';
-  fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
-    if(data.authenticated && data.user_id){
-      // Flask session valid — refresh sessionStorage and re-render
-      oauthSet({
-        token: 'session',
-        username: data.username || data.display_name || 'Roblox user',
-        userId: data.user_id,
-        exp: Date.now() + 3600*1000 - 30000
-      });
-      ccRenderAuth();  // re-run with fresh sessionStorage
-    }
-  }).catch(() => { /* keep login card shown */ });
 }
 function ccBoot(){
   ccRestoreDraft();
@@ -4651,7 +4592,7 @@ async function loadApiKeys(){
   const list = document.getElementById('apikeys-list');
   list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Loading...</div>';
   try{
-    const res = await fetch(`${BASE}/api/admin/keys`, { headers: oauthAuthHeaders(), credentials: 'include' });
+    const res = await fetch(`${BASE}/api/admin/keys`, { credentials: 'include' });
     if(res.status === 401){
       list.innerHTML = '<div style="text-align:center;color:var(--red);padding:20px">Please login first</div>';
       return;
@@ -4704,7 +4645,7 @@ async function createApiKey(){
   try{
     const res = await fetch(`${BASE}/api/admin/keys`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...oauthAuthHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ scopes })
     });
@@ -4728,7 +4669,6 @@ async function revokeApiKey(keyId){
   try{
     const res = await fetch(`${BASE}/api/admin/keys/${keyId}`, {
       method: 'DELETE',
-      headers: oauthAuthHeaders(),
       credentials: 'include'
     });
     if(res.ok){
@@ -5918,7 +5858,7 @@ function trackFetchAction(){
   count += 1;
   localStorage.setItem('rbx3d_fetch_count', count.toString());
   updateProgressBars(count);
-  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1' || (typeof oauthGet === 'function' && !!oauthGet());
+  const alreadyDismissed = localStorage.getItem('rbx3d_nudge_dismissed') === '1';
   if(count % 5 === 0 && !alreadyDismissed){
     showNudge();
   }
