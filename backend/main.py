@@ -6345,9 +6345,16 @@ def _cc_auth():
     # CSRF/Origin check on state-changing methods
     if request.method in ("POST", "PUT", "DELETE"):
         origin = request.headers.get("Origin", "")
-        expected = os.getenv("APP_ORIGIN", "https://3drbx-mt.shafarois5.workers.dev")
-        if origin and origin != expected:
-            return None, _cc_err("Invalid origin.", 403, "invalid_origin")
+        sec_fetch_site = request.headers.get("Sec-Fetch-Site", "")
+        # Allow same-origin (no Origin header) or explicit same-site
+        same_origin = not origin or sec_fetch_site == "same-origin"
+        if not same_origin:
+            allowed = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://getrbx3d.qzz.io").split(",") if o.strip()]
+            if origin not in allowed:
+                host = request.headers.get("Host", "")
+                # Log without cookies/secrets
+                print(f"[custom-catalog] Origin check failed: Origin={origin!r} Host={host!r} Sec-Fetch-Site={sec_fetch_site!r} Allowed={allowed!r}")
+                return None, _cc_err("Invalid origin.", 403, "invalid_origin")
 
     user_id, err = get_current_user_id()
     if err:

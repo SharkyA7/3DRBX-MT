@@ -2521,7 +2521,7 @@ function switchTab(name){
   });
   if(typeof Motion!=='undefined'&&next) animatePanelCards(next);
   if(name==='catalog' && typeof bwInit==='function') bwInit();
-  if(name==='custom' && typeof ccRenderAuth==='function') ccRenderAuth();
+  if(name==='custom' && typeof ccRenderAuth==='function') ccRenderAuth(window.authState.authenticated, window.authState);
 }
 
 let dropdownAnchorBtn = null;
@@ -3005,19 +3005,34 @@ function closeOauthPopup(){
   if(ov) ov.style.display = 'none';
 }
 
-// Render UI from /auth/me response data
-function oauthRender(data){
+// Single source of truth for auth state
+window.authState = { authenticated: false, username: '', display_name: '', user_id: '' };
+
+function setAuthState(data){
+  const authed = data && data.authenticated === true;
+  window.authState = {
+    authenticated: authed,
+    username: authed ? (data.username || '') : '',
+    display_name: authed ? (data.display_name || '') : '',
+    user_id: authed ? (data.user_id || '') : ''
+  };
+  // Update all UI that depends on auth state
+  oauthRender(window.authState);
+  if(typeof ccRenderAuth === 'function') ccRenderAuth(window.authState.authenticated, window.authState);
+}
+
+// Render UI from window.authState
+function oauthRender(state){
   const bar = document.getElementById('oauth-bar');
   const name = document.getElementById('oauth-username');
   const login = document.getElementById('btn-login-header');
-  const authed = data && data.authenticated === true;
+  const authed = state && state.authenticated === true;
   if(bar)   bar.style.display = authed ? 'flex' : 'none';
-  if(name)  name.textContent = authed ? ('👤 ' + (data.username || data.display_name || 'Roblox user')) : '';
+  if(name)  name.textContent = authed ? ('👤 ' + (state.username || state.display_name || 'Roblox user')) : '';
   if(login) login.style.display = authed ? 'none' : 'inline-flex';
-  if(typeof ccRenderAuth === 'function') ccRenderAuth(authed, data);
 }
 
-// Fetch /auth/me and render; returns promise
+// Fetch /auth/me and update auth state; returns promise
 function oauthCheck(){
   return fetch(`${BASE}/auth/me`, { credentials: 'include' })
     .then(r => r.json())
@@ -3034,8 +3049,7 @@ function oauthCheck(){
         const m = OAUTH_ERRORS.session_expired;
         oauthPopup('err', oaT('Sesi berakhir','Session ended'), [oaT(m[0], m[1])], 0, true);
       }
-      oauthRender(data);
-      if(typeof ccRenderAuth === 'function') ccRenderAuth(authed, data);
+      setAuthState(data);
       return data;
     })
     .catch(() => {
@@ -3551,7 +3565,8 @@ function ccRenderAuth(authed, data){
 function ccBoot(){
   ccRestoreDraft();
   ccRenderBuilder();
-  ccRenderAuth();
+  // Use single source of truth for auth state
+  if(typeof ccRenderAuth === 'function') ccRenderAuth(window.authState.authenticated, window.authState);
   // Share link: https://<site>/?cc=K7M2-Q9XA opens the tab with that code loaded.
   const q = new URLSearchParams(location.search).get('cc');
   if(q && /^[A-Za-z0-9-]{8,12}$/.test(q)){ switchTab('custom'); ccLoadCode(q); }
