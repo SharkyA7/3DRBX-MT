@@ -3578,15 +3578,34 @@ async function ccDelete(code){
 }
 
 // Login-dependent cards: called from oauthRender() and when the tab opens.
+// If sessionStorage empty but Flask session cookie might be valid, re-check /auth/me.
 function ccRenderAuth(){
   const login = ccEl('cc-login-card'), mine = ccEl('cc-mine-card');
   if(!login || !mine) return;
   const o = (typeof oauthGet === 'function') ? oauthGet() : null;
-  login.style.display = o ? 'none' : 'block';
-  mine.style.display  = o ? 'block' : 'none';
-  if(!o){ ccEl('cc-mine-list').textContent = ''; return; }
-  const panel = ccEl('panel-custom');
-  if(panel && panel.classList.contains('active')) ccLoadMine();
+  if(o){
+    login.style.display = 'none';
+    mine.style.display = 'block';
+    const panel = ccEl('panel-custom');
+    if(panel && panel.classList.contains('active')) ccLoadMine();
+    return;
+  }
+  // sessionStorage empty — verify Flask session via /auth/me
+  login.style.display = 'block';
+  mine.style.display = 'none';
+  ccEl('cc-mine-list').textContent = '';
+  fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+    if(data.authenticated && data.user_id){
+      // Flask session valid — refresh sessionStorage and re-render
+      oauthSet({
+        token: 'session',
+        username: data.username || data.display_name || 'Roblox user',
+        userId: data.user_id,
+        exp: Date.now() + 3600*1000 - 30000
+      });
+      ccRenderAuth();  // re-run with fresh sessionStorage
+    }
+  }).catch(() => { /* keep login card shown */ });
 }
 function ccBoot(){
   ccRestoreDraft();
