@@ -3069,15 +3069,40 @@ function oauthInit(){
     query.delete('oauth_error');
     const qs = query.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }else if(query.get('auth') === 'success'){
+    // New Flask session flow: backend sets session cookie and redirects to ?auth=success
+    // Call /auth/me to pick up the session and mirror it into sessionStorage for UI
+    outcome = { ok: true, checkSession: true };
+    query.delete('auth');
+    const qs = query.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   }
 
   oauthRender();
 
   if(outcome && outcome.ok){
-    const o = oauthGet();
-    oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
-               [oaT('Halo, ','Hi, '), {strong: o.username}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
-               6000, false);
+    if(outcome.checkSession){
+      // Verify Flask session via /auth/me (no Authorization header needed)
+      fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+        if(data.authenticated && data.user_id){
+          oauthSet({
+            token: 'session',  // marker; actual auth is via cookie
+            username: data.username || data.display_name || 'Roblox user',
+            userId: data.user_id,
+            exp: Date.now() + 3600*1000 - 30000  // ~1 hour
+          });
+          oauthRender();
+          oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
+                     [oaT('Halo, ','Hi, '), {strong: data.username || data.display_name || 'Roblox user'}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
+                     6000, false);
+        }
+      }).catch(()=>{ /* session not ready yet */ });
+    }else{
+      const o = oauthGet();
+      oauthPopup('ok', oaT('Login berhasil!','Login successful!'),
+                 [oaT('Halo, ','Hi, '), {strong: o.username}, oaT('! Akun Roblox kamu sudah terhubung.','! Your Roblox account is connected.')],
+                 6000, false);
+    }
   }else if(outcome && outcome.err){
     const code = /^[\w-]{1,40}$/.test(outcome.err) ? outcome.err : 'unknown';
     const m = OAUTH_ERRORS[code];
