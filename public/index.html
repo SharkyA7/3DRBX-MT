@@ -3037,14 +3037,14 @@ function oauthExpire(){
 function oauthLogout(){
   try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
   oauthRender();
-  fetch(`${BASE}/auth/logout`).catch(()=>{});
+  fetch(`${BASE}/auth/logout`, { credentials: 'include' }).catch(()=>{});
   oauthPopup('info', oaT('Logout berhasil','Logged out'),
              [oaT('Kamu sudah keluar. Sampai jumpa lagi!','You are logged out. See you soon!')], 3500, false);
 }
 async function oauthVerify(){
   if(!oauthGet()) return;
   try{
-    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders() });
+    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders(), credentials: 'include' });
     if(r.status === 401) oauthExpire();      // Roblox no longer accepts the token
   }catch(_){ /* offline: keep the session; it is re-checked when actually used */ }
 }
@@ -3083,7 +3083,7 @@ function oauthInit(){
   if(outcome && outcome.ok){
     if(outcome.checkSession){
       // Verify Flask session via /auth/me (no Authorization header needed)
-      fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+      fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
         if(data.authenticated && data.user_id){
           oauthSet({
             token: 'session',  // marker; actual auth is via cookie
@@ -3117,9 +3117,24 @@ function oauthInit(){
 }
 document.addEventListener('DOMContentLoaded', oauthInit);
 // Logged-in sessions end quietly when Roblox's token lifetime runs out: tell the user.
+// If sessionStorage expired but Flask session cookie might still be valid, re-check /auth/me.
 setInterval(()=>{
   const bar = document.getElementById('oauth-bar');
-  if(bar && bar.style.display === 'flex' && !oauthGet()) oauthExpire();
+  if(bar && bar.style.display === 'flex' && !oauthGet()){
+    fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
+      if(!data.authenticated) oauthExpire();
+      else {
+        // Flask session still valid - refresh sessionStorage
+        oauthSet({
+          token: 'session',
+          username: data.username || data.display_name || 'Roblox user',
+          userId: data.user_id,
+          exp: Date.now() + 3600*1000 - 30000
+        });
+        oauthRender();
+      }
+    }).catch(() => oauthExpire());
+  }
 }, 30000);
 
 // ── CUSTOM CATALOG (build, save, share by code) ─────────────────────
@@ -3563,15 +3578,34 @@ async function ccDelete(code){
 }
 
 // Login-dependent cards: called from oauthRender() and when the tab opens.
+// If sessionStorage empty but Flask session cookie might be valid, re-check /auth/me.
 function ccRenderAuth(){
   const login = ccEl('cc-login-card'), mine = ccEl('cc-mine-card');
   if(!login || !mine) return;
   const o = (typeof oauthGet === 'function') ? oauthGet() : null;
-  login.style.display = o ? 'none' : 'block';
-  mine.style.display  = o ? 'block' : 'none';
-  if(!o){ ccEl('cc-mine-list').textContent = ''; return; }
-  const panel = ccEl('panel-custom');
-  if(panel && panel.classList.contains('active')) ccLoadMine();
+  if(o){
+    login.style.display = 'none';
+    mine.style.display = 'block';
+    const panel = ccEl('panel-custom');
+    if(panel && panel.classList.contains('active')) ccLoadMine();
+    return;
+  }
+  // sessionStorage empty — verify Flask session via /auth/me
+  login.style.display = 'block';
+  mine.style.display = 'none';
+  ccEl('cc-mine-list').textContent = '';
+  fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
+    if(data.authenticated && data.user_id){
+      // Flask session valid — refresh sessionStorage and re-render
+      oauthSet({
+        token: 'session',
+        username: data.username || data.display_name || 'Roblox user',
+        userId: data.user_id,
+        exp: Date.now() + 3600*1000 - 30000
+      });
+      ccRenderAuth();  // re-run with fresh sessionStorage
+    }
+  }).catch(() => { /* keep login card shown */ });
 }
 function ccBoot(){
   ccRestoreDraft();
