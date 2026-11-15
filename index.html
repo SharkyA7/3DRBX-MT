@@ -3037,14 +3037,14 @@ function oauthExpire(){
 function oauthLogout(){
   try{ sessionStorage.removeItem(OAUTH_KEY); }catch(_){}
   oauthRender();
-  fetch(`${BASE}/auth/logout`).catch(()=>{});
+  fetch(`${BASE}/auth/logout`, { credentials: 'include' }).catch(()=>{});
   oauthPopup('info', oaT('Logout berhasil','Logged out'),
              [oaT('Kamu sudah keluar. Sampai jumpa lagi!','You are logged out. See you soon!')], 3500, false);
 }
 async function oauthVerify(){
   if(!oauthGet()) return;
   try{
-    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders() });
+    const r = await fetch(`${BASE}/auth/me`, { headers: oauthAuthHeaders(), credentials: 'include' });
     if(r.status === 401) oauthExpire();      // Roblox no longer accepts the token
   }catch(_){ /* offline: keep the session; it is re-checked when actually used */ }
 }
@@ -3083,7 +3083,7 @@ function oauthInit(){
   if(outcome && outcome.ok){
     if(outcome.checkSession){
       // Verify Flask session via /auth/me (no Authorization header needed)
-      fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+      fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
         if(data.authenticated && data.user_id){
           oauthSet({
             token: 'session',  // marker; actual auth is via cookie
@@ -3121,7 +3121,7 @@ document.addEventListener('DOMContentLoaded', oauthInit);
 setInterval(()=>{
   const bar = document.getElementById('oauth-bar');
   if(bar && bar.style.display === 'flex' && !oauthGet()){
-    fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+    fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
       if(!data.authenticated) oauthExpire();
       else {
         // Flask session still valid - refresh sessionStorage
@@ -3594,7 +3594,7 @@ function ccRenderAuth(){
   login.style.display = 'block';
   mine.style.display = 'none';
   ccEl('cc-mine-list').textContent = '';
-  fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+  fetch(`${BASE}/auth/me`, { credentials: 'include' }).then(r => r.json()).then(data => {
     if(data.authenticated && data.user_id){
       // Flask session valid — refresh sessionStorage and re-render
       oauthSet({
