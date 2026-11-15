@@ -3117,9 +3117,24 @@ function oauthInit(){
 }
 document.addEventListener('DOMContentLoaded', oauthInit);
 // Logged-in sessions end quietly when Roblox's token lifetime runs out: tell the user.
+// If sessionStorage expired but Flask session cookie might still be valid, re-check /auth/me.
 setInterval(()=>{
   const bar = document.getElementById('oauth-bar');
-  if(bar && bar.style.display === 'flex' && !oauthGet()) oauthExpire();
+  if(bar && bar.style.display === 'flex' && !oauthGet()){
+    fetch(`${BASE}/auth/me`).then(r => r.json()).then(data => {
+      if(!data.authenticated) oauthExpire();
+      else {
+        // Flask session still valid - refresh sessionStorage
+        oauthSet({
+          token: 'session',
+          username: data.username || data.display_name || 'Roblox user',
+          userId: data.user_id,
+          exp: Date.now() + 3600*1000 - 30000
+        });
+        oauthRender();
+      }
+    }).catch(() => oauthExpire());
+  }
 }, 30000);
 
 // ── CUSTOM CATALOG (build, save, share by code) ─────────────────────
