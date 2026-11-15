@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, Response, redirect, session, g
+from flask import Flask, jsonify, request, Response, redirect, session, g, make_response, render_template_string
 from functools import wraps
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
@@ -541,7 +541,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
+# SESSION_SECRET must come from environment; fail clearly if missing in production
+session_secret = os.environ.get("SESSION_SECRET")
+if not session_secret:
+    # Allow fallback only for local development (non-Vercel)
+    if os.environ.get("VERCEL") or os.environ.get("PRODUCTION"):
+        raise RuntimeError("SESSION_SECRET environment variable is required in production")
+    session_secret = secrets.token_hex(32)
+    print("[WARN] Using random SESSION_SECRET for development; set SESSION_SECRET in production")
+app.secret_key = session_secret
+# Flask session cookie settings: HttpOnly, Secure, SameSite=Lax, short lifetime
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,          # requires HTTPS (Vercel provides this)
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=3600,     # 1 hour session lifetime
+)
 
 # CORS - izinkan semua request dari browser
 @app.after_request
@@ -1708,7 +1723,7 @@ def procedural(av,name,rig=None):
 
 @app.get("/health")
 def health():
-    return jsonify({"status":"ok","cookie_set":bool(COOKIE),"maintenance":MAINTENANCE})
+    return jsonify({"status":"ok","cookie_set":bool(COOKIE),"maintenance":get_maintenance_state()})
 
 
 # ── ROBLOX OAUTH 2.0 ROUTES ────────────────────────────────────────────
@@ -1716,15 +1731,13 @@ def health():
 @app.get("/auth/roblox")
 def auth_roblox():
     """Redirect to Roblox OAuth consent screen."""
-    params = {
-        "client_id": ROBLOX_CLIENT_ID,
-        "redirect_uri": ROBLOX_REDIRECT_URI,
-        "response_type": "code",
-        "scope": ROBLOX_SCOPES,
-        "state": secrets.token_urlsafe(16)
-    }
-    auth_url = f"{ROBLOX_AUTH_URL}?{urlencode(params)}"
-    return redirect(auth_url)
+    # Generate state and store in signed short-lived cookie (5 min)
+    state = secrets.token_urlsafe(16)
+    resp = make_response(redirect(
+        f"{ROBLOX_AUTH_URL}?{urlencode({'client_id': ROBLOX_CLIENT_ID, 'redirect_uri': ROBLOX_REDIRECT_URI, 'response_type': 'code', 'scope': ROBLOX_SCOPES, 'state': state})}"
+    ))
+    resp.set_cookie("oauth_state", state, httponly=True, secure=True, samesite="Lax", max_age=300)
+    return resp
 
 
 @app.get("/auth/roblox/callback")
@@ -1734,11 +1747,24 @@ def auth_roblox_callback():
     state = request.args.get("state")
     error = request.args.get("error")
 
+    # Verify state from cookie (CSRF protection)
+    cookie_state = request.cookies.get("oauth_state")
+    if not cookie_state or not secrets.compare_digest(state or "", cookie_state):
+        resp = make_response(render_template_string(
+            "<h1>Invalid OAuth state</h1><p>The authorization request expired or was tampered with. <a href='/auth/roblox'>Try again</a>.</p>"
+        ), 400)
+        resp.set_cookie("oauth_state", "", expires=0)
+        return resp
+
     if error:
-        return jsonify({"error": f"OAuth error: {error}"}), 400
+        return render_template_string(
+            "<h1>OAuth error</h1><p>Roblox denied the request.</p>"
+        ), 400
 
     if not code:
-        return jsonify({"error": "Missing authorization code"}), 400
+        return render_template_string(
+            "<h1>Missing authorization code</h1><p>The callback did not include an authorization code. <a href='/auth/roblox'>Try again</a>.</p>"
+        ), 400
 
     try:
         # Exchange code for access token
@@ -1754,7 +1780,7 @@ def auth_roblox_callback():
         token_json = token_resp.json()
 
         access_token = token_json.get("access_token")
-        refresh_token = token_json.get("refresh_token")
+        # refresh_token intentionally not stored
 
         # Get user info
         user_resp = requests.get(
@@ -1765,43 +1791,33 @@ def auth_roblox_callback():
         user_resp.raise_for_status()
         user_json = user_resp.json()
 
-        # Create session
-        session_id = secrets.token_urlsafe(32)
-        user_data = {
-            "user_id": user_json.get("sub") or user_json.get("id"),
+        # Store user data in Flask signed cookie session (no access/refresh tokens)
+        session.permanent = True
+        session["user"] = {
+            "user_id": str(user_json.get("sub") or user_json.get("id")),
             "username": user_json.get("preferred_username") or user_json.get("username"),
             "display_name": user_json.get("name"),
             "avatar_url": user_json.get("picture"),
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "scopes": ROBLOX_SCOPES.split(),
-            "created": time.time()
+            "expiry": time.time() + 3600  # 1 hour
         }
-        USER_SESSIONS[session_id] = user_data
-        session["user_id"] = user_data["user_id"]
-        session["session_id"] = session_id
 
-        # Redirect to frontend with success
-        return redirect("/?auth=success")
+        # Clear state cookie
+        resp = make_response(redirect("/?auth=success"))
+        resp.set_cookie("oauth_state", "", expires=0)
+        return resp
 
     except requests.RequestException as e:
-        return jsonify({"error": f"OAuth failed: {str(e)}"}), 500
+        print(f"[OAUTH] Token/userinfo request failed: {e}")
+        return render_template_string(
+            "<h1>Authentication failed</h1><p>Could not complete sign-in. <a href='/auth/roblox'>Try again</a>.</p>"
+        ), 502
 
 
 @app.get("/auth/me")
 def auth_me():
-    """Get current user info from session or API key."""
-    # Check API key first
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        raw_key = auth_header[7:]
-        scopes, error = verify_api_key(raw_key)
-        if not error:
-            return jsonify({"authenticated": True, "via": "api_key", "scopes": scopes})
-
-    # Check session
-    if "session_id" in session and session["session_id"] in USER_SESSIONS:
-        user = USER_SESSIONS[session["session_id"]]
+    """Get current user info from session."""
+    user = session.get("user")
+    if user and user.get("expiry", 0) > time.time():
         return jsonify({
             "authenticated": True,
             "via": "session",
@@ -1810,104 +1826,44 @@ def auth_me():
             "display_name": user.get("display_name"),
             "avatar_url": user.get("avatar_url")
         })
-
     return jsonify({"authenticated": False})
 
 
 @app.post("/auth/logout")
 def auth_logout():
     """Logout and clear session."""
-    session_id = session.get("session_id")
-    if session_id and session_id in USER_SESSIONS:
-        del USER_SESSIONS[session_id]
     session.clear()
     return jsonify({"success": True})
 
 
 def get_current_user_id():
-    """Get user_id from session or Bearer token (OAuth). Returns (user_id, error)."""
-    # Check session first
-    if "session_id" in session and session["session_id"] in USER_SESSIONS:
-        return USER_SESSIONS[session["session_id"]]["user_id"], None
-
-    # Check Bearer token (Roblox OAuth access token)
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        try:
-            resp = requests.get(ROBLOX_USER_URL, headers={"Authorization": f"Bearer {token}"}, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                user_id = data.get("sub") or data.get("id")
-                if user_id:
-                    return str(user_id), None
-        except Exception:
-            pass
+    """Get user_id from session. Returns (user_id, error)."""
+    user = session.get("user")
+    if user and user.get("expiry", 0) > time.time():
+        return user["user_id"], None
     return None, "Authentication required"
 
 
 # ── API KEY MANAGEMENT ────────────────────────────────────────────────
-
-VALID_SCOPES = ["catalog", "avatar", "audio", "model", "image", "admin"]
+# Part 2: will be implemented with Supabase storage.
+# Currently returns 503 to avoid NameError from removed in-memory dicts.
 
 @app.post("/api/admin/keys")
 def create_api_key():
-    """Create a new API key with specified scopes."""
-    user_id, error = get_current_user_id()
-    if error:
-        return jsonify({"error": error}), 401
-
-    data = request.get_json(silent=True) or {}
-    scopes = data.get("scopes", [])
-    if not scopes:
-        return jsonify({"error": "Scopes required"}), 400
-
-    # Validate scopes
-    invalid = [s for s in scopes if s not in VALID_SCOPES]
-    if invalid:
-        return jsonify({"error": f"Invalid scopes: {invalid}"}), 400
-
-    key_id, raw_key = generate_api_key(scopes)
-    API_KEYS[key_id]["user_id"] = user_id
-
-    return jsonify({
-        "key_id": key_id,
-        "key": raw_key,
-        "scopes": scopes,
-        "created": API_KEYS[key_id]["created"]
-    })
+    """Create a new API key (not yet implemented; requires Supabase)."""
+    return jsonify({"error_code": "api_keys_unavailable"}), 503
 
 
 @app.get("/api/admin/keys")
 def list_api_keys():
-    """List all API keys for current user."""
-    user_id, error = get_current_user_id()
-    if error:
-        return jsonify({"error": error}), 401
-
-    user_keys = []
-    for key_id, data in API_KEYS.items():
-        if data.get("user_id") == user_id:
-            user_keys.append({
-                "key_id": key_id,
-                "scopes": data["scopes"],
-                "created": data["created"],
-                "rate_limit": data["rate_limit"]
-            })
-    return jsonify({"keys": user_keys})
+    """List API keys (not yet implemented; requires Supabase)."""
+    return jsonify({"error_code": "api_keys_unavailable"}), 503
 
 
 @app.delete("/api/admin/keys/<key_id>")
 def revoke_api_key(key_id):
-    """Revoke an API key."""
-    user_id, error = get_current_user_id()
-    if error:
-        return jsonify({"error": error}), 401
-
-    if key_id in API_KEYS and API_KEYS[key_id].get("user_id") == user_id:
-        del API_KEYS[key_id]
-        return jsonify({"success": True})
-    return jsonify({"error": "Key not found"}), 404
+    """Revoke an API key (not yet implemented; requires Supabase)."""
+    return jsonify({"error_code": "api_keys_unavailable"}), 503
 
 
 @app.get("/api/audio/ping")
