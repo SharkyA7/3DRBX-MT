@@ -1999,6 +1999,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
               <option value="pixels-1440" data-t-id="1440 px" data-t-en="1440 px">1440 px</option>
               <option value="pixels-2048" data-t-id="2048 px" data-t-en="2048 px">2048 px</option>
               <option value="pixels-4096" data-t-id="4096 px" data-t-en="4096 px">4096 px</option>
+              <option value="factor-custom" data-t-id="Custom multiple" data-t-en="Custom multiple">Custom ×</option>
               <option value="custom" data-t-id="Custom" data-t-en="Custom">Custom</option>
             </select>
           </div>
@@ -2023,16 +2024,39 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
             <input type="checkbox" id="tex-upscale-lock" checked style="accent-color:var(--accent)"> <span data-t-id="Lock aspect" data-t-en="Lock aspect">Lock aspect</span>
           </label>
         </div>
+        <div id="tex-upscale-factor-custom" style="display:none;margin-bottom:8px">
+          <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Multiplier" data-t-en="Multiplier">Multiplier</span></label>
+          <input type="number" id="tex-upscale-factor-custom-val" min="1" max="64" step="0.1" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)" placeholder="e.g. 8, 16, 32">
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Preset" data-t-en="Preset">Preset</span></label>
+            <select id="tex-upscale-preset" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+              <option value="custom" data-t-id="Custom" data-t-en="Custom">Custom</option>
+              <option value="photo" data-t-id="Photo textures" data-t-en="Photo textures">📷 Photo textures</option>
+              <option value="pixelart" data-t-id="Pixel art" data-t-en="Pixel art">🎮 Pixel art</option>
+              <option value="lineart" data-t-id="Line art" data-t-en="Line art">🖋 Line art</option>
+              <option value="normal" data-t-id="Normal maps" data-t-en="Normal maps">🗺 Normal maps</option>
+              <option value="rotated" data-t-id="Rotated / Perspective" data-t-en="Rotated / Perspective">🔄 Rotated / Perspective</option>
+            </select>
+          </div>
           <div>
             <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Filter" data-t-en="Filter">Filter</span></label>
             <select id="tex-upscale-filter" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
               <option value="lanczos3" data-t-id="Lanczos3 (sharp, good for photos)" data-t-en="Lanczos3 (sharp, good for photos)">Lanczos3</option>
               <option value="robidouxsharp" data-t-id="RobidouxSharp (balanced, IM default)" data-t-en="RobidouxSharp (balanced, IM default)">RobidouxSharp</option>
               <option value="catmullrom" data-t-id="Catmull-Rom (sharp, B=0 C=0.5)" data-t-en="Catmull-Rom (sharp, B=0 C=0.5)">Catmull-Rom</option>
+              <option value="spline64" data-t-id="Spline64 (4-lobe B-spline)" data-t-en="Spline64 (4-lobe B-spline)">Spline64</option>
+              <option value="spline64-2xssaa" data-t-id="2xSSAA Spline64 (max quality, 2-pass)" data-t-en="2xSSAA Spline64 (max quality, 2-pass)">2xSSAA Spline64</option>
+              <option value="ewa-lanczos3" data-t-id="EWA Lanczos3 (rotation/perspective)" data-t-en="EWA Lanczos3 (rotation/perspective)">EWA Lanczos3</option>
+              <option value="ewa-robidouxsharp" data-t-id="EWA RobidouxSharp (general EWA)" data-t-en="EWA RobidouxSharp (general EWA)">EWA RobidouxSharp</option>
+              <option value="ewa-spline64" data-t-id="EWA Spline64 (max quality EWA)" data-t-en="EWA Spline64 (max quality EWA)">EWA Spline64</option>
+              <option value="ewa-spline64-2xssaa" data-t-id="2xSSAA EWA Spline64 (best for rotated)" data-t-en="2xSSAA EWA Spline64 (best for rotated)">2xSSAA EWA Spline64</option>
               <option value="nearest" data-t-id="Nearest (pixel art, no blur)" data-t-en="Nearest (pixel art, no blur)">Nearest</option>
             </select>
           </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
             <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Snap" data-t-en="Snap">Snap</span></label>
             <select id="tex-upscale-snap" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
@@ -2041,8 +2065,17 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
               <option value="pow2" data-t-id="Power of two" data-t-en="Power of two">Power of two</option>
             </select>
           </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:9px;color:var(--white);white-space:nowrap">
+              <input type="checkbox" id="tex-upscale-ewa" style="accent-color:var(--accent)"> <span data-t-id="EWA mode" data-t-en="EWA mode">EWA mode</span>
+            </label>
+          </div>
         </div>
         <div id="tex-upscale-preview" style="font-size:8px;color:var(--accent);margin-bottom:8px;min-height:18px"></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn" id="tex-upscale-apply" onclick="applyTexUpscale()" style="flex:1" data-t-id="APPLY UPSCALE" data-t-en="APPLY UPSCALE">⟳ <span data-t-id="APPLY UPSCALE" data-t-en="APPLY UPSCALE">APPLY UPSCALE</span></button>
+          <button class="btn" id="tex-upscale-cancel" onclick="cancelTexUpscale()" style="flex:1;display:none;background:linear-gradient(135deg,#cc3333,#aa2222)" data-t-id="CANCEL" data-t-en="CANCEL">✕ <span data-t-id="CANCEL" data-t-en="CANCEL">CANCEL</span></button>
+        </div>
       </div>
     </div>
     <div class="card" id="tex-result" style="display:none">
@@ -5039,8 +5072,8 @@ let texOriginalName = "texture";
 let pendingTexImg = null, pendingTexUrl = null;
 
 // Upscale constants
-const UPSCALE_MAX_LONG_SIDE = 4096;
-const UPSCALE_MAX_PIXELS = 16777216; // 16 MP
+const UPSCALE_MAX_LONG_SIDE = 8192; // soft limit for warning only
+const UPSCALE_MAX_PIXELS = 67108864; // 64 MP soft limit for warning only
 
 // Pure function: compute output size from source and options
 // Returns {w, h, scale, capped, reason}
@@ -5117,25 +5150,18 @@ function computeUpscaleSize(srcW, srcH, opts){
     return { w: srcW, h: srcH, scale: 1, capped: true, reason: 'onlyUpscale blocks downscaling' };
   }
 
-  // Apply caps
+  // Soft limits - warn but don't cap
   let capped = false;
   let reason = '';
   const longSide = Math.max(targetW, targetH);
   const pixels = targetW * targetH;
 
-  if(longSide > UPSCALE_MAX_LONG_SIDE){
-    const ratio = UPSCALE_MAX_LONG_SIDE / longSide;
-    targetW = Math.round(targetW * ratio);
-    targetH = Math.round(targetH * ratio);
-    capped = true;
-    reason = 'long side capped at ' + UPSCALE_MAX_LONG_SIDE;
-  }
-  if(targetW * targetH > UPSCALE_MAX_PIXELS){
-    const ratio = Math.sqrt(UPSCALE_MAX_PIXELS / (targetW * targetH));
-    targetW = Math.round(targetW * ratio);
-    targetH = Math.round(targetH * ratio);
-    capped = true;
-    reason = (reason ? reason + '; ' : '') + 'pixels capped at ' + UPSCALE_MAX_PIXELS;
+  if(longSide > UPSCALE_MAX_LONG_SIDE || pixels > UPSCALE_MAX_PIXELS){
+    capped = true; // flag for warning UI, but don't modify dimensions
+    const parts = [];
+    if(longSide > UPSCALE_MAX_LONG_SIDE) parts.push('long side ' + longSide + ' > ' + UPSCALE_MAX_LONG_SIDE);
+    if(pixels > UPSCALE_MAX_PIXELS) parts.push('pixels ' + Math.round(pixels/1000000) + 'MP > ' + Math.round(UPSCALE_MAX_PIXELS/1000000) + 'MP');
+    reason = parts.join('; ') + ' — process may fail on this device';
   }
 
   return { w: targetW, h: targetH, scale, capped, reason };
@@ -5219,6 +5245,16 @@ function cancelUpscale(){
   resamplerCancelToken.cancelled = true;
 }
 
+function cancelTexUpscale(){
+  cancelUpscale();
+  const applyBtn = document.getElementById('tex-upscale-apply');
+  const cancelBtn = document.getElementById('tex-upscale-cancel');
+  const st = document.getElementById('tex-status');
+  if(applyBtn) applyBtn.style.display = 'block';
+  if(cancelBtn) cancelBtn.style.display = 'none';
+  if(st) st.textContent = '✕ Upscale cancelled';
+}
+
 function loadTexture(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -5236,8 +5272,14 @@ function loadTexture(event){
       texwarnActiveFor = 'import';
       return;
     }
+    // Reset upscale to Off for each new texture (so it doesn't auto-apply previous settings)
+    const upscaleModeEl = document.getElementById('tex-upscale-mode');
+    if(upscaleModeEl) upscaleModeEl.value = 'off';
     // Show upscale card for all textures
     if(window.texUpscale) window.texUpscale.showCard(img.width, img.height);
+    // Store original for re-processing with different upscale settings
+    window.texOriginalImg = img;
+    window.texOriginalUrl = url;
     finishLoadTexture(img, url);
   };
   img.src = url;
@@ -5256,10 +5298,17 @@ async function finishLoadTexture(img, url){
 
   let texCanvasResult;
 
+  // UI elements for cancel button
+  const applyBtn = document.getElementById('tex-upscale-apply');
+  const cancelBtn = document.getElementById('tex-upscale-cancel');
+  const st = document.getElementById("tex-status");
+
   if(upscaleOpts && (finalW !== img.width || finalH !== img.height)){
     // Upscale using Web Worker
-    const st = document.getElementById("tex-status");
     st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text"><span data-t-id="Upscaling texture..." data-t-en="Upscaling texture...">Upscaling texture...</span></div></div>';
+    // Show cancel button, hide apply button
+    if(applyBtn) applyBtn.style.display = 'none';
+    if(cancelBtn) cancelBtn.style.display = 'block';
 
     // Create temporary canvas with source image
     const srcCanvas = document.createElement('canvas');
@@ -5284,6 +5333,9 @@ async function finishLoadTexture(img, url){
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, finalW, finalH);
     }
+    // Hide cancel button, show apply button (after upscale completes or fails)
+    if(applyBtn) applyBtn.style.display = 'block';
+    if(cancelBtn) cancelBtn.style.display = 'none';
   }else{
     // No upscaling needed
     texCanvasResult = document.createElement('canvas');
@@ -5296,7 +5348,6 @@ async function finishLoadTexture(img, url){
   texCanvas = texCanvasResult;
   URL.revokeObjectURL(url);
 
-  const st = document.getElementById("tex-status");
   st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating 10 texture maps ('+finalW+'x'+finalH+')... Mohon tunggu, jangan tutup halaman.</div></div>';
 
   setTimeout(() => {
@@ -5312,12 +5363,32 @@ function cancelTexWarn(){
   document.getElementById("tex-status").textContent = "Dibatalkan.";
   document.getElementById("tex-input").value = "";
 }
+
+// Re-process texture with current upscale settings
+function applyTexUpscale(){
+  if(!texCanvas) return; // No texture loaded
+  const upscaleOpts = window.texUpscale ? window.texUpscale.getOpts() : null;
+  if(!upscaleOpts){
+    document.getElementById("tex-status").textContent = "No upscale selected.";
+    return;
+  }
+  // Re-run finishLoadTexture logic but keep the original image
+  // We need the original image - store it when first loaded
+  if(!window.texOriginalImg) return;
+  finishLoadTexture(window.texOriginalImg, window.texOriginalUrl);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   let texwarnActiveFor = null; // 'import' | 'upscale' | null
   const originalContinueHandler = function(){
     document.getElementById("texwarn-overlay").style.display = "none";
     if(texwarnActiveFor === 'import' && pendingTexImg){
+      // Reset upscale to Off for new texture
+      const upscaleModeEl = document.getElementById('tex-upscale-mode');
+      if(upscaleModeEl) upscaleModeEl.value = 'off';
       if(window.texUpscale) window.texUpscale.showCard(pendingTexImg.width, pendingTexImg.height);
+      window.texOriginalImg = pendingTexImg;
+      window.texOriginalUrl = pendingTexUrl;
       finishLoadTexture(pendingTexImg, pendingTexUrl);
     }
     pendingTexImg = null; pendingTexUrl = null;
@@ -5334,6 +5405,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const upscaleLock = document.getElementById('tex-upscale-lock');
   const upscaleFilter = document.getElementById('tex-upscale-filter');
   const upscaleSnap = document.getElementById('tex-upscale-snap');
+  const upscalePreset = document.getElementById('tex-upscale-preset');
+  const upscaleEwa = document.getElementById('tex-upscale-ewa');
   const upscalePreview = document.getElementById('tex-upscale-preview');
   const upscaleCard = document.getElementById('tex-upscale-card');
 
@@ -5349,7 +5422,11 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     let opts = { onlyUpscale: true, snap: upscaleSnap.value };
-    if(modeVal.startsWith('factor-')){
+    if(modeVal === 'factor-custom'){
+      opts.mode = 'factor';
+      const factorCustomInput = document.getElementById('tex-upscale-factor-custom-val');
+      opts.value = parseFloat(factorCustomInput?.value) || 1;
+    }else if(modeVal.startsWith('factor-')){
       opts.mode = 'factor';
       opts.value = parseInt(modeVal.split('-')[1], 10);
     }else if(modeVal.startsWith('pixels-')){
@@ -5366,12 +5443,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const mp = (res.w * res.h / 1000000).toFixed(2);
     const mbPerMap = (res.w * res.h * 4 / 1048576).toFixed(1);
     const mbTen = (res.w * res.h * 4 * 10 / 1048576).toFixed(1);
-    const cappedNote = res.capped ? ' ⚠ ' + (res.reason || 'capped') : '';
+    const cappedNote = res.capped ? ' ⚠ ' + (res.reason || 'may fail') : '';
     upscalePreview.innerHTML = '<span data-t-id="Output" data-t-en="Output">Output</span>: ' + res.w + 'x' + res.h + ' (' + mp + ' MP, ~' + mbPerMap + ' MB/map, ~' + mbTen + ' MB/10 maps)' + cappedNote;
 
-    // Check for high-upscale warning conditions
+    // Check for high-upscale warning conditions (soft limits)
     const longSide = Math.max(res.w, res.h);
-    const isHighUpscale = longSide >= 4096 || res.w * res.h >= 16000000 || res.capped;
+    const isHighUpscale = longSide >= UPSCALE_MAX_LONG_SIDE || res.w * res.h >= UPSCALE_MAX_PIXELS || res.capped;
     if(isHighUpscale){
       const sizeKey = res.w + 'x' + res.h;
       if(!upscaleConfirmedSizes.has(sizeKey)){
@@ -5385,28 +5462,36 @@ document.addEventListener("DOMContentLoaded", () => {
   let pendingHighUpscaleResolve = null;
 
   function showHighUpscaleWarning(res, sizeKey){
-    // Pause the mode change - revert to 'off' to avoid recursion if lastSafeMode is also high
-    const prevMode = upscaleMode.value;
-    upscaleMode.value = 'off';
-    onModeChange();
+    const modeVal = upscaleMode.value;
+    const isCustomMode = (modeVal === 'custom' || modeVal === 'factor-custom');
+
+    // For custom mode: don't reset mode/values, just warn about the cap
+    // For preset modes: revert to 'off' to prevent accidental high upscale
+    let prevMode = modeVal;
+    if(!isCustomMode){
+      upscaleMode.value = 'off';
+      onModeChange();
+    }
 
     const mp = (res.w * res.h / 1000000).toFixed(2);
     const mbPerMap = (res.w * res.h * 4 / 1048576).toFixed(1);
     const mbTen = (res.w * res.h * 4 * 10 / 1048576).toFixed(1);
 
     const warnBody = document.getElementById('texwarn-body');
+    const capNote = res.capped ? ('<p style="margin-bottom:8px;font-size:9px;color:#ffaa00"><span data-t-id="Warning" data-t-en="Warning">Warning</span>: ' + (res.reason || 'may exceed device memory') + '</p>') : '';
     warnBody.innerHTML =
       '<div style="text-align:center">' +
       '<p style="margin-bottom:8px"><span data-t-id="High upscale selected" data-t-en="High upscale selected">High upscale selected</span>: <strong>' + res.w + 'x' + res.h + '</strong> (' + mp + ' MP)</p>' +
+      capNote +
       '<p style="margin-bottom:8px;font-size:9px;color:var(--muted)"><span data-t-id="Estimated memory" data-t-en="Estimated memory">Estimated memory</span>: ~' + mbPerMap + ' MB/map, ~' + mbTen + ' MB for 10 maps</p>' +
-      '<p style="margin-bottom:12px;font-size:9px;color:#ffaa00"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <span data-t-id="UI may lag or tab may crash on phones" data-t-en="UI may lag or tab may crash on phones">UI may lag or tab may crash on phones</span></p>' +
+      '<p style="margin-bottom:12px;font-size:9px;color:#ffaa00"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <span data-t-id="Process may fail due to memory limit — if so, try a lower setting" data-t-en="Process may fail due to memory limit — if so, try a lower setting">Process may fail due to memory limit — if so, try a lower setting</span></p>' +
       '<p style="margin-bottom:12px;font-size:9px;color:var(--accent)"><span data-t-id="Tip" data-t-en="Tip">Tip</span>: <span data-t-id="Try 2x or 2048 px for safer performance" data-t-en="Try 2x or 2048 px for safer performance">Try 2x or 2048 px for safer performance</span></p>' +
       '</div>';
 
     const overlay = document.getElementById('texwarn-overlay');
     const continueBtn = document.getElementById('texwarn-continue-btn');
 
-    // Show "Choose Lower" button
+    // Show "Choose Lower" button (only for preset modes)
     let lowerBtn = document.getElementById('texwarn-lower-btn');
     if(!lowerBtn){
       lowerBtn = document.createElement('button');
@@ -5417,9 +5502,9 @@ document.addEventListener("DOMContentLoaded", () => {
       lowerBtn.style.borderColor = 'var(--border)';
       continueBtn.parentNode.insertBefore(lowerBtn, continueBtn.nextSibling);
     }
-    lowerBtn.style.display = 'inline-block';
+    lowerBtn.style.display = isCustomMode ? 'none' : 'inline-block';
 
-    continueBtn.textContent = 'Continue Anyway';
+    continueBtn.textContent = isCustomMode ? 'OK' : 'Continue Anyway';
 
     // Set flag for upscale warning
     texwarnActiveFor = 'upscale';
@@ -5429,12 +5514,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const onContinue = function(){
       upscaleConfirmedSizes.add(sizeKey);
       cleanup();
-      // Re-apply the high mode
-      upscaleMode.value = prevMode;
-      onModeChange();
+      // For preset modes, re-apply the high mode
+      if(!isCustomMode){
+        upscaleMode.value = prevMode;
+        onModeChange();
+      }
+      // For custom mode: just close modal, keep user's values
     };
     const onLower = function(){
       cleanup();
+      if(!isCustomMode){
+        // Revert to safe mode already done
+      }
+      // For custom mode: user keeps their values, modal just closes
     };
     const onKeydown = function(e){
       if(e.key === 'Escape') onLower();
@@ -5460,12 +5552,95 @@ document.addEventListener("DOMContentLoaded", () => {
     overlay.onclick = onOverlayClick;
   }
 
+  // ===== 2xSSAA Spline64 Specific Warning =====
+  // This is the HIGHEST quality upscale (2-pass: 4x up → 2x down with 4-lobe Spline64)
+  // ~4x compute cost, much higher memory during processing
+  const spline64Confirmed = new Set();
+
+  function showSpline64Warning(){
+    // Always revert filter to previous safe choice
+    const prevFilter = upscaleFilter.value;
+    // Don't auto-revert here - let the modal handle it via the "Choose Lower" button
+
+    const overlay = document.getElementById('texwarn-overlay');
+    const warnBody = document.getElementById('texwarn-body');
+    const continueBtn = document.getElementById('texwarn-continue-btn');
+
+    warnBody.innerHTML =
+      '<div style="text-align:center">' +
+      '<p style="margin-bottom:10px;color:#ff4444;font-size:12px;font-weight:700;letter-spacing:1px">⚠ USER BE ADVISED ⚠</p>' +
+      '<p style="margin-bottom:8px;font-size:10px"><span data-t-id="Maximum Quality Upscale" data-t-en="Maximum Quality Upscale">Maximum Quality Upscale</span>: <strong>2xSSAA Spline64</strong></p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ffaa00"><span data-t-id="Process" data-t-en="Process">Process</span>: 2-pass supersampling (4x up → 2x down with 4-lobe Spline64)</p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ff6666"><span data-t-id="Cost" data-t-en="Cost">Cost</span>: ~4x compute time, <strong>much higher memory</strong> during processing</p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ff4444"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <strong>Tab may freeze/crash on phones</strong>, desktop may lag significantly</p>' +
+      '<p style="margin-bottom:12px;font-size:9px;color:var(--accent)"><span data-t-id="Recommended" data-t-en="Recommended">Recommended</span>: Use <strong>Lanczos3</strong> or <strong>RobidouxSharp</strong> for normal upscaling</p>' +
+      '</div>';
+
+    // Show "Choose Lower" button
+    let lowerBtn = document.getElementById('texwarn-lower-btn');
+    if(!lowerBtn){
+      lowerBtn = document.createElement('button');
+      lowerBtn.id = 'texwarn-lower-btn';
+      lowerBtn.className = 'warn-btn-continue';
+      lowerBtn.style.marginLeft = '8px';
+      lowerBtn.style.background = 'var(--btn-secondary-bg, #333)';
+      lowerBtn.style.borderColor = 'var(--border)';
+      continueBtn.parentNode.insertBefore(lowerBtn, continueBtn.nextSibling);
+    }
+    lowerBtn.style.display = 'inline-block';
+
+    continueBtn.textContent = 'Continue Anyway';
+    continueBtn.style.background = '#cc3333'; // Red for danger
+
+    texwarnActiveFor = 'spline64';
+    overlay.style.display = 'flex';
+
+    // One-time handlers
+    const onContinue = function(){
+      spline64Confirmed.add('spline64-2xssaa');
+      cleanup();
+      // Keep the filter selection
+    };
+    const onLower = function(){
+      // Revert to a safe filter
+      upscaleFilter.value = 'robidouxsharp';
+      cleanup();
+      updateUpscalePreview();
+    };
+    const onKeydown = function(e){
+      if(e.key === 'Escape') onLower();
+    };
+    const onOverlayClick = function(e){
+      if(e.target === overlay) onLower();
+    };
+
+    function cleanup(){
+      overlay.style.display = 'none';
+      lowerBtn.style.display = 'none';
+      continueBtn.textContent = 'Lanjutkan Tetap';
+      continueBtn.style.background = ''; // reset
+      document.removeEventListener('keydown', onKeydown);
+      overlay.onclick = null;
+      continueBtn.removeEventListener('click', onContinue);
+      lowerBtn.removeEventListener('click', onLower);
+      texwarnActiveFor = null;
+    }
+
+    continueBtn.addEventListener('click', onContinue);
+    lowerBtn.addEventListener('click', onLower);
+    document.addEventListener('keydown', onKeydown);
+    overlay.onclick = onOverlayClick;
+  }
+
   function onModeChange(){
     const modeVal = upscaleMode.value;
     const isCustom = modeVal === 'custom';
+    const isFactorCustom = modeVal === 'factor-custom';
     const isOff = modeVal === 'off';
-    upscaleApplies.style.display = isCustom || isOff ? 'none' : 'block';
+    upscaleApplies.style.display = isCustom || isOff || isFactorCustom ? 'none' : 'block';
     upscaleCustom.style.display = isCustom ? 'grid' : 'none';
+    const factorCustomRow = document.getElementById('tex-upscale-factor-custom');
+    if(factorCustomRow) factorCustomRow.style.display = isFactorCustom ? 'block' : 'none';
     if(!isOff) lastSafeMode = modeVal;
     if(texSourceWidth && texSourceHeight){
       if(isCustom){
@@ -5481,14 +5656,93 @@ document.addEventListener("DOMContentLoaded", () => {
   upscaleCustomH.addEventListener('input', updateUpscalePreview);
   upscaleLock.addEventListener('change', updateUpscalePreview);
   upscaleSnap.addEventListener('change', updateUpscalePreview);
+  upscaleFilter.addEventListener('change', function(){
+    if(upscaleFilter.value === 'spline64-2xssaa' || upscaleFilter.value === 'ewa-spline64-2xssaa'){
+      showSpline64Warning();
+    }
+    // When user manually changes filter, switch preset to Custom
+    if(upscalePreset.value !== 'custom'){
+      upscalePreset.value = 'custom';
+    }
+    updateUpscalePreview();
+  });
+  upscalePreset.addEventListener('change', applyPreset);
+  upscaleEwa.addEventListener('change', function(){
+    // When user manually toggles EWA, switch preset to Custom
+    if(upscalePreset.value !== 'custom'){
+      upscalePreset.value = 'custom';
+    }
+    updateUpscalePreview();
+  });
+
+  // Sync custom W/H when Lock Aspect is on
+  function syncCustomWH(sourceInput, targetInput){
+    if(!upscaleLock.checked || !texSourceWidth || !texSourceHeight) return;
+    const srcAR = texSourceWidth / texSourceHeight;
+    if(sourceInput === upscaleCustomW){
+      const w = parseInt(upscaleCustomW.value, 10);
+      if(w > 0) targetInput.value = Math.round(w / srcAR);
+    }else{
+      const h = parseInt(upscaleCustomH.value, 10);
+      if(h > 0) targetInput.value = Math.round(h * srcAR);
+    }
+  }
+  upscaleCustomW.addEventListener('input', function(){
+    syncCustomWH(upscaleCustomW, upscaleCustomH);
+    updateUpscalePreview();
+  });
+  upscaleCustomH.addEventListener('input', function(){
+    syncCustomWH(upscaleCustomH, upscaleCustomW);
+    updateUpscalePreview();
+  });
+  const factorCustomInput = document.getElementById('tex-upscale-factor-custom-val');
+  if(factorCustomInput){
+    factorCustomInput.addEventListener('input', updateUpscalePreview);
+  }
+
+  // Filter presets - applies filter, EWA, and snap settings
+  const PRESETS = {
+    photo: { filter: 'robidouxsharp', ewa: false, snap: 'none' },
+    pixelart: { filter: 'nearest', ewa: false, snap: 'none' },
+    lineart: { filter: 'catmullrom', ewa: true, snap: 'none' },
+    normal: { filter: 'spline64-2xssaa', ewa: false, snap: 'none' },
+    rotated: { filter: 'ewa-lanczos3', ewa: true, snap: 'none' }
+  };
+
+  function applyPreset(){
+    const preset = PRESETS[upscalePreset.value];
+    if(!preset) return;
+    upscaleFilter.value = preset.filter;
+    upscaleEwa.checked = preset.ewa;
+    upscaleSnap.value = preset.snap;
+    updateUpscalePreview();
+  }
 
   // Expose for use in finishLoadTexture
   window.texUpscale = {
     getOpts: function(){
       const modeVal = upscaleMode.value;
       if(modeVal === 'off') return null;
-      let opts = { onlyUpscale: true, snap: upscaleSnap.value, filter: upscaleFilter.value };
-      if(modeVal.startsWith('factor-')){
+
+      // Determine effective filter: if EWA toggle is on, map standard filters to EWA variants
+      let filter = upscaleFilter.value;
+      if(upscaleEwa.checked){
+        const ewaMap = {
+          'lanczos3': 'ewa-lanczos3',
+          'robidouxsharp': 'ewa-robidouxsharp',
+          'catmullrom': 'ewa-robidouxsharp', // Catmull-Rom doesn't have direct EWA, use RobidouxSharp
+          'spline64': 'ewa-spline64',
+          'spline64-2xssaa': 'ewa-spline64-2xssaa'
+        };
+        filter = ewaMap[filter] || filter;
+      }
+
+      let opts = { onlyUpscale: true, snap: upscaleSnap.value, filter: filter };
+      if(modeVal === 'factor-custom'){
+        opts.mode = 'factor';
+        const factorCustomInput = document.getElementById('tex-upscale-factor-custom-val');
+        opts.value = parseFloat(factorCustomInput?.value) || 1;
+      }else if(modeVal.startsWith('factor-')){
         opts.mode = 'factor';
         opts.value = parseInt(modeVal.split('-')[1], 10);
       }else if(modeVal.startsWith('pixels-')){
