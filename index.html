@@ -5237,6 +5237,9 @@ function loadTexture(event){
       texwarnActiveFor = 'import';
       return;
     }
+    // Reset upscale to Off for each new texture (so it doesn't auto-apply previous settings)
+    const upscaleModeEl = document.getElementById('tex-upscale-mode');
+    if(upscaleModeEl) upscaleModeEl.value = 'off';
     // Show upscale card for all textures
     if(window.texUpscale) window.texUpscale.showCard(img.width, img.height);
     // Store original for re-processing with different upscale settings
@@ -5336,6 +5339,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const originalContinueHandler = function(){
     document.getElementById("texwarn-overlay").style.display = "none";
     if(texwarnActiveFor === 'import' && pendingTexImg){
+      // Reset upscale to Off for new texture
+      const upscaleModeEl = document.getElementById('tex-upscale-mode');
+      if(upscaleModeEl) upscaleModeEl.value = 'off';
       if(window.texUpscale) window.texUpscale.showCard(pendingTexImg.width, pendingTexImg.height);
       window.texOriginalImg = pendingTexImg;
       window.texOriginalUrl = pendingTexUrl;
