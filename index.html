@@ -5413,19 +5413,27 @@ document.addEventListener("DOMContentLoaded", () => {
   let pendingHighUpscaleResolve = null;
 
   function showHighUpscaleWarning(res, sizeKey){
-    // Pause the mode change - revert to 'off' to avoid recursion if lastSafeMode is also high
-    const prevMode = upscaleMode.value;
-    upscaleMode.value = 'off';
-    onModeChange();
+    const modeVal = upscaleMode.value;
+    const isCustomMode = (modeVal === 'custom');
+
+    // For custom mode: don't reset mode/values, just warn about the cap
+    // For preset modes: revert to 'off' to prevent accidental high upscale
+    let prevMode = modeVal;
+    if(!isCustomMode){
+      upscaleMode.value = 'off';
+      onModeChange();
+    }
 
     const mp = (res.w * res.h / 1000000).toFixed(2);
     const mbPerMap = (res.w * res.h * 4 / 1048576).toFixed(1);
     const mbTen = (res.w * res.h * 4 * 10 / 1048576).toFixed(1);
 
     const warnBody = document.getElementById('texwarn-body');
+    const capNote = res.capped ? ('<p style="margin-bottom:8px;font-size:9px;color:#ffaa00"><span data-t-id="Capped" data-t-en="Capped">Capped</span>: ' + (res.reason || 'max limits') + '</p>') : '';
     warnBody.innerHTML =
       '<div style="text-align:center">' +
       '<p style="margin-bottom:8px"><span data-t-id="High upscale selected" data-t-en="High upscale selected">High upscale selected</span>: <strong>' + res.w + 'x' + res.h + '</strong> (' + mp + ' MP)</p>' +
+      capNote +
       '<p style="margin-bottom:8px;font-size:9px;color:var(--muted)"><span data-t-id="Estimated memory" data-t-en="Estimated memory">Estimated memory</span>: ~' + mbPerMap + ' MB/map, ~' + mbTen + ' MB for 10 maps</p>' +
       '<p style="margin-bottom:12px;font-size:9px;color:#ffaa00"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <span data-t-id="UI may lag or tab may crash on phones" data-t-en="UI may lag or tab may crash on phones">UI may lag or tab may crash on phones</span></p>' +
       '<p style="margin-bottom:12px;font-size:9px;color:var(--accent)"><span data-t-id="Tip" data-t-en="Tip">Tip</span>: <span data-t-id="Try 2x or 2048 px for safer performance" data-t-en="Try 2x or 2048 px for safer performance">Try 2x or 2048 px for safer performance</span></p>' +
@@ -5434,7 +5442,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const overlay = document.getElementById('texwarn-overlay');
     const continueBtn = document.getElementById('texwarn-continue-btn');
 
-    // Show "Choose Lower" button
+    // Show "Choose Lower" button (only for preset modes)
     let lowerBtn = document.getElementById('texwarn-lower-btn');
     if(!lowerBtn){
       lowerBtn = document.createElement('button');
@@ -5445,9 +5453,9 @@ document.addEventListener("DOMContentLoaded", () => {
       lowerBtn.style.borderColor = 'var(--border)';
       continueBtn.parentNode.insertBefore(lowerBtn, continueBtn.nextSibling);
     }
-    lowerBtn.style.display = 'inline-block';
+    lowerBtn.style.display = isCustomMode ? 'none' : 'inline-block';
 
-    continueBtn.textContent = 'Continue Anyway';
+    continueBtn.textContent = isCustomMode ? 'OK' : 'Continue Anyway';
 
     // Set flag for upscale warning
     texwarnActiveFor = 'upscale';
@@ -5457,12 +5465,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const onContinue = function(){
       upscaleConfirmedSizes.add(sizeKey);
       cleanup();
-      // Re-apply the high mode
-      upscaleMode.value = prevMode;
-      onModeChange();
+      // For preset modes, re-apply the high mode
+      if(!isCustomMode){
+        upscaleMode.value = prevMode;
+        onModeChange();
+      }
+      // For custom mode: just close modal, keep user's values
     };
     const onLower = function(){
       cleanup();
+      if(!isCustomMode){
+        // Revert to safe mode already done
+      }
+      // For custom mode: user keeps their values, modal just closes
     };
     const onKeydown = function(e){
       if(e.key === 'Escape') onLower();
