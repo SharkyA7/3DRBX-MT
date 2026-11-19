@@ -2043,6 +2043,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           </div>
         </div>
         <div id="tex-upscale-preview" style="font-size:8px;color:var(--accent);margin-bottom:8px;min-height:18px"></div>
+        <button class="btn" id="tex-upscale-apply" onclick="applyTexUpscale()" style="width:100%;margin-top:4px" data-t-id="APPLY UPSCALE" data-t-en="APPLY UPSCALE">⟳ <span data-t-id="APPLY UPSCALE" data-t-en="APPLY UPSCALE">APPLY UPSCALE</span></button>
       </div>
     </div>
     <div class="card" id="tex-result" style="display:none">
@@ -5238,6 +5239,9 @@ function loadTexture(event){
     }
     // Show upscale card for all textures
     if(window.texUpscale) window.texUpscale.showCard(img.width, img.height);
+    // Store original for re-processing with different upscale settings
+    window.texOriginalImg = img;
+    window.texOriginalUrl = url;
     finishLoadTexture(img, url);
   };
   img.src = url;
@@ -5312,12 +5316,29 @@ function cancelTexWarn(){
   document.getElementById("tex-status").textContent = "Dibatalkan.";
   document.getElementById("tex-input").value = "";
 }
+
+// Re-process texture with current upscale settings
+function applyTexUpscale(){
+  if(!texCanvas) return; // No texture loaded
+  const upscaleOpts = window.texUpscale ? window.texUpscale.getOpts() : null;
+  if(!upscaleOpts){
+    document.getElementById("tex-status").textContent = "No upscale selected.";
+    return;
+  }
+  // Re-run finishLoadTexture logic but keep the original image
+  // We need the original image - store it when first loaded
+  if(!window.texOriginalImg) return;
+  finishLoadTexture(window.texOriginalImg, window.texOriginalUrl);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   let texwarnActiveFor = null; // 'import' | 'upscale' | null
   const originalContinueHandler = function(){
     document.getElementById("texwarn-overlay").style.display = "none";
     if(texwarnActiveFor === 'import' && pendingTexImg){
       if(window.texUpscale) window.texUpscale.showCard(pendingTexImg.width, pendingTexImg.height);
+      window.texOriginalImg = pendingTexImg;
+      window.texOriginalUrl = pendingTexUrl;
       finishLoadTexture(pendingTexImg, pendingTexUrl);
     }
     pendingTexImg = null; pendingTexUrl = null;
