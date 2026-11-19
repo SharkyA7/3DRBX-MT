@@ -5596,6 +5596,27 @@ document.addEventListener("DOMContentLoaded", () => {
     updateUpscalePreview();
   });
 
+  // Sync custom W/H when Lock Aspect is on
+  function syncCustomWH(sourceInput, targetInput){
+    if(!upscaleLock.checked || !texSourceWidth || !texSourceHeight) return;
+    const srcAR = texSourceWidth / texSourceHeight;
+    if(sourceInput === upscaleCustomW){
+      const w = parseInt(upscaleCustomW.value, 10);
+      if(w > 0) targetInput.value = Math.round(w / srcAR);
+    }else{
+      const h = parseInt(upscaleCustomH.value, 10);
+      if(h > 0) targetInput.value = Math.round(h * srcAR);
+    }
+  }
+  upscaleCustomW.addEventListener('input', function(){
+    syncCustomWH(upscaleCustomW, upscaleCustomH);
+    updateUpscalePreview();
+  });
+  upscaleCustomH.addEventListener('input', function(){
+    syncCustomWH(upscaleCustomH, upscaleCustomW);
+    updateUpscalePreview();
+  });
+
   // Expose for use in finishLoadTexture
   window.texUpscale = {
     getOpts: function(){
