@@ -1983,6 +1983,67 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <input type="file" id="tex-input" accept="image/*" onchange="loadTexture(event)" style="display:none">
       <button class="btn" onclick="document.getElementById('tex-input').click()">📁 UPLOAD TEXTURE</button>
       <div id="tex-status" style="margin-top:8px;font-size:9px;color:var(--gray)"></div>
+
+      <!-- Upscale Options -->
+      <div class="card" id="tex-upscale-card" style="margin-top:12px;display:none">
+        <div class="label">🔍 <span data-t-id="UPSCALE OPTIONS" data-t-en="UPSCALE OPTIONS">UPSCALE OPTIONS</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Target" data-t-en="Target">Target</span></label>
+            <select id="tex-upscale-mode" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+              <option value="off" data-t-id="Off" data-t-en="Off">Off</option>
+              <option value="factor-2" data-t-id="2x" data-t-en="2x">2x</option>
+              <option value="factor-3" data-t-id="3x" data-t-en="3x">3x</option>
+              <option value="factor-4" data-t-id="4x" data-t-en="4x">4x</option>
+              <option value="pixels-1080" data-t-id="1080 px" data-t-en="1080 px">1080 px</option>
+              <option value="pixels-1440" data-t-id="1440 px" data-t-en="1440 px">1440 px</option>
+              <option value="pixels-2048" data-t-id="2048 px" data-t-en="2048 px">2048 px</option>
+              <option value="pixels-4096" data-t-id="4096 px" data-t-en="4096 px">4096 px</option>
+              <option value="custom" data-t-id="Custom" data-t-en="Custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Applies to" data-t-en="Applies to">Applies to</span></label>
+            <select id="tex-upscale-applies" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+              <option value="long" data-t-id="Long side" data-t-en="Long side">Long side</option>
+              <option value="short" data-t-id="Short side" data-t-en="Short side">Short side</option>
+            </select>
+          </div>
+        </div>
+        <div id="tex-upscale-custom" style="display:none;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Width" data-t-en="Width">Width</span></label>
+            <input type="number" id="tex-upscale-custom-w" min="1" max="4096" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+          </div>
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Height" data-t-en="Height">Height</option>
+            <input type="number" id="tex-upscale-custom-h" min="1" max="4096" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+          </div>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:9px;color:var(--white);white-space:nowrap">
+            <input type="checkbox" id="tex-upscale-lock" checked style="accent-color:var(--accent)"> <span data-t-id="Lock aspect" data-t-en="Lock aspect">Lock aspect</span>
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Filter" data-t-en="Filter">Filter</span></label>
+            <select id="tex-upscale-filter" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+              <option value="lanczos3" data-t-id="Lanczos3 (sharp, good for photos)" data-t-en="Lanczos3 (sharp, good for photos)">Lanczos3</option>
+              <option value="robidouxsharp" data-t-id="RobidouxSharp (balanced, IM default)" data-t-en="RobidouxSharp (balanced, IM default)">RobidouxSharp</option>
+              <option value="catmullrom" data-t-id="Catmull-Rom (sharp, B=0 C=0.5)" data-t-en="Catmull-Rom (sharp, B=0 C=0.5)">Catmull-Rom</option>
+              <option value="nearest" data-t-id="Nearest (pixel art, no blur)" data-t-en="Nearest (pixel art, no blur)">Nearest</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:8px;color:var(--gray);margin-bottom:4px"><span data-t-id="Snap" data-t-en="Snap">Snap</span></label>
+            <select id="tex-upscale-snap" style="width:100%;padding:6px 8px;font-size:9px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;color:var(--white)">
+              <option value="none" data-t-id="None" data-t-en="None">None</option>
+              <option value="mult4" data-t-id="Multiple of 4" data-t-en="Multiple of 4">Multiple of 4</option>
+              <option value="pow2" data-t-id="Power of two" data-t-en="Power of two">Power of two</option>
+            </select>
+          </div>
+        </div>
+        <div id="tex-upscale-preview" style="font-size:8px;color:var(--accent);margin-bottom:8px;min-height:18px"></div>
+      </div>
     </div>
     <div class="card" id="tex-result" style="display:none">
       <div class="label"><span data-t-id="PREVIEW" data-t-en="PREVIEW">PREVIEW</span></div>
@@ -4976,6 +5037,188 @@ let texCanvas = null;
 
 let texOriginalName = "texture";
 let pendingTexImg = null, pendingTexUrl = null;
+
+// Upscale constants
+const UPSCALE_MAX_LONG_SIDE = 4096;
+const UPSCALE_MAX_PIXELS = 16777216; // 16 MP
+
+// Pure function: compute output size from source and options
+// Returns {w, h, scale, capped, reason}
+// Modes: factor (2,3,4) or pixels (1080,1440,2048,4096) applied to long/short side
+// Custom W/H with lock toggle (default on). Aspect ratio preserved unless custom with lock off.
+// onlyUpscale: block smaller targets (default true). Snap: none|mult4|pow2
+function computeUpscaleSize(srcW, srcH, opts){
+  const {
+    mode = 'factor',        // 'factor' | 'pixels' | 'custom'
+    value = 2,              // factor: 2|3|4; pixels: 1080|1440|2048|4096
+    appliesTo = 'long',     // 'long' | 'short'
+    customW = srcW,
+    customH = srcH,
+    lockAspect = true,
+    onlyUpscale = true,
+    snap = 'none'           // 'none' | 'mult4' | 'pow2'
+  } = opts || {};
+
+  let targetW, targetH;
+
+  if(mode === 'custom'){
+    targetW = Math.round(customW);
+    targetH = Math.round(customH);
+    if(!lockAspect){
+      // free aspect - use as-is
+    }else{
+      // preserve source aspect
+      const srcAR = srcW / srcH;
+      targetH = Math.round(targetW / srcAR);
+    }
+  }else if(mode === 'factor'){
+    const factor = Math.max(1, Math.round(value));
+    targetW = Math.round(srcW * factor);
+    targetH = Math.round(srcH * factor);
+  }else{ // 'pixels'
+    const targetPx = Math.max(1, Math.round(value));
+    if(appliesTo === 'long'){
+      if(srcW >= srcH){
+        targetW = targetPx;
+        targetH = Math.round(targetPx * srcH / srcW);
+      }else{
+        targetH = targetPx;
+        targetW = Math.round(targetPx * srcW / srcH);
+      }
+    }else{ // 'short'
+      if(srcW <= srcH){
+        targetW = targetPx;
+        targetH = Math.round(targetPx * srcH / srcW);
+      }else{
+        targetH = targetPx;
+        targetW = Math.round(targetPx * srcW / srcH);
+      }
+    }
+  }
+
+  // Snap
+  if(snap === 'mult4'){
+    targetW = Math.round(targetW / 4) * 4;
+    targetH = Math.round(targetH / 4) * 4;
+  }else if(snap === 'pow2'){
+    targetW = Math.pow(2, Math.round(Math.log2(targetW)));
+    targetH = Math.pow(2, Math.round(Math.log2(targetH)));
+  }
+
+  // Clamp to at least 1
+  targetW = Math.max(1, targetW);
+  targetH = Math.max(1, targetH);
+
+  // Check onlyUpscale
+  const scaleW = targetW / srcW;
+  const scaleH = targetH / srcH;
+  const scale = Math.min(scaleW, scaleH); // uniform scale factor
+  if(onlyUpscale && (scaleW < 1 || scaleH < 1)){
+    return { w: srcW, h: srcH, scale: 1, capped: true, reason: 'onlyUpscale blocks downscaling' };
+  }
+
+  // Apply caps
+  let capped = false;
+  let reason = '';
+  const longSide = Math.max(targetW, targetH);
+  const pixels = targetW * targetH;
+
+  if(longSide > UPSCALE_MAX_LONG_SIDE){
+    const ratio = UPSCALE_MAX_LONG_SIDE / longSide;
+    targetW = Math.round(targetW * ratio);
+    targetH = Math.round(targetH * ratio);
+    capped = true;
+    reason = 'long side capped at ' + UPSCALE_MAX_LONG_SIDE;
+  }
+  if(targetW * targetH > UPSCALE_MAX_PIXELS){
+    const ratio = Math.sqrt(UPSCALE_MAX_PIXELS / (targetW * targetH));
+    targetW = Math.round(targetW * ratio);
+    targetH = Math.round(targetH * ratio);
+    capped = true;
+    reason = (reason ? reason + '; ' : '') + 'pixels capped at ' + UPSCALE_MAX_PIXELS;
+  }
+
+  return { w: targetW, h: targetH, scale, capped, reason };
+}
+
+// Tests (run in console: computeUpscaleSize(1024,1024,{mode:'factor',value:2}))
+// 1024x1024 2x -> 2048x2048
+// 1000x500 long side 2048 -> 2048x1024
+// 1000x500 short side 1080 -> 2160x1080
+// custom width 1500 lock on -> 1500x750
+// 2048x2048 4x -> capped at 4096x4096 with capped=true and reason
+// 1920x1080 target 1080 short side with onlyUpscale -> blocked
+// mult4 snap -> divisible by 4
+
+// ===== Web Worker Resampler =====
+// Uses separate same-origin file: upscale-worker.js (precached by SW)
+// Kernel definitions (Mitchell-Netravali family) duplicated in worker for independence
+// Catmull-Rom: B=0, C=0.5
+// Mitchell: B=1/3, C=1/3
+// RobidouxSharp (ImageMagick): B=0.375, C=0.375 - verified from ImageMagick resize.c
+// Lanczos3: 3-lobe windowed sinc
+
+let resamplerWorker = null;
+let resamplerCancelToken = { cancelled: false };
+
+function createResamplerWorker() {
+  if (resamplerWorker) return resamplerWorker;
+  resamplerWorker = new Worker('/upscale-worker.js');
+  return resamplerWorker;
+}
+
+function terminateResamplerWorker(){
+  if(resamplerWorker){
+    resamplerWorker.terminate();
+    resamplerWorker = null;
+  }
+}
+
+function upscaleInWorker(srcCanvas, dstW, dstH, kernel, progressCb){
+  return new Promise((resolve, reject) => {
+    const worker = createResamplerWorker();
+    resamplerCancelToken.cancelled = false;
+
+    const ctx = srcCanvas.getContext('2d');
+    const srcW = srcCanvas.width;
+    const srcH = srcCanvas.height;
+    const srcData = ctx.getImageData(0, 0, srcW, srcH).data;
+
+    // Convert to Float32Array for transfer
+    const floatData = new Float32Array(srcData.length);
+    for(let i = 0; i < srcData.length; i++) floatData[i] = srcData[i];
+
+    worker.onmessage = function(e){
+      const msg = e.data;
+      if(msg.type === 'progress'){
+        if(progressCb) progressCb(msg.progress);
+      }else if(msg.type === 'done'){
+        const resultCanvas = document.createElement('canvas');
+        resultCanvas.width = msg.dstW;
+        resultCanvas.height = msg.dstH;
+        const resultCtx = resultCanvas.getContext('2d');
+        const imageData = new ImageData(new Uint8ClampedArray(msg.data), msg.dstW, msg.dstH);
+        resultCtx.putImageData(imageData, 0, 0);
+        resolve(resultCanvas);
+      }else if(msg.type === 'error'){
+        reject(new Error(msg.error));
+      }
+    };
+
+    worker.postMessage({
+      srcData: floatData,
+      srcW, srcH,
+      dstW, dstH,
+      kernel,
+      cancelToken: resamplerCancelToken
+    }, [floatData.buffer]);
+  });
+}
+
+function cancelUpscale(){
+  resamplerCancelToken.cancelled = true;
+}
+
 function loadTexture(event){
   const file = event.target.files[0];
   if(!file) return;
@@ -4990,27 +5233,76 @@ function loadTexture(event){
         'Texture ini berukuran <strong>'+img.width+'x'+img.height+'</strong> (4K+). Generate 9 map sekaligus di resolusi ini bisa bikin device kamu <strong>lag</strong> dan preview <strong>loading lambat</strong>, terutama di HP dengan spesifikasi standar.<br><br>Rekomendasi: gunakan resolusi 1K-2K untuk performa terbaik. Tapi kamu tetap bisa lanjut kalau device kamu mumpuni.';
       document.getElementById("texwarn-overlay").style.display = "flex";
       document.getElementById("tex-status").textContent = "⚠ Menunggu konfirmasi...";
+      texwarnActiveFor = 'import';
       return;
     }
+    // Show upscale card for all textures
+    if(window.texUpscale) window.texUpscale.showCard(img.width, img.height);
     finishLoadTexture(img, url);
   };
   img.src = url;
 }
-function finishLoadTexture(img, url){
-  texCanvas = document.createElement("canvas");
-  texCanvas.width = img.width;
-  texCanvas.height = img.height;
-  const ctx = texCanvas.getContext("2d");
-  ctx.drawImage(img, 0, 0);
+async function finishLoadTexture(img, url){
+  // Get upscale options
+  const upscaleOpts = window.texUpscale ? window.texUpscale.getOpts() : null;
+  let finalW = img.width;
+  let finalH = img.height;
+
+  if(upscaleOpts){
+    const size = computeUpscaleSize(img.width, img.height, upscaleOpts);
+    finalW = size.w;
+    finalH = size.h;
+  }
+
+  let texCanvasResult;
+
+  if(upscaleOpts && (finalW !== img.width || finalH !== img.height)){
+    // Upscale using Web Worker
+    const st = document.getElementById("tex-status");
+    st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text"><span data-t-id="Upscaling texture..." data-t-en="Upscaling texture...">Upscaling texture...</span></div></div>';
+
+    // Create temporary canvas with source image
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = img.width;
+    srcCanvas.height = img.height;
+    const srcCtx = srcCanvas.getContext('2d');
+    srcCtx.drawImage(img, 0, 0);
+
+    try{
+      texCanvasResult = await upscaleInWorker(srcCanvas, finalW, finalH, upscaleOpts.filter || 'lanczos3', (progress) => {
+        const pct = Math.round(progress * 50);
+        st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Upscaling: ' + pct + '%</div></div>';
+      });
+    }catch(err){
+      // Fallback to canvas drawImage
+      console.warn('Worker upscale failed, falling back:', err);
+      texCanvasResult = document.createElement('canvas');
+      texCanvasResult.width = finalW;
+      texCanvasResult.height = finalH;
+      const ctx = texCanvasResult.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, finalW, finalH);
+    }
+  }else{
+    // No upscaling needed
+    texCanvasResult = document.createElement('canvas');
+    texCanvasResult.width = finalW;
+    texCanvasResult.height = finalH;
+    const ctx = texCanvasResult.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+  }
+
+  texCanvas = texCanvasResult;
   URL.revokeObjectURL(url);
 
   const st = document.getElementById("tex-status");
-  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating 9 texture maps ('+img.width+'x'+img.height+')... Mohon tunggu, jangan tutup halaman.</div></div>';
+  st.innerHTML = '<div class="tex-loading-wrap"><div class="tex-spinner"></div><div class="tex-loading-text">Generating 10 texture maps ('+finalW+'x'+finalH+')... Mohon tunggu, jangan tutup halaman.</div></div>';
 
   setTimeout(() => {
     generateMaps(texCanvas);
     document.getElementById("tex-result").style.display = "block";
-    st.textContent = "✓ Texture loaded: "+img.width+"x"+img.height;
+    st.textContent = "✓ Texture loaded: "+finalW+"x"+finalH + (upscaleOpts ? " (upscaled from "+img.width+"x"+img.height+")" : "");
   }, 50);
 }
 function cancelTexWarn(){
@@ -5021,11 +5313,213 @@ function cancelTexWarn(){
   document.getElementById("tex-input").value = "";
 }
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("texwarn-continue-btn").addEventListener("click", () => {
+  let texwarnActiveFor = null; // 'import' | 'upscale' | null
+  const originalContinueHandler = function(){
     document.getElementById("texwarn-overlay").style.display = "none";
-    if(pendingTexImg) finishLoadTexture(pendingTexImg, pendingTexUrl);
+    if(texwarnActiveFor === 'import' && pendingTexImg){
+      if(window.texUpscale) window.texUpscale.showCard(pendingTexImg.width, pendingTexImg.height);
+      finishLoadTexture(pendingTexImg, pendingTexUrl);
+    }
     pendingTexImg = null; pendingTexUrl = null;
-  });
+    texwarnActiveFor = null;
+  };
+  document.getElementById("texwarn-continue-btn").addEventListener("click", originalContinueHandler);
+
+  // Upscale UI logic
+  const upscaleMode = document.getElementById('tex-upscale-mode');
+  const upscaleApplies = document.getElementById('tex-upscale-applies');
+  const upscaleCustom = document.getElementById('tex-upscale-custom');
+  const upscaleCustomW = document.getElementById('tex-upscale-custom-w');
+  const upscaleCustomH = document.getElementById('tex-upscale-custom-h');
+  const upscaleLock = document.getElementById('tex-upscale-lock');
+  const upscaleFilter = document.getElementById('tex-upscale-filter');
+  const upscaleSnap = document.getElementById('tex-upscale-snap');
+  const upscalePreview = document.getElementById('tex-upscale-preview');
+  const upscaleCard = document.getElementById('tex-upscale-card');
+
+  let texSourceWidth = 0;
+  let texSourceHeight = 0;
+  let lastSafeMode = 'off';
+
+  function updateUpscalePreview(){
+    if(!texSourceWidth || !texSourceHeight){ return; }
+    const modeVal = upscaleMode.value;
+    if(modeVal === 'off'){
+      upscalePreview.textContent = '';
+      return;
+    }
+    let opts = { onlyUpscale: true, snap: upscaleSnap.value };
+    if(modeVal.startsWith('factor-')){
+      opts.mode = 'factor';
+      opts.value = parseInt(modeVal.split('-')[1], 10);
+    }else if(modeVal.startsWith('pixels-')){
+      opts.mode = 'pixels';
+      opts.value = parseInt(modeVal.split('-')[1], 10);
+      opts.appliesTo = upscaleApplies.value;
+    }else if(modeVal === 'custom'){
+      opts.mode = 'custom';
+      opts.customW = parseInt(upscaleCustomW.value, 10) || texSourceWidth;
+      opts.customH = parseInt(upscaleCustomH.value, 10) || texSourceHeight;
+      opts.lockAspect = upscaleLock.checked;
+    }
+    const res = computeUpscaleSize(texSourceWidth, texSourceHeight, opts);
+    const mp = (res.w * res.h / 1000000).toFixed(2);
+    const mbPerMap = (res.w * res.h * 4 / 1048576).toFixed(1);
+    const mbTen = (res.w * res.h * 4 * 10 / 1048576).toFixed(1);
+    const cappedNote = res.capped ? ' ⚠ ' + (res.reason || 'capped') : '';
+    upscalePreview.innerHTML = '<span data-t-id="Output" data-t-en="Output">Output</span>: ' + res.w + 'x' + res.h + ' (' + mp + ' MP, ~' + mbPerMap + ' MB/map, ~' + mbTen + ' MB/10 maps)' + cappedNote;
+
+    // Check for high-upscale warning conditions
+    const longSide = Math.max(res.w, res.h);
+    const isHighUpscale = longSide >= 4096 || res.w * res.h >= 16000000 || res.capped;
+    if(isHighUpscale){
+      const sizeKey = res.w + 'x' + res.h;
+      if(!upscaleConfirmedSizes.has(sizeKey)){
+        showHighUpscaleWarning(res, sizeKey);
+      }
+    }
+  }
+
+  // High-upscale warning modal (reuses texwarn-overlay style)
+  const upscaleConfirmedSizes = new Set();
+  let pendingHighUpscaleResolve = null;
+
+  function showHighUpscaleWarning(res, sizeKey){
+    // Pause the mode change - revert to last safe mode
+    const prevMode = upscaleMode.value;
+    upscaleMode.value = lastSafeMode || 'off';
+    onModeChange();
+
+    const mp = (res.w * res.h / 1000000).toFixed(2);
+    const mbPerMap = (res.w * res.h * 4 / 1048576).toFixed(1);
+    const mbTen = (res.w * res.h * 4 * 10 / 1048576).toFixed(1);
+
+    const warnBody = document.getElementById('texwarn-body');
+    warnBody.innerHTML =
+      '<div style="text-align:center">' +
+      '<p style="margin-bottom:8px"><span data-t-id="High upscale selected" data-t-en="High upscale selected">High upscale selected</span>: <strong>' + res.w + 'x' + res.h + '</strong> (' + mp + ' MP)</p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:var(--muted)"><span data-t-id="Estimated memory" data-t-en="Estimated memory">Estimated memory</span>: ~' + mbPerMap + ' MB/map, ~' + mbTen + ' MB for 10 maps</p>' +
+      '<p style="margin-bottom:12px;font-size:9px;color:#ffaa00"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <span data-t-id="UI may lag or tab may crash on phones" data-t-en="UI may lag or tab may crash on phones">UI may lag or tab may crash on phones</span></p>' +
+      '<p style="margin-bottom:12px;font-size:9px;color:var(--accent)"><span data-t-id="Tip" data-t-en="Tip">Tip</span>: <span data-t-id="Try 2x or 2048 px for safer performance" data-t-en="Try 2x or 2048 px for safer performance">Try 2x or 2048 px for safer performance</span></p>' +
+      '</div>';
+
+    const overlay = document.getElementById('texwarn-overlay');
+    const continueBtn = document.getElementById('texwarn-continue-btn');
+
+    // Show "Choose Lower" button
+    let lowerBtn = document.getElementById('texwarn-lower-btn');
+    if(!lowerBtn){
+      lowerBtn = document.createElement('button');
+      lowerBtn.id = 'texwarn-lower-btn';
+      lowerBtn.className = 'warn-btn-continue';
+      lowerBtn.style.marginLeft = '8px';
+      lowerBtn.style.background = 'var(--btn-secondary-bg, #333)';
+      lowerBtn.style.borderColor = 'var(--border)';
+      continueBtn.parentNode.insertBefore(lowerBtn, continueBtn.nextSibling);
+    }
+    lowerBtn.style.display = 'inline-block';
+
+    continueBtn.textContent = 'Continue Anyway';
+
+    // Set flag for upscale warning
+    texwarnActiveFor = 'upscale';
+    overlay.style.display = 'flex';
+
+    // One-time handlers
+    const onContinue = function(){
+      upscaleConfirmedSizes.add(sizeKey);
+      cleanup();
+      // Re-apply the high mode
+      upscaleMode.value = prevMode;
+      onModeChange();
+    };
+    const onLower = function(){
+      cleanup();
+    };
+    const onKeydown = function(e){
+      if(e.key === 'Escape') onLower();
+    };
+    const onOverlayClick = function(e){
+      if(e.target === overlay) onLower();
+    };
+
+    function cleanup(){
+      overlay.style.display = 'none';
+      lowerBtn.style.display = 'none';
+      continueBtn.textContent = 'Lanjutkan Tetap'; // restore default
+      document.removeEventListener('keydown', onKeydown);
+      overlay.onclick = null;
+      continueBtn.removeEventListener('click', onContinue);
+      lowerBtn.removeEventListener('click', onLower);
+      texwarnActiveFor = null;
+    }
+
+    continueBtn.addEventListener('click', onContinue);
+    lowerBtn.addEventListener('click', onLower);
+    document.addEventListener('keydown', onKeydown);
+    overlay.onclick = onOverlayClick;
+  }
+
+  function onModeChange(){
+    const modeVal = upscaleMode.value;
+    const isCustom = modeVal === 'custom';
+    const isOff = modeVal === 'off';
+    upscaleApplies.style.display = isCustom || isOff ? 'none' : 'block';
+    upscaleCustom.style.display = isCustom ? 'grid' : 'none';
+    if(!isOff) lastSafeMode = modeVal;
+    if(texSourceWidth && texSourceHeight){
+      if(isCustom){
+        upscaleCustomW.value = texSourceWidth;
+        upscaleCustomH.value = texSourceHeight;
+      }
+      updateUpscalePreview();
+    }
+  }
+  upscaleMode.addEventListener('change', onModeChange);
+  upscaleApplies.addEventListener('change', updateUpscalePreview);
+  upscaleCustomW.addEventListener('input', updateUpscalePreview);
+  upscaleCustomH.addEventListener('input', updateUpscalePreview);
+  upscaleLock.addEventListener('change', updateUpscalePreview);
+  upscaleSnap.addEventListener('change', updateUpscalePreview);
+
+  // Expose for use in finishLoadTexture
+  window.texUpscale = {
+    getOpts: function(){
+      const modeVal = upscaleMode.value;
+      if(modeVal === 'off') return null;
+      let opts = { onlyUpscale: true, snap: upscaleSnap.value, filter: upscaleFilter.value };
+      if(modeVal.startsWith('factor-')){
+        opts.mode = 'factor';
+        opts.value = parseInt(modeVal.split('-')[1], 10);
+      }else if(modeVal.startsWith('pixels-')){
+        opts.mode = 'pixels';
+        opts.value = parseInt(modeVal.split('-')[1], 10);
+        opts.appliesTo = upscaleApplies.value;
+      }else if(modeVal === 'custom'){
+        opts.mode = 'custom';
+        opts.customW = parseInt(upscaleCustomW.value, 10) || texSourceWidth;
+        opts.customH = parseInt(upscaleCustomH.value, 10) || texSourceHeight;
+        opts.lockAspect = upscaleLock.checked;
+      }
+      return opts;
+    },
+    showCard: function(srcW, srcH){
+      texSourceWidth = srcW;
+      texSourceHeight = srcH;
+      upscaleCard.style.display = 'block';
+      upscaleCustomW.value = srcW;
+      upscaleCustomH.value = srcH;
+      updateUpscalePreview();
+    },
+    hideCard: function(){
+      upscaleCard.style.display = 'none';
+      upscaleMode.value = 'off';
+      texSourceWidth = 0;
+      texSourceHeight = 0;
+    },
+    getLastSafeMode: function(){ return lastSafeMode; },
+    setMode: function(mode){ upscaleMode.value = mode; onModeChange(); }
+  };
 });
 
 function generateMaps(src){

@@ -5,7 +5,7 @@
 // - API routes: not intercepted at all
 // - Does NOT skipWaiting on install: the page asks for it after the user taps "Update"
 
-const VERSION = 'v9';
+const VERSION = 'v10';
 const STATIC_CACHE = '3drbxmt-static-' + VERSION;
 const CDN_CACHE = '3drbxmt-cdn-v1'; // CDN URLs are version-pinned, so this one can persist across releases
 
@@ -14,7 +14,7 @@ const PAGES = [
   '/maintenance.html', '/privacy.html', '/terms.html'
 ];
 const FILES = [
-  '/manifest.json', '/favicon.png', '/icons/icon-192.png', '/icons/icon-512.png'
+  '/manifest.json', '/favicon.png', '/icons/icon-192.png', '/icons/icon-512.png', '/upscale-worker.js'
 ];
 const CDN_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;600;700&display=swap',
