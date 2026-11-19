@@ -5385,9 +5385,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let pendingHighUpscaleResolve = null;
 
   function showHighUpscaleWarning(res, sizeKey){
-    // Pause the mode change - revert to last safe mode
+    // Pause the mode change - revert to 'off' to avoid recursion if lastSafeMode is also high
     const prevMode = upscaleMode.value;
-    upscaleMode.value = lastSafeMode || 'off';
+    upscaleMode.value = 'off';
     onModeChange();
 
     const mp = (res.w * res.h / 1000000).toFixed(2);
