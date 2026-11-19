@@ -2030,6 +2030,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
               <option value="lanczos3" data-t-id="Lanczos3 (sharp, good for photos)" data-t-en="Lanczos3 (sharp, good for photos)">Lanczos3</option>
               <option value="robidouxsharp" data-t-id="RobidouxSharp (balanced, IM default)" data-t-en="RobidouxSharp (balanced, IM default)">RobidouxSharp</option>
               <option value="catmullrom" data-t-id="Catmull-Rom (sharp, B=0 C=0.5)" data-t-en="Catmull-Rom (sharp, B=0 C=0.5)">Catmull-Rom</option>
+              <option value="spline64-2xssaa" data-t-id="2xSSAA Spline64 (max quality, 2-pass)" data-t-en="2xSSAA Spline64 (max quality, 2-pass)">2xSSAA Spline64</option>
               <option value="nearest" data-t-id="Nearest (pixel art, no blur)" data-t-en="Nearest (pixel art, no blur)">Nearest</option>
             </select>
           </div>
@@ -5487,6 +5488,86 @@ document.addEventListener("DOMContentLoaded", () => {
     overlay.onclick = onOverlayClick;
   }
 
+  // ===== 2xSSAA Spline64 Specific Warning =====
+  // This is the HIGHEST quality upscale (2-pass: 4x up → 2x down with 4-lobe Spline64)
+  // ~4x compute cost, much higher memory during processing
+  const spline64Confirmed = new Set();
+
+  function showSpline64Warning(){
+    // Always revert filter to previous safe choice
+    const prevFilter = upscaleFilter.value;
+    // Don't auto-revert here - let the modal handle it via the "Choose Lower" button
+
+    const overlay = document.getElementById('texwarn-overlay');
+    const warnBody = document.getElementById('texwarn-body');
+    const continueBtn = document.getElementById('texwarn-continue-btn');
+
+    warnBody.innerHTML =
+      '<div style="text-align:center">' +
+      '<p style="margin-bottom:10px;color:#ff4444;font-size:12px;font-weight:700;letter-spacing:1px">⚠ USER BE ADVISED ⚠</p>' +
+      '<p style="margin-bottom:8px;font-size:10px"><span data-t-id="Maximum Quality Upscale" data-t-en="Maximum Quality Upscale">Maximum Quality Upscale</span>: <strong>2xSSAA Spline64</strong></p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ffaa00"><span data-t-id="Process" data-t-en="Process">Process</span>: 2-pass supersampling (4x up → 2x down with 4-lobe Spline64)</p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ff6666"><span data-t-id="Cost" data-t-en="Cost">Cost</span>: ~4x compute time, <strong>much higher memory</strong> during processing</p>' +
+      '<p style="margin-bottom:8px;font-size:9px;color:#ff4444"><span data-t-id="Risk" data-t-en="Risk">Risk</span>: <strong>Tab may freeze/crash on phones</strong>, desktop may lag significantly</p>' +
+      '<p style="margin-bottom:12px;font-size:9px;color:var(--accent)"><span data-t-id="Recommended" data-t-en="Recommended">Recommended</span>: Use <strong>Lanczos3</strong> or <strong>RobidouxSharp</strong> for normal upscaling</p>' +
+      '</div>';
+
+    // Show "Choose Lower" button
+    let lowerBtn = document.getElementById('texwarn-lower-btn');
+    if(!lowerBtn){
+      lowerBtn = document.createElement('button');
+      lowerBtn.id = 'texwarn-lower-btn';
+      lowerBtn.className = 'warn-btn-continue';
+      lowerBtn.style.marginLeft = '8px';
+      lowerBtn.style.background = 'var(--btn-secondary-bg, #333)';
+      lowerBtn.style.borderColor = 'var(--border)';
+      continueBtn.parentNode.insertBefore(lowerBtn, continueBtn.nextSibling);
+    }
+    lowerBtn.style.display = 'inline-block';
+
+    continueBtn.textContent = 'Continue Anyway';
+    continueBtn.style.background = '#cc3333'; // Red for danger
+
+    texwarnActiveFor = 'spline64';
+    overlay.style.display = 'flex';
+
+    // One-time handlers
+    const onContinue = function(){
+      spline64Confirmed.add('spline64-2xssaa');
+      cleanup();
+      // Keep the filter selection
+    };
+    const onLower = function(){
+      // Revert to a safe filter
+      upscaleFilter.value = 'robidouxsharp';
+      cleanup();
+      updateUpscalePreview();
+    };
+    const onKeydown = function(e){
+      if(e.key === 'Escape') onLower();
+    };
+    const onOverlayClick = function(e){
+      if(e.target === overlay) onLower();
+    };
+
+    function cleanup(){
+      overlay.style.display = 'none';
+      lowerBtn.style.display = 'none';
+      continueBtn.textContent = 'Lanjutkan Tetap';
+      continueBtn.style.background = ''; // reset
+      document.removeEventListener('keydown', onKeydown);
+      overlay.onclick = null;
+      continueBtn.removeEventListener('click', onContinue);
+      lowerBtn.removeEventListener('click', onLower);
+      texwarnActiveFor = null;
+    }
+
+    continueBtn.addEventListener('click', onContinue);
+    lowerBtn.addEventListener('click', onLower);
+    document.addEventListener('keydown', onKeydown);
+    overlay.onclick = onOverlayClick;
+  }
+
   function onModeChange(){
     const modeVal = upscaleMode.value;
     const isCustom = modeVal === 'custom';
@@ -5508,6 +5589,12 @@ document.addEventListener("DOMContentLoaded", () => {
   upscaleCustomH.addEventListener('input', updateUpscalePreview);
   upscaleLock.addEventListener('change', updateUpscalePreview);
   upscaleSnap.addEventListener('change', updateUpscalePreview);
+  upscaleFilter.addEventListener('change', function(){
+    if(upscaleFilter.value === 'spline64-2xssaa'){
+      showSpline64Warning();
+    }
+    updateUpscalePreview();
+  });
 
   // Expose for use in finishLoadTexture
   window.texUpscale = {

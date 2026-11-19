@@ -5,6 +5,7 @@ const KERNELS = {
   lanczos3: { type: 'lanczos', lobes: 3, radius: 3 },
   robidouxsharp: { type: 'mitchell', B: 0.375, C: 0.375, radius: 2 },
   catmullrom: { type: 'mitchell', B: 0, C: 0.5, radius: 2 },
+  spline64: { type: 'spline', lobes: 4, radius: 4 },
   nearest: { type: 'nearest', radius: 0.5 }
 };
 
@@ -24,6 +25,29 @@ function lanczosWeight(x, lobes) {
   if (absX >= lobes) return 0;
   const piX = Math.PI * absX;
   return (lobes * Math.sin(piX) * Math.sin(piX / lobes)) / (piX * piX);
+}
+
+// Spline64 = 4-lobe B-spline (Keys spline with B=0, C=0.5, but 4 lobes)
+// Using the standard cubic B-spline basis scaled to 4 lobes
+function splineWeight(x, lobes) {
+  const absX = Math.abs(x);
+  if (absX >= lobes) return 0;
+  // Uniform B-spline basis function of degree 3 (cubic), 4 lobes
+  // B3(x) = 1/6 * (|x|^3 - 4|x|^2 + 6|x| - 4) for 1 <= |x| < 2
+  // B3(x) = 1/6 * (4 - 6|x|^2 + 3|x|^3) for 0 <= |x| < 1
+  // B3(x) = 1/6 * (2 - |x|)^3 for 2 <= |x| < 3
+  // B3(x) = 1/6 * (4 - |x|)^3 for 3 <= |x| < 4
+  // Normalized to sum to 1
+  if (absX < 1) {
+    return (4 - 6 * absX * absX + 3 * absX * absX * absX) / 6;
+  } else if (absX < 2) {
+    return (4 - 8 * absX + 5 * absX * absX - absX * absX * absX) / 6;
+  } else if (absX < 3) {
+    return Math.pow(2 - absX, 3) / 6;
+  } else if (absX < 4) {
+    return Math.pow(4 - absX, 3) / 6;
+  }
+  return 0;
 }
 
 function buildKernelWeights(kernelName, scale) {
@@ -47,6 +71,8 @@ function buildKernelWeights(kernelName, scale) {
       w = mitchellWeight(x, kernel.B, kernel.C);
     } else if (kernel.type === 'lanczos') {
       w = lanczosWeight(x, kernel.lobes);
+    } else if (kernel.type === 'spline') {
+      w = splineWeight(x, kernel.lobes);
     }
     weights[i] = w;
     sum += w;
@@ -55,6 +81,20 @@ function buildKernelWeights(kernelName, scale) {
   for (let i = 0; i < size; i++) weights[i] /= sum;
 
   return { weights, radius: support, isNearest: false };
+}
+
+// Single resample pass (horizontal then vertical)
+function resamplePass(srcData, srcW, srcH, dstW, dstH, kernelName) {
+  const hKernel = buildKernelWeights(kernelName, srcW / dstW);
+  const vKernel = buildKernelWeights(kernelName, srcH / dstH);
+
+  // Horizontal pass
+  const hData = resampleHorizontal(srcData, srcW, srcH, dstW, hKernel.weights, hKernel.radius, hKernel.isNearest);
+
+  // Vertical pass
+  const vData = resampleVertical(hData, dstW, srcH, dstH, vKernel.weights, vKernel.radius, vKernel.isNearest);
+
+  return vData;
 }
 
 function resampleHorizontal(srcData, srcW, srcH, dstW, kernelWeights, radius, isNearest) {
@@ -156,25 +196,67 @@ self.onmessage = function(e) {
   const { srcData, srcW, srcH, dstW, dstH, kernel, cancelToken } = e.data;
 
   try {
-    const hKernel = buildKernelWeights(kernel, srcW / dstW);
-    const vKernel = buildKernelWeights(kernel, srcH / dstH);
+    // Check if this is the 2xSSAA Spline64 special mode
+    const isSpline64_2xSSAA = (kernel === 'spline64-2xssaa');
+    const scaleX = srcW / dstW;
+    const scaleY = srcH / dstH;
+    const avgScale = (scaleX + scaleY) / 2; // approximate uniform scale
 
-    // Horizontal pass
-    const hData = resampleHorizontal(srcData, srcW, srcH, dstW, hKernel.weights, hKernel.radius, hKernel.isNearest);
+    let finalData;
 
-    // Progress
-    self.postMessage({ type: 'progress', progress: 0.5 });
+    if (isSpline64_2xSSAA && Math.abs(avgScale - 2) < 0.1) {
+      // 2xSSAA Spline64: 2-pass supersampling (4x up → 2x down with Spline64)
+      // This is specifically for ~2x upscale
+      const midW = srcW * 2; // 2x intermediate (4x relative to final 2x output = wait...)
+      // Actually: target is 2x. 2xSSAA means:
+      // Pass 1: upscale 4x (2x the target scale) → intermediate at 4x original
+      // Pass 2: downscale 2x → final at 2x original
+      // So if src=100, dst=200 (2x), mid=400 (4x), then downscale to 200
 
-    // Check cancel
-    if (cancelToken && cancelToken.cancelled) return;
+      const intermediateW = srcW * 4;
+      const intermediateH = srcH * 4;
 
-    // Vertical pass
-    const vData = resampleVertical(hData, dstW, srcH, dstH, vKernel.weights, vKernel.radius, vKernel.isNearest);
+      // Progress: starting first pass (4x up)
+      self.postMessage({ type: 'progress', progress: 0.1 });
+
+      // Pass 1: 4x upscale with Spline64
+      const midData = resamplePass(srcData, srcW, srcH, intermediateW, intermediateH, 'spline64');
+
+      // Progress: first pass done
+      self.postMessage({ type: 'progress', progress: 0.5 });
+
+      // Check cancel
+      if (cancelToken && cancelToken.cancelled) return;
+
+      // Pass 2: 2x downscale with Spline64 (from 4x to 2x)
+      finalData = resamplePass(midData, intermediateW, intermediateH, dstW, dstH, 'spline64');
+
+      // Progress: second pass done
+      self.postMessage({ type: 'progress', progress: 0.9 });
+
+    } else {
+      // Single-pass for all other kernels (including spline64 non-SSAA)
+      const effectiveKernel = isSpline64_2xSSAA ? 'spline64' : kernel;
+      const hKernel = buildKernelWeights(effectiveKernel, scaleX);
+      const vKernel = buildKernelWeights(effectiveKernel, scaleY);
+
+      // Horizontal pass
+      const hData = resampleHorizontal(srcData, srcW, srcH, dstW, hKernel.weights, hKernel.radius, hKernel.isNearest);
+
+      // Progress
+      self.postMessage({ type: 'progress', progress: 0.5 });
+
+      // Check cancel
+      if (cancelToken && cancelToken.cancelled) return;
+
+      // Vertical pass
+      finalData = resampleVertical(hData, dstW, srcH, dstH, vKernel.weights, vKernel.radius, vKernel.isNearest);
+    }
 
     // Convert to Uint8ClampedArray
-    const result = new Uint8ClampedArray(vData.length);
-    for (let i = 0; i < vData.length; i++) {
-      result[i] = Math.min(255, Math.max(0, Math.round(vData[i])));
+    const result = new Uint8ClampedArray(finalData.length);
+    for (let i = 0; i < finalData.length; i++) {
+      result[i] = Math.min(255, Math.max(0, Math.round(finalData[i])));
     }
 
     self.postMessage({ type: 'done', data: result, dstW, dstH }, [result.buffer]);
