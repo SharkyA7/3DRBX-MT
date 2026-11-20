@@ -6,3 +6,5 @@ cloudscraper
 lz4
 requests
 msgpack
+bcrypt
+supabase

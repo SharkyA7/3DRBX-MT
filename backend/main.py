@@ -3,6 +3,9 @@ from functools import wraps
 import httpx, os, io, zipfile, time, json, struct, requests, secrets
 import lz4.block, re
 from urllib.parse import urlparse, urljoin, urlencode
+import bcrypt
+from supabase import create_client, Client
+from datetime import datetime, timedelta
 
 
 def extract_asset_id(raw_id: str) -> int:
@@ -1844,32 +1847,305 @@ def get_current_user_id():
     return None, "Authentication required"
 
 
+# ── API KEY HELPERS ──────────────────────────────────────────────────
+
+def generate_api_key() -> tuple[str, str]:
+    """Returns (full_key, key_prefix). Full key shown once; prefix stored for lookup."""
+    prefix = secrets.token_hex(API_KEY_PREFIX_LEN // 2)  # 4 hex chars
+    secret = secrets.token_urlsafe(API_KEY_RANDOM_BYTES)  # ~27 chars
+    full_key = f"{API_KEY_PREFIX}_{prefix}_{secret}"
+    return full_key, prefix
+
+
+def hash_api_key(key: str) -> str:
+    """bcrypt hash for storage."""
+    return bcrypt.hashpw(key.encode(), bcrypt.gensalt(BCRYPT_COST)).decode()
+
+
+def verify_api_key(key: str, key_hash: str) -> bool:
+    """Constant-time verify."""
+    return bcrypt.checkpw(key.encode(), key_hash.encode())
+
+
+def check_api_key_rate_limit(key_id: str, rpm: int, rph: int):
+    """Returns (response, status) if over limit, else None."""
+    now = time.time()
+    minute_key = f"{key_id}:m:{int(now // 60)}"
+    hour_key = f"{key_id}:h:{int(now // 3600)}"
+
+    for bucket_key, limit, window in [
+        (minute_key, rpm, 60),
+        (hour_key, rph, 3600)
+    ]:
+        bucket = _api_key_rate_buckets.setdefault(bucket_key, 0)
+        if bucket >= limit:
+            retry_after = int(window - (now % window)) + 1
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "retry_after": retry_after,
+                "limit": limit,
+                "window_seconds": window
+            }), 429
+        _api_key_rate_buckets[bucket_key] = bucket + 1
+
+    return None
+
+
+def require_api_key(required_scopes: list[str] = None):
+    """
+    Decorator for routes that accept API key authentication.
+    Checks Authorization: Bearer <key> header.
+    Validates: exists, not expired, not revoked, scopes match, rate limit OK.
+    Sets g.api_key_user_id, g.api_key_scopes, g.api_key_id for the route.
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if not API_KEY_SUPABASE:
+                return jsonify({"error": "API key service unavailable"}), 503
+
+            auth = request.headers.get("Authorization", "")
+            if not auth.startswith("Bearer "):
+                return jsonify({"error": "Missing or invalid Authorization header"}), 401
+
+            provided_key = auth[7:].strip()
+            if not provided_key.startswith(f"{API_KEY_PREFIX}_"):
+                return jsonify({"error": "Invalid API key format"}), 401
+
+            # Extract prefix for fast lookup
+            try:
+                _, prefix, _ = provided_key.split("_", 2)
+            except ValueError:
+                return jsonify({"error": "Invalid API key format"}), 401
+
+            # Fetch candidate by prefix (single row expected)
+            resp = API_KEY_SUPABASE.table("api_keys") \
+                .select("*") \
+                .eq("key_prefix", prefix) \
+                .is_("revoked_at", "null") \
+                .gt("expires_at", datetime.utcnow().isoformat()) \
+                .execute()
+
+            if not resp.data:
+                return jsonify({"error": "Invalid or expired API key"}), 401
+
+            key_row = resp.data[0]
+
+            # Verify bcrypt hash
+            if not verify_api_key(provided_key, key_row["key_hash"]):
+                return jsonify({"error": "Invalid API key"}), 401
+
+            # Scope check
+            key_scopes = set(key_row["scopes"] or [])
+            if required_scopes and not set(required_scopes).issubset(key_scopes):
+                return jsonify({
+                    "error": "Insufficient scopes",
+                    "required": required_scopes,
+                    "have": list(key_scopes)
+                }), 403
+
+            # Rate limiting (per-key, sliding window)
+            rl_resp = check_api_key_rate_limit(key_row["id"], key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
+            if rl_resp:
+                return rl_resp
+
+            # Update last_used_at (async, best-effort)
+            API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_row["id"]).execute()
+
+            # Attach to request context
+            g.api_key_user_id = key_row["user_id"]
+            g.api_key_scopes = key_scopes
+            g.api_key_id = key_row["id"]
+            g.auth_via = "api_key"
+
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
+def dual_auth(required_scopes=None):
+    """Allows either session auth (existing) or API key auth."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            # Try session first
+            user_id, err = get_current_user_id()
+            if not err:
+                g.auth_via = "session"
+                g.user_id = user_id
+                return f(*args, **kwargs)
+
+            # Try API key
+            if not API_KEY_SUPABASE:
+                return jsonify({"error": "Auth service unavailable"}), 503
+
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                provided_key = auth[7:].strip()
+                if provided_key.startswith(f"{API_KEY_PREFIX}_"):
+                    try:
+                        _, prefix, _ = provided_key.split("_", 2)
+                    except ValueError:
+                        return jsonify({"error": "Invalid API key format"}), 401
+
+                    resp = API_KEY_SUPABASE.table("api_keys") \
+                        .select("*") \
+                        .eq("key_prefix", prefix) \
+                        .is_("revoked_at", "null") \
+                        .gt("expires_at", datetime.utcnow().isoformat()) \
+                        .execute()
+
+                    if resp.data:
+                        key_row = resp.data[0]
+                        if verify_api_key(provided_key, key_row["key_hash"]):
+                            key_scopes = set(key_row["scopes"] or [])
+                            if required_scopes is None or set(required_scopes).issubset(key_scopes):
+                                rl_resp = check_api_key_rate_limit(key_row["id"], key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
+                                if not rl_resp:
+                                    API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_row["id"]).execute()
+                                    g.api_key_user_id = key_row["user_id"]
+                                    g.api_key_scopes = key_scopes
+                                    g.api_key_id = key_row["id"]
+                                    g.auth_via = "api_key"
+                                    return f(*args, **kwargs)
+                                return rl_resp
+                            return jsonify({
+                                "error": "Insufficient scopes",
+                                "required": required_scopes,
+                                "have": list(key_scopes)
+                            }), 403
+                        return jsonify({"error": "Invalid API key"}), 401
+                    return jsonify({"error": "Invalid or expired API key"}), 401
+
+            return jsonify({"error": "Authentication required"}), 401
+        return wrapped
+    return decorator
+
+
 # ── API KEY MANAGEMENT ────────────────────────────────────────────────
-# Part 2: will be implemented with Supabase storage.
-# Currently returns 503 to avoid NameError from removed in-memory dicts.
 
 @app.post("/api/admin/keys")
+@dual_auth()  # Requires session auth (existing Part 1 OAuth)
 def create_api_key():
-    """Create a new API key (not yet implemented; requires Supabase)."""
-    return jsonify({"error_code": "api_keys_unavailable"}), 503
+    """
+    Body: { "name": "My bot", "scopes": ["catalog"], "expires_at": "2026-12-31T23:59:59Z", "rate_limit_rpm": 60, "rate_limit_rph": 1000 }
+    Returns: { "key": "3drbx_abcd_x7k9m2n1...", "key_id": "uuid", "prefix": "abcd", "expires_at": "...", "scopes": [...] }
+    Key shown ONCE — never returned again.
+    """
+    user_id, err = get_current_user_id()
+    if err:
+        return jsonify({"error": err}), 401
+
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    scopes = data.get("scopes") or []
+    expires_at = data.get("expires_at")
+    rpm = int(data.get("rate_limit_rpm", 60))
+    rph = int(data.get("rate_limit_rph", 1000))
+
+    # Validation
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    if len(name) > 100:
+        return jsonify({"error": "name too long (max 100)"}), 400
+    valid_scopes = {"catalog", "avatar", "admin"}
+    if not scopes or not set(scopes).issubset(valid_scopes):
+        return jsonify({"error": f"scopes must be non-empty subset of {list(valid_scopes)}"}), 400
+    try:
+        exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        if exp_dt <= datetime.utcnow():
+            return jsonify({"error": "expires_at must be in the future"}), 400
+        # Cap max expiry (1 year)
+        if exp_dt > datetime.utcnow() + timedelta(days=365):
+            return jsonify({"error": "expires_at too far in future (max 365 days)"}), 400
+    except Exception:
+        return jsonify({"error": "expires_at must be valid ISO 8601 UTC (e.g. 2026-12-31T23:59:59Z)"}), 400
+    if rpm < 1 or rpm > 300:
+        return jsonify({"error": "rate_limit_rpm must be 1-300"}), 400
+    if rph < 1 or rph > 10000:
+        return jsonify({"error": "rate_limit_rph must be 1-10000"}), 400
+
+    # Generate key (retry on prefix collision - extremely unlikely with 4 hex chars)
+    max_retries = 3
+    for _ in range(max_retries):
+        full_key, prefix = generate_api_key()
+        # Check for prefix collision
+        check = API_KEY_SUPABASE.table("api_keys").select("id").eq("key_prefix", prefix).execute()
+        if not check.data:
+            break
+    else:
+        return jsonify({"error": "Key generation collision, please try again"}), 500
+
+    key_hash = hash_api_key(full_key)
+
+    insert_resp = API_KEY_SUPABASE.table("api_keys").insert({
+        "user_id": user_id,
+        "key_hash": key_hash,
+        "key_prefix": prefix,
+        "name": name,
+        "scopes": scopes,
+        "expires_at": exp_dt.isoformat(),
+        "rate_limit_rpm": rpm,
+        "rate_limit_rph": rph,
+    }).execute()
+
+    if not insert_resp.data:
+        return jsonify({"error": "Failed to create key"}), 500
+
+    key_row = insert_resp.data[0]
+    return jsonify({
+        "key": full_key,                    # ONLY TIME THIS IS RETURNED
+        "key_id": key_row["id"],
+        "prefix": prefix,
+        "name": name,
+        "scopes": scopes,
+        "expires_at": key_row["expires_at"],
+        "rate_limit_rpm": rpm,
+        "rate_limit_rph": rph,
+        "created_at": key_row["created_at"],
+        "warning": "Store this key securely. It will not be shown again."
+    }), 201
 
 
 @app.get("/api/admin/keys")
+@dual_auth()
 def list_api_keys():
-    """List API keys (not yet implemented; requires Supabase)."""
-    return jsonify({"error_code": "api_keys_unavailable"}), 503
+    """List current user's keys (no secrets)."""
+    user_id, err = get_current_user_id()
+    if err:
+        return jsonify({"error": err}), 401
+
+    resp = API_KEY_SUPABASE.table("api_keys") \
+        .select("id,key_prefix,name,scopes,expires_at,created_at,revoked_at,last_used_at,rate_limit_rpm,rate_limit_rph") \
+        .eq("user_id", user_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    return jsonify({"keys": resp.data or []})
 
 
 @app.delete("/api/admin/keys/<key_id>")
+@dual_auth()
 def revoke_api_key(key_id):
-    """Revoke an API key (not yet implemented; requires Supabase)."""
-    return jsonify({"error_code": "api_keys_unavailable"}), 503
+    """Revoke (soft delete) a key."""
+    user_id, err = get_current_user_id()
+    if err:
+        return jsonify({"error": err}), 401
+
+    # Verify ownership
+    check = API_KEY_SUPABASE.table("api_keys").select("id").eq("id", key_id).eq("user_id", user_id).execute()
+    if not check.data:
+        return jsonify({"error": "Key not found"}), 404
+
+    API_KEY_SUPABASE.table("api_keys").update({"revoked_at": datetime.utcnow().isoformat()}).eq("id", key_id).execute()
+    return jsonify({"success": True, "revoked_at": datetime.utcnow().isoformat()})
 
 
 @app.get("/api/audio/ping")
 def audio_ping():
     return jsonify({"status":"audio ok"})
 @app.get("/api/avatar/info")
+@dual_auth(["avatar"])
 def avatar_info():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
@@ -1891,6 +2167,7 @@ def avatar_info():
     except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/wearing")
+@dual_auth(["avatar"])
 def avatar_wearing():
     """List the catalog items (Shirts, Pants, Accessories, MeshParts, etc.) a user
     currently has equipped -- built for Packed Catalog so the frontend can add every
@@ -1935,6 +2212,7 @@ def avatar_wearing():
     except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/3d-urls")
+@dual_auth(["avatar"])
 def avatar_3d_urls():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
@@ -1952,6 +2230,7 @@ def fix_url(url):
     return url
 
 @app.get("/api/avatar/download-full")
+@dual_auth(["avatar"])
 def avatar_download_full():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
@@ -1989,6 +2268,7 @@ def avatar_download_full():
     except Exception as e: return safe_error(e)
 
 @app.get("/api/avatar/procedural-download")
+@dual_auth(["avatar"])
 def avatar_procedural_download():
     user=request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
@@ -2040,6 +2320,7 @@ def _is_animation_asset_type(atype):
 
 
 @app.get("/api/catalog/info")
+@dual_auth(["catalog"])
 def catalog_info():
     aid = request.args.get("asset_id","")
     if not aid: return jsonify({"error":"asset_id required"}),400
@@ -2415,6 +2696,7 @@ def _browse_collect(s, base_params, cursor, asset_types, bundle_types, deadline,
     return out, cur, 200, scanned
 
 @app.get("/api/catalog/browse")
+@dual_auth(["catalog"])
 def catalog_browse():
     rl = check_rate_limit("browse", limit=30, window_s=60)
     if rl: return rl
@@ -2551,6 +2833,7 @@ def catalog_browse():
         return safe_error(e)
 
 @app.get("/api/catalog/items-meta")
+@dual_auth(["catalog"])
 def catalog_items_meta():
     """Roblox's own name + thumbnail for a list of items, by ID.
     Used when showing a saved Custom Catalog: the names stored inside a public
@@ -2614,6 +2897,7 @@ def catalog_items_meta():
         return safe_error(e)
 
 @app.get("/api/catalog/texture-variants")
+@dual_auth(["catalog"])
 def catalog_texture_variants():
     """Tells the frontend which real texture kinds actually exist for an asset, so
     it only shows a "UV Bake" / "Raw Template" choice when there genuinely are two
@@ -2634,6 +2918,7 @@ def catalog_texture_variants():
         return safe_error(e)
 
 @app.get("/api/catalog/image")
+@dual_auth(["catalog"])
 def catalog_image():
     """Download the raw 2D image for a catalog asset — for items with no 3D mesh at
     all (Profile/Avatar Backgrounds, Decals, plain Images), where OBJ export isn't
@@ -2742,6 +3027,7 @@ def _convert_cage_mesh(stem, mesh_id, s):
     return mesh_to_obj(mesh), len(mesh.vertices), len(mesh.faces)
 
 @app.get("/api/catalog/cages")
+@dual_auth(["catalog"])
 def catalog_cages():
     """Layered Clothing cage export. Layered items carry hidden helper meshes (cages)
     that tell Roblox how the clothing bends over different bodies; creators making
@@ -2974,6 +3260,7 @@ def _resolve_all_clothing_textures(raw_bytes):
     return results
 
 @app.get("/api/catalog/download-full")
+@dual_auth(["catalog"])
 def catalog_download_full():
     aid = request.args.get("asset_id","")
     fmt = request.args.get("format","gltf").lower()  # "obj" atau "gltf"
@@ -3149,6 +3436,7 @@ def maintenance_preview():
 
 
 @app.get("/api/avatar/smart-download")
+@dual_auth(["avatar"])
 def avatar_smart_download():
     user = request.args.get("user","")
     if not user: return jsonify({"error":"user required"}),400
@@ -4240,6 +4528,7 @@ def convert_r6_to_r15(obj_text: str, mtl_text: str, av: dict = None, name: str =
 
 
 @app.get("/api/v2/avatar")
+@dual_auth(["avatar"])
 def avatar_v2():
     """Avatar download - real mesh + UV texture, with optional R15⇄R6 conversion"""
     user = request.args.get("user", "")
@@ -4647,6 +4936,7 @@ def _fbx_convert_package_files(files):
 
 
 @app.get("/api/v2/item")
+@dual_auth(["catalog"])
 def item_v2():
     """Item/Bundle download - cloudscraper + format OBJ/GLTF/FBX (Faizdzn method).
     format=fbx is Catalog-only: it converts the OBJ+MTL package to FBX on the server.
@@ -4832,6 +5122,7 @@ def _resolve_batch_entry(raw_id, known_name, s):
     return {"raw_id": raw_id, "kind": "bundle", "id": file_id, "name": bundle_display_name, "components": comp_results}
 
 @app.route("/api/v2/item-batch", methods=["GET","POST"])
+@dual_auth(["catalog"])
 def item_batch_v2():
     """Packed catalog download - multiple items (or bundles), ONE zip, each in its own folder.
     Always OBJ + MTL + PNG textures (real mesh via 3D thumbnail manifest). No GLTF conversion.
@@ -5523,6 +5814,7 @@ def _manifest_from_rust_instances(instances, file_id):
     }
 
 @app.get("/api/v2/model/info")
+@dual_auth(["catalog"])
 def model_info():
     """Parse RBXM (Model assets from create.roblox.com), return manifest.
     Tries the standalone Rust/rbx-dom parser service first (proper SurfaceAppearance/
@@ -5742,6 +6034,7 @@ def model_info():
 
 
 @app.get("/api/v2/model/mesh")
+@dual_auth(["catalog"])
 def model_mesh():
     """Fetch raw .mesh by ID (dari MeshId di manifest model/info), convert ke OBJ.
     Dipanggil per-part dari browser saat assembly GLB untuk Model 3D create.roblox.com."""
@@ -5829,6 +6122,7 @@ def model_mesh():
 
 
 @app.get("/api/v2/model/texture")
+@dual_auth(["catalog"])
 def model_texture():
     """Fetch texture image untuk MeshPart (dari TextureID di manifest). Proxy langsung sebagai binary image."""
     raw_id = request.args.get("textureId", "")
@@ -5858,6 +6152,7 @@ def model_texture():
 
 
 @app.get("/api/v2/model/download")
+@dual_auth(["catalog"])
 def model_download():
     """Download raw .rbxm file langsung dari Roblox - no limit, no conversion.
 
@@ -5903,6 +6198,7 @@ def model_download():
 
 
 @app.post("/api/v2/model/convert")
+@dual_auth(["catalog"])
 def model_convert():
     """Parse uploaded .rbxm file dan return manifest (sama seperti model/info tapi dari upload, bukan fetch Roblox).
     Tidak butuh cookie/scraper - file di-upload langsung oleh user."""
@@ -6091,6 +6387,7 @@ def model_convert():
 
 
 @app.get("/api/v2/model/mesh-union")
+@dual_auth(["catalog"])
 def model_mesh_union():
     """Fetch dan decode geometry Union/CSG dari AssetId (nested RBXM + CSGMDL).
     Dipanggil per-UnionOperation dari browser saat assembly GLB."""
@@ -6271,6 +6568,21 @@ def maintenance_toggle():
 #
 # Only IDs, item types and names are stored -- never tokens, never 3D files.
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+# ── API KEY CONFIG ───────────────────────────────────────────────────
+# Supabase client for API keys (uses service role key to bypass RLS)
+API_KEY_SUPABASE: Client = None
+if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    API_KEY_SUPABASE = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+# API Key format constants
+API_KEY_PREFIX = "3drbx"
+API_KEY_PREFIX_LEN = 4       # chars shown in key_prefix column (4 hex chars)
+API_KEY_RANDOM_BYTES = 20    # entropy for the secret portion
+BCRYPT_COST = 12
+
+# In-memory rate limit buckets for API keys (per container, resets on cold start)
+_api_key_rate_buckets = {}
 
 _CC_ALPHABET     = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"   # no I, L, O, 0, 1: easy to read out and type
 _CC_CODE_RE      = re.compile(r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
