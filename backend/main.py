@@ -1918,6 +1918,10 @@ def require_api_key(required_scopes: list[str] = None):
             except ValueError:
                 return jsonify({"error": "Invalid API key format"}), 401
 
+            # Validate prefix before Supabase request
+            if not _validate_key_prefix(prefix):
+                return jsonify({"error": "Invalid API key format"}), 401
+
             # Fetch candidate by prefix (single row expected)
             resp = API_KEY_SUPABASE.table("api_keys") \
                 .select("*") \
@@ -1935,6 +1939,11 @@ def require_api_key(required_scopes: list[str] = None):
             if not verify_api_key(provided_key, key_row["key_hash"]):
                 return jsonify({"error": "Invalid API key"}), 401
 
+            # Validate key_id from DB before using in subsequent queries
+            key_id = key_row["id"]
+            if not _validate_key_id(key_id):
+                return jsonify({"error": "Invalid key record"}), 500
+
             # Scope check
             key_scopes = set(key_row["scopes"] or [])
             if required_scopes and not set(required_scopes).issubset(key_scopes):
@@ -1945,12 +1954,13 @@ def require_api_key(required_scopes: list[str] = None):
                 }), 403
 
             # Rate limiting (per-key, sliding window)
-            rl_resp = check_api_key_rate_limit(key_row["id"], key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
+            rl_resp = check_api_key_rate_limit(key_id, key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
             if rl_resp:
                 return rl_resp
 
-            # Update last_used_at (async, best-effort)
-            API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_row["id"]).execute()
+            # Update last_used_at (async, best-effort) - validate key_id again
+            if _validate_key_id(key_id):
+                API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_id).execute()
 
             # Attach to request context
             g.api_key_user_id = key_row["user_id"]
@@ -1988,6 +1998,10 @@ def dual_auth(required_scopes=None):
                     except ValueError:
                         return jsonify({"error": "Invalid API key format"}), 401
 
+                    # Validate prefix before Supabase request
+                    if not _validate_key_prefix(prefix):
+                        return jsonify({"error": "Invalid API key format"}), 401
+
                     resp = API_KEY_SUPABASE.table("api_keys") \
                         .select("*") \
                         .eq("key_prefix", prefix) \
@@ -2000,12 +2014,16 @@ def dual_auth(required_scopes=None):
                         if verify_api_key(provided_key, key_row["key_hash"]):
                             key_scopes = set(key_row["scopes"] or [])
                             if required_scopes is None or set(required_scopes).issubset(key_scopes):
-                                rl_resp = check_api_key_rate_limit(key_row["id"], key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
+                                key_id = key_row["id"]
+                                if not _validate_key_id(key_id):
+                                    return jsonify({"error": "Invalid key record"}), 500
+                                rl_resp = check_api_key_rate_limit(key_id, key_row["rate_limit_rpm"], key_row["rate_limit_rph"])
                                 if not rl_resp:
-                                    API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_row["id"]).execute()
+                                    if _validate_key_id(key_id):
+                                        API_KEY_SUPABASE.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("id", key_id).execute()
                                     g.api_key_user_id = key_row["user_id"]
                                     g.api_key_scopes = key_scopes
-                                    g.api_key_id = key_row["id"]
+                                    g.api_key_id = key_id
                                     g.auth_via = "api_key"
                                     return f(*args, **kwargs)
                                 return rl_resp
@@ -2069,12 +2087,21 @@ def create_api_key():
     max_retries = 3
     for _ in range(max_retries):
         full_key, prefix = generate_api_key()
+        # Validate prefix before Supabase request
+        if not _validate_key_prefix(prefix):
+            continue
         # Check for prefix collision
         check = API_KEY_SUPABASE.table("api_keys").select("id").eq("key_prefix", prefix).execute()
         if not check.data:
             break
     else:
         return jsonify({"error": "Key generation collision, please try again"}), 500
+
+    # Validate user_id before Supabase insert
+    if not _validate_user_id(user_id):
+        return jsonify({"error": "Invalid user"}), 401
+    if not _validate_scopes(scopes):
+        return jsonify({"error": "Invalid scopes"}), 400
 
     key_hash = hash_api_key(full_key)
 
@@ -2115,6 +2142,9 @@ def list_api_keys():
     if err:
         return jsonify({"error": err}), 401
 
+    if not _validate_user_id(user_id):
+        return jsonify({"error": "Invalid user"}), 401
+
     resp = API_KEY_SUPABASE.table("api_keys") \
         .select("id,key_prefix,name,scopes,expires_at,created_at,revoked_at,last_used_at,rate_limit_rpm,rate_limit_rph") \
         .eq("user_id", user_id) \
@@ -2132,12 +2162,18 @@ def revoke_api_key(key_id):
     if err:
         return jsonify({"error": err}), 401
 
+    if not _validate_user_id(user_id):
+        return jsonify({"error": "Invalid user"}), 401
+    if not _validate_key_id(key_id):
+        return jsonify({"error": "Invalid key ID"}), 400
+
     # Verify ownership
     check = API_KEY_SUPABASE.table("api_keys").select("id").eq("id", key_id).eq("user_id", user_id).execute()
     if not check.data:
         return jsonify({"error": "Key not found"}), 404
 
-    API_KEY_SUPABASE.table("api_keys").update({"revoked_at": datetime.utcnow().isoformat()}).eq("id", key_id).execute()
+    if _validate_key_id(key_id):
+        API_KEY_SUPABASE.table("api_keys").update({"revoked_at": datetime.utcnow().isoformat()}).eq("id", key_id).execute()
     return jsonify({"success": True, "revoked_at": datetime.utcnow().isoformat()})
 
 
@@ -6570,10 +6606,12 @@ def maintenance_toggle():
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 # ── API KEY CONFIG ───────────────────────────────────────────────────
-# Supabase client for API keys (uses service role key to bypass RLS)
+# Supabase client for API keys — uses existing service role key mechanism
+# (SUPABASE_SERVICE_KEY falls back to SUPABASE_KEY, which is already RLS-bypassing in Vercel)
+_API_KEY_SUPABASE_KEY = SUPABASE_SERVICE_KEY or SUPABASE_KEY
 API_KEY_SUPABASE: Client = None
-if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-    API_KEY_SUPABASE = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+if SUPABASE_URL and _API_KEY_SUPABASE_KEY:
+    API_KEY_SUPABASE = create_client(SUPABASE_URL, _API_KEY_SUPABASE_KEY)
 
 # API Key format constants
 API_KEY_PREFIX = "3drbx"
@@ -6583,6 +6621,31 @@ BCRYPT_COST = 12
 
 # In-memory rate limit buckets for API keys (per container, resets on cold start)
 _api_key_rate_buckets = {}
+
+# ── API KEY VALIDATION HELPERS ────────────────────────────────────────
+# Strict allowlist/digits-only validation for all params reaching Supabase
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+_HEX4_RE = re.compile(r"^[0-9a-f]{4}$", re.I)
+_DIGITS_RE = re.compile(r"^\d+$")
+_VALID_SCOPES = frozenset({"catalog", "avatar", "admin"})
+
+def _validate_key_prefix(prefix: str) -> bool:
+    """key_prefix must be exactly 4 hex chars."""
+    return bool(_HEX4_RE.fullmatch(prefix))
+
+def _validate_key_id(key_id: str) -> bool:
+    """key_id must be valid UUID."""
+    return bool(_UUID_RE.fullmatch(key_id))
+
+def _validate_user_id(user_id: str) -> bool:
+    """user_id must be digits only (Roblox user ID)."""
+    return bool(_DIGITS_RE.fullmatch(user_id))
+
+def _validate_scopes(scopes: list) -> bool:
+    """All scopes must be from allowlist."""
+    if not isinstance(scopes, list):
+        return False
+    return all(s in _VALID_SCOPES for s in scopes)
 
 _CC_ALPHABET     = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"   # no I, L, O, 0, 1: easy to read out and type
 _CC_CODE_RE      = re.compile(r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
