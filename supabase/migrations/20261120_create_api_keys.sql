@@ -25,13 +25,7 @@ CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
 CREATE INDEX idx_api_keys_prefix ON api_keys(key_prefix);
 CREATE INDEX idx_api_keys_expires_at ON api_keys(expires_at) WHERE revoked_at IS NULL;
 
--- Row Level Security (RLS)
+-- Row Level Security (RLS) — ENABLED with NO POLICIES
+-- Only the service role key (SUPABASE_KEY in Vercel) can access this table.
+-- No policies = no access for anon/publishable keys.
 ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
-
--- Users can only see/manage their own keys
-CREATE POLICY "Users manage own keys" ON api_keys
-    FOR ALL USING (user_id = current_setting('app.current_user_id', true))
-    WITH CHECK (user_id = current_setting('app.current_user_id', true));
-
--- Service role (backend) bypasses RLS for validation
--- (handled by using service role key in backend, not anon key)
