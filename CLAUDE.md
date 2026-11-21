@@ -283,3 +283,9 @@ Next step: get a second RBXM with several MeshParts (catalog accessory or Studio
 - The UV editor (uv-checker.html and public/uv-checker.html) is PAUSED. Do not edit it unless I explicitly ask.
 - Before editing any frontend file, say which file you plan to change and why, and wait for my OK.
 - Never read or print secrets or API keys.
+
+## Current focus (read after every /compact)
+- Task: optional upscale on texture import in index.html (Texture Map Generator). Reference notes: tmp/upscale_commands.txt (unverified, see caveats).
+- uv-checker.html and public/uv-checker.html are PAUSED. Do not edit them.
+- Before editing any file other than index.html and public/index.html, say which and why, and wait for my OK.
+- Don't install anything over 20 MB. Never print secrets.
