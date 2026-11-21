@@ -4637,6 +4637,7 @@ function setLang(lang){
   });
 }
 function initModalAnimation(){
+  if(typeof Motion==='undefined') return;
   const { animate } = Motion;
   const box = document.querySelector('.modal-box');
   const cards = Array.from(document.querySelectorAll('.sec-card'));
@@ -4680,6 +4681,7 @@ function initModalAnimation(){
   });
 }
 function closeModal(){
+  if(typeof Motion==='undefined') return;
   const { animate } = Motion;
   const overlay = document.getElementById('security-modal');
   animate(overlay, { opacity:[1,0] }, { duration:0.22, easing:'ease-in' })
