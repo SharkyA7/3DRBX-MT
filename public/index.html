@@ -1373,6 +1373,7 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
 
       <div style="margin-top:20px;padding:16px;background:rgba(80,232,244,.05);border:1px solid rgba(80,232,244,.15);border-radius:10px">
         <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);margin-bottom:12px">CREATE NEW KEY</div>
+        <input type="text" id="apikey-name" placeholder="Key name (e.g. My Bot)" style="width:100%;padding:10px 12px;font-size:11px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;color:var(--white);margin-bottom:12px;box-sizing:border-box" maxlength="100">
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px" id="scope-checkboxes"></div>
         <button class="modal-btn modal-btn-primary" onclick="createApiKey()" style="width:100%">⚡ <span data-t-id="CREATE KEY" data-t-en="CREATE KEY">CREATE KEY</span></button>
       </div>
@@ -2068,6 +2069,11 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
           <div>
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:9px;color:var(--white);white-space:nowrap">
               <input type="checkbox" id="tex-upscale-ewa" style="accent-color:var(--accent)"> <span data-t-id="EWA mode" data-t-en="EWA mode">EWA mode</span>
+            </label>
+          </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:9px;color:var(--white);white-space:nowrap">
+              <input type="checkbox" id="tex-upscale-auto" style="accent-color:var(--accent)"> <span data-t-id="Auto-upscale on import" data-t-en="Auto-upscale on import">Auto-upscale on import</span>
             </label>
           </div>
         </div>
@@ -4742,8 +4748,13 @@ function renderScopeCheckboxes(){
 }
 
 async function createApiKey(){
+  const name = document.getElementById('apikey-name').value.trim();
   const checkboxes = document.querySelectorAll('#scope-checkboxes input:checked');
   const scopes = Array.from(checkboxes).map(cb => cb.value);
+  if(!name){
+    alert('Enter a name for the key');
+    return;
+  }
   if(scopes.length === 0){
     alert('Select at least one scope');
     return;
@@ -4756,7 +4767,7 @@ async function createApiKey(){
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ scopes })
+      body: JSON.stringify({ name, scopes })
     });
     const data = await res.json();
     if(res.ok){
@@ -5272,9 +5283,12 @@ function loadTexture(event){
       texwarnActiveFor = 'import';
       return;
     }
-    // Reset upscale to Off for each new texture (so it doesn't auto-apply previous settings)
+    // Reset upscale to Off for each new texture UNLESS auto-upscale is enabled
     const upscaleModeEl = document.getElementById('tex-upscale-mode');
-    if(upscaleModeEl) upscaleModeEl.value = 'off';
+    const upscaleAutoEl = document.getElementById('tex-upscale-auto');
+    if(upscaleModeEl && (!upscaleAutoEl || !upscaleAutoEl.checked)){
+      upscaleModeEl.value = 'off';
+    }
     // Show upscale card for all textures
     if(window.texUpscale) window.texUpscale.showCard(img.width, img.height);
     // Store original for re-processing with different upscale settings
@@ -5383,9 +5397,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const originalContinueHandler = function(){
     document.getElementById("texwarn-overlay").style.display = "none";
     if(texwarnActiveFor === 'import' && pendingTexImg){
-      // Reset upscale to Off for new texture
+      // Reset upscale to Off for new texture UNLESS auto-upscale is enabled
       const upscaleModeEl = document.getElementById('tex-upscale-mode');
-      if(upscaleModeEl) upscaleModeEl.value = 'off';
+      const upscaleAutoEl = document.getElementById('tex-upscale-auto');
+      if(upscaleModeEl && (!upscaleAutoEl || !upscaleAutoEl.checked)){
+        upscaleModeEl.value = 'off';
+      }
       if(window.texUpscale) window.texUpscale.showCard(pendingTexImg.width, pendingTexImg.height);
       window.texOriginalImg = pendingTexImg;
       window.texOriginalUrl = pendingTexUrl;
@@ -5407,12 +5424,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const upscaleSnap = document.getElementById('tex-upscale-snap');
   const upscalePreset = document.getElementById('tex-upscale-preset');
   const upscaleEwa = document.getElementById('tex-upscale-ewa');
+  const upscaleAuto = document.getElementById('tex-upscale-auto');
   const upscalePreview = document.getElementById('tex-upscale-preview');
   const upscaleCard = document.getElementById('tex-upscale-card');
 
   let texSourceWidth = 0;
   let texSourceHeight = 0;
   let lastSafeMode = 'off';
+
+  // Load auto-upscale preference from localStorage
+  if(upscaleAuto){
+    const savedAuto = localStorage.getItem('tex_upscale_auto');
+    if(savedAuto !== null){
+      upscaleAuto.checked = savedAuto === 'true';
+    }
+    upscaleAuto.addEventListener('change', function(){
+      localStorage.setItem('tex_upscale_auto', upscaleAuto.checked.toString());
+    });
+  }
 
   function updateUpscalePreview(){
     if(!texSourceWidth || !texSourceHeight){ return; }
