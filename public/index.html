@@ -1374,6 +1374,8 @@ window.downloadModelOBJZip = async function(customStatusEl, customBtn){
       <div style="margin-top:20px;padding:16px;background:rgba(80,232,244,.05);border:1px solid rgba(80,232,244,.15);border-radius:10px">
         <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);margin-bottom:12px">CREATE NEW KEY</div>
         <input type="text" id="apikey-name" placeholder="Key name (e.g. My Bot)" style="width:100%;padding:10px 12px;font-size:11px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;color:var(--white);margin-bottom:12px;box-sizing:border-box" maxlength="100">
+        <label style="display:block;font-size:10px;color:var(--gray);margin-bottom:4px"><span data-t-id="Expires" data-t-en="Expires">Expires</span></label>
+        <input type="date" id="apikey-expires" style="width:100%;padding:10px 12px;font-size:11px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;color:var(--white);margin-bottom:12px;box-sizing:border-box">
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px" id="scope-checkboxes"></div>
         <button class="modal-btn modal-btn-primary" onclick="createApiKey()" style="width:100%">⚡ <span data-t-id="CREATE KEY" data-t-en="CREATE KEY">CREATE KEY</span></button>
       </div>
@@ -4696,6 +4698,15 @@ function closeDiscordModal(){
 
 function openApiKeysModal(){
   document.getElementById('apikeys-modal').style.display = 'flex';
+  // Set default expiration to 1 year from now (max allowed)
+  const expiresInput = document.getElementById('apikey-expires');
+  const nextYear = new Date();
+  nextYear.setFullYear(nextYear.getFullYear() + 1);
+  expiresInput.value = nextYear.toISOString().split('T')[0];
+  // Set min date to tomorrow
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  expiresInput.min = tomorrow.toISOString().split('T')[0];
   loadApiKeys();
   renderScopeCheckboxes();
 }
@@ -4751,6 +4762,7 @@ async function createApiKey(){
   const name = document.getElementById('apikey-name').value.trim();
   const checkboxes = document.querySelectorAll('#scope-checkboxes input:checked');
   const scopes = Array.from(checkboxes).map(cb => cb.value);
+  const expiresInput = document.getElementById('apikey-expires').value;
   if(!name){
     alert('Enter a name for the key');
     return;
@@ -4759,6 +4771,12 @@ async function createApiKey(){
     alert('Select at least one scope');
     return;
   }
+  if(!expiresInput){
+    alert('Select an expiration date');
+    return;
+  }
+  // Convert date to ISO 8601 UTC (end of day)
+  const expires_at = new Date(expiresInput + 'T23:59:59Z').toISOString();
   const btn = event.target;
   btn.disabled = true;
   btn.textContent = 'Creating...';
@@ -4767,7 +4785,7 @@ async function createApiKey(){
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name, scopes })
+      body: JSON.stringify({ name, scopes, expires_at })
     });
     const data = await res.json();
     if(res.ok){
